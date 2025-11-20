@@ -1,0 +1,402 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import CardDetail from "./components/card.detail";
+
+export type Expansion = {
+  id: string;
+  name: string;
+  series: string;
+  printedTotal: number;
+  total: number;
+  ptcgoCode: string;
+};
+
+// Nuevo tipo para flujo directo
+export type CartaBusquedaDirecta = {
+  id: string;
+  localId: string;
+  name: string;
+  image: string;
+};
+
+export default function Stock() {
+  // Estado para seleccionar modo de búsqueda
+  const [modoBusqueda, setModoBusqueda] = useState<"expansion" | "directa">(
+    "expansion"
+  );
+
+  // Estados comunes
+  const [cartaSeleccionada, setCartaSeleccionada] =
+    useState<CartaBusquedaDirecta | null>(null);
+  const [costoCarta, setCostoCarta] = useState<number>(0);
+  const [costoEnvio, setCostoEnvio] = useState<number>(0);
+  const [cartasEnvio, setCartasEnvio] = useState<number>(1);
+  const [copias, setCopias] = useState<number>(1);
+  const [cardState, setCardState] = useState<string>("");
+
+  // ------------------ MODO EXPANSIÓN ------------------
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroExpansion, setFiltroExpansion] = useState("");
+  const [mostrarLista, setMostrarLista] = useState(false);
+  const [expansionSeleccionada, setExpansionSeleccionada] = useState("");
+  const [expansion, setExpansion] = useState<Expansion | null>(null);
+  const [currency, setCurrency] = useState<"EUR" | "COP">("EUR");
+
+  const { data: expansiones = [], isLoading: cargandoExpansiones } = useQuery({
+    queryKey: ["expansiones"],
+    queryFn: async () => {
+      const res = await axios.get("http://localhost:3000/tcg-dex/set");
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    staleTime: Infinity,
+    enabled: modoBusqueda === "expansion",
+  });
+
+  const {
+    data: cartas = [],
+    isLoading: cargandoCartas,
+    isFetching: buscandoCartas,
+  } = useQuery({
+    queryKey: ["cartas", expansionSeleccionada],
+    queryFn: async () => {
+      if (!expansionSeleccionada) return [];
+      const res = await axios.get(
+        `http://localhost:3000/tcg-dex/set/${expansionSeleccionada}/cards`
+      );
+      if (Array.isArray(res.data)) return res.data;
+      if (Array.isArray(res.data.cards)) return res.data.cards;
+      return [];
+    },
+    enabled: !!expansionSeleccionada && modoBusqueda === "expansion",
+  });
+
+  const cartasFiltradas =
+    busqueda.trim() !== ""
+      ? cartas.filter(
+          (carta: CartaBusquedaDirecta) =>
+            carta.name.toLowerCase().includes(busqueda.toLowerCase()) ||
+            carta.localId?.includes(busqueda.toLowerCase())
+        )
+      : cartas.slice(0, 3);
+
+  const expansionesFiltradas = expansiones.filter(
+    (exp) =>
+      exp.name.toLowerCase().includes(filtroExpansion.toLowerCase()) ||
+      exp.ptcgoCode?.toLowerCase().includes(filtroExpansion.toLowerCase())
+  );
+
+  // ------------------ MODO DIRECTO ------------------
+  const [nombreCarta, setNombreCarta] = useState("");
+  const [resultadosCarta, setResultadosCarta] = useState<
+    CartaBusquedaDirecta[]
+  >([]);
+  const [buscandoCartaDirecta, setBuscandoCartaDirecta] = useState(false);
+  const [errorBusqueda, setErrorBusqueda] = useState("");
+
+  const buscarCartaPorNombre = async () => {
+    if (!nombreCarta.trim()) return;
+
+    setBuscandoCartaDirecta(true);
+    setErrorBusqueda("");
+    try {
+      const res = await axios.get<CartaBusquedaDirecta[]>(
+        `http://localhost:3000/tcg-dex/card/search/${encodeURIComponent(
+          nombreCarta
+        )}`
+      );
+
+      const data = res.data;
+      if (Array.isArray(data) && data.length > 0) {
+        setResultadosCarta(data);
+      } else {
+        setResultadosCarta([]);
+        setErrorBusqueda("No se encontraron cartas.");
+      }
+    } catch (err) {
+      setErrorBusqueda("Error al buscar la carta.");
+      setResultadosCarta([]);
+    } finally {
+      setBuscandoCartaDirecta(false);
+    }
+  };
+
+  // GUARDADO
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+
+  const guardarStock = async () => {
+    setMensaje("");
+
+    if (!cartaSeleccionada) {
+      setMensaje("Selecciona una carta antes de guardar.");
+      return;
+    }
+
+    if (costoCarta <= 0 ||  cartasEnvio <= 0 || copias <= 0) {
+      setMensaje("Todos los campos deben ser mayores a cero.");
+      return;
+    }
+
+    const body = {
+      card_id: cartaSeleccionada.id,
+      shipment: costoEnvio,
+      unity_cost: costoCarta,
+      cards_in_shipmet: cartasEnvio,
+      card_state: cardState,
+      image_url: (cartaSeleccionada as any)?.image || "",
+      currency: currency
+    };
+
+    try {
+      setGuardando(true);
+
+      // Ejecutar múltiples peticiones
+      const peticiones = Array.from({ length: copias }).map(() =>
+        axios.post("http://localhost:3000/stock", body)
+      );
+
+      await Promise.all(peticiones);
+
+      setMensaje(`✅ Se guardaron ${copias} copias exitosamente.`);
+    } catch (err) {
+      setMensaje("❌ Error al guardar una o más copias.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // ------------------ RENDER ------------------
+  return (
+    <div className="max-w-3xl mx-auto mt-10 bg-white shadow-lg rounded-xl p-6">
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">
+        Formulario de Cartas
+      </h1>
+
+      {/* Selector de modo de búsqueda */}
+      <div className="mb-6">
+        <label className="block mb-2 font-medium text-gray-700">
+          Modo de búsqueda:
+        </label>
+        <select
+          value={modoBusqueda}
+          onChange={(e) => {
+            const modo = e.target.value as "expansion" | "directa";
+            setModoBusqueda(modo);
+            setCartaSeleccionada(null);
+          }}
+          className="px-4 py-2 border border-gray-300 rounded-lg"
+        >
+          <option value="expansion">Buscar por expansión</option>
+          <option value="directa">Buscar por nombre de carta</option>
+        </select>
+      </div>
+
+      {/* ------------------ MODO EXPANSIÓN ------------------ */}
+      {modoBusqueda === "expansion" && (
+        <>
+          {/* Buscador de expansión */}
+          <div className="mb-6 relative">
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Buscar expansión
+            </label>
+            <input
+              type="text"
+              value={filtroExpansion}
+              onChange={(e) => {
+                setFiltroExpansion(e.target.value);
+                setMostrarLista(true);
+              }}
+              onFocus={() => setMostrarLista(true)}
+              placeholder="Nombre o código de la expansión..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {mostrarLista && (
+              <ul className="absolute z-10 bg-white w-full border border-gray-200 max-h-60 overflow-y-auto rounded-lg shadow mt-1">
+                {expansionesFiltradas.length > 0 ? (
+                  expansionesFiltradas.map((exp: Expansion) => (
+                    <li
+                      key={exp.id}
+                      onClick={() => {
+                        setExpansionSeleccionada(exp.id);
+                        setExpansion(exp);
+                        setFiltroExpansion(`${exp.name} (${exp.ptcgoCode})`);
+                        setMostrarLista(false);
+                        setCartaSeleccionada(null);
+                      }}
+                      className="px-4 py-2 cursor-pointer hover:bg-blue-100"
+                    >
+                      {exp.name} ({exp.ptcgoCode})
+                    </li>
+                  ))
+                ) : (
+                  <li className="px-4 py-2 text-gray-500">
+                    No se encontraron expansiones.
+                  </li>
+                )}
+              </ul>
+            )}
+            {cargandoExpansiones && (
+              <p className="text-sm text-gray-500 mt-2">
+                Cargando expansiones...
+              </p>
+            )}
+          </div>
+
+          {/* Buscador de carta */}
+          {expansionSeleccionada && (
+            <div className="mb-6">
+              <label className="block mb-2 text-sm font-medium text-gray-700">
+                Buscar carta
+              </label>
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Nombre de la carta..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Listado de cartas */}
+          {cargandoCartas || buscandoCartas ? (
+            <p className="text-gray-500 text-center">Cargando cartas...</p>
+          ) : busqueda && cartasFiltradas.length > 0 ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {cartasFiltradas.map((carta: CartaBusquedaDirecta) => (
+                  <div
+                    key={carta.id}
+                    onClick={() => setCartaSeleccionada(carta)}
+                    className={`bg-white rounded-lg shadow p-4 border flex flex-col cursor-pointer ${
+                      cartaSeleccionada?.id === carta.id
+                        ? "border-4 border-blue-500 shadow-lg"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <img
+                      src={carta.image}
+                      alt={carta.name}
+                      className="w-full h-40 object-contain mb-2"
+                    />
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      {carta.name} - {expansion?.ptcgoCode} - {carta.localId}
+                    </h3>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            busqueda && (
+              <p className="text-gray-500">
+                No se encontraron cartas con ese nombre.
+              </p>
+            )
+          )}
+        </>
+      )}
+
+      {modoBusqueda === "directa" && (
+        <div className="mb-6">
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Nombre de la carta
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nombreCarta}
+              onChange={(e) => setNombreCarta(e.target.value)}
+              placeholder="Ej. Pikachu"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            />
+            <button
+              onClick={buscarCartaPorNombre}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+              disabled={buscandoCartaDirecta}
+            >
+              {buscandoCartaDirecta ? "Buscando..." : "Buscar"}
+            </button>
+          </div>
+
+          {errorBusqueda && (
+            <p className="text-red-500 text-sm mt-2">{errorBusqueda}</p>
+          )}
+
+          {resultadosCarta.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
+              {resultadosCarta.map((carta) => (
+                <div
+                  key={carta.id}
+                  onClick={() => {
+                    setCartaSeleccionada(carta);
+                  }}
+                  className={`cursor-pointer border rounded-lg p-2 shadow hover:shadow-lg transition ${
+                    cartaSeleccionada?.id === carta.id
+                      ? "border-blue-500"
+                      : "border-gray-200"
+                  }`}
+                >
+                  <img
+                    src={carta.image}
+                    alt={carta.name}
+                    className="w-full h-40 object-contain mb-2"
+                  />
+                  <p className="text-sm font-medium text-center">
+                    {carta.name}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Detalles de la carta seleccionada */}
+      {cartaSeleccionada && (
+        <>
+          <CardDetail
+            carta={cartaSeleccionada}
+            costoCarta={costoCarta}
+            setCostoCarta={setCostoCarta}
+            costoEnvio={costoEnvio}
+            setCostoEnvio={setCostoEnvio}
+            cartasEnvio={cartasEnvio}
+            setCartasEnvio={setCartasEnvio}
+            copias={copias}
+            setCopias={setCopias}
+            cardState={cardState}
+            setCardState={setCardState}
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mt-4">
+              Moneda
+            </label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as "EUR" | "COP")}
+              className="w-full px-3 py-2 border rounded-lg border-gray-300 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="EUR">EUR</option>
+              <option value="COP">COP</option>
+            </select>
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={guardarStock}
+              disabled={guardando}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Guardar stock"}
+            </button>
+            {mensaje && (
+              <p className="mt-2 text-sm text-center text-gray-700">
+                {mensaje}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

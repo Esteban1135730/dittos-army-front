@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useAuth } from "../../context/auth.context";
 import { Link, useNavigate } from "react-router-dom";
+import EuroToCOPConverter from "../../utils/tasa";
 
 export default function SideLayout({ children }: { children: ReactNode }) {
   const { logout } = useAuth();
@@ -21,6 +22,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             Inicio
           </Link>
           <Link
+            to="/add-stock"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Agregar Stock
+          </Link>
+          <Link
             to="/stock"
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >
@@ -38,6 +45,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
           >
             Ventas
           </Link>
+          <EuroToCOPConverter />
         </nav>
         <button
           onClick={handleLogout}
