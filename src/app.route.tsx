@@ -7,6 +7,8 @@ import Stock from "./pages/stock/create-stock/stock";
 import StockGrid from "./pages/stock/grid-stock";
 import ModificarStock from "./pages/stock/update-stock/update-stock";
 import AddPVP from "./pages/pvp/add-pvp/add-pvp";
+import PropertyList from "./pages/sales/property-list";
+import SalesDashboard from "./pages/sales/sales-dashboard";
 
 export default function AppRouter() {
   return (
@@ -78,7 +80,17 @@ export default function AppRouter() {
         element={
           <ProtectedRoute>
             <SideLayout>
-              <div>3</div>
+              <SalesDashboard />
+            </SideLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/propiedad"
+        element={
+          <ProtectedRoute>
+            <SideLayout>
+              <PropertyList />
             </SideLayout>
           </ProtectedRoute>
         }

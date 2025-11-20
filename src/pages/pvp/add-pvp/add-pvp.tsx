@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
 
@@ -42,10 +42,12 @@ type StockGroupResponse = {
   quantity: number;
   card_value_EUR: number;
   card_value_COP: number | null;
+  primary_currency?: string;
 };
 
 export default function AsignarPVP() {
   const { id } = useParams(); // card_id
+  const navigate = useNavigate();
   const [currency, setCurrency] = useState<"EUR" | "COP">("COP");
   const [pvp, setPvp] = useState<number | "">("");
   const [mensaje, setMensaje] = useState("");
@@ -53,7 +55,7 @@ export default function AsignarPVP() {
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const { convert } = useExchangeRates();
 
-  const { data: stockData, isLoading: loadingStock } =
+  const { data: stockData } =
     useQuery<StockGroupResponse>({
       queryKey: ["group", id],
       queryFn: async () => {
@@ -74,6 +76,23 @@ export default function AsignarPVP() {
     enabled: !!id,
   });
 
+  const { data: existingPvp } = useQuery<{ pvp: number; currency: string }>({
+    queryKey: ["pvp", id],
+    queryFn: async () => {
+      const res = await axios.get(`http://localhost:3000/pvp/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+  });
+
+  // Cargar PVP existente cuando se obtiene
+  useEffect(() => {
+    if (existingPvp) {
+      setPvp(existingPvp.pvp);
+      setCurrency(existingPvp.currency as "EUR" | "COP");
+    }
+  }, [existingPvp]);
+
   const priceVariants = cardData?.tcgplayer?.prices
     ? Object.keys(cardData.tcgplayer.prices)
     : [];
@@ -93,8 +112,8 @@ export default function AsignarPVP() {
   const pvpEstimadoCOP = costoCOP > 0 ? costoCOP * 1.2 : null;
 
   const variant = multipleVariants ? selectedVariant : priceVariants[0];
-  const precios = variant
-    ? (cardData?.tcgplayer?.prices?.[variant] as any)
+  const precios = variant && cardData?.tcgplayer?.prices
+    ? (cardData.tcgplayer.prices as any)[variant]
     : null;
 
   let marketPriceCOP = 0;
@@ -140,22 +159,47 @@ export default function AsignarPVP() {
   }, [pvp, currency, marketPriceCOP, convert]);
 
   const handleGuardar = async () => {
-    if (!id || !pvp || !currency) return;
+    if (!id) {
+      setMensaje("❌ No se encontró el ID de la carta.");
+      return;
+    }
+    
+    if (typeof pvp !== "number" || pvp <= 0) {
+      setMensaje("❌ El PVP debe ser un número mayor a cero.");
+      return;
+    }
+    
+    if (!currency) {
+      setMensaje("❌ Debes seleccionar una moneda.");
+      return;
+    }
+    
     if (multipleVariants && !selectedVariant) {
       setMensaje("❌ Debes seleccionar una variante de rareza para guardar.");
       return;
     }
 
     try {
-      await axios.post("http://localhost:3000/stock", {
+      setMensaje(""); // Limpiar mensaje anterior
+      await axios.post("http://localhost:3000/pvp", {
         card_id: id,
-        pvp,
+        pvp: Number(pvp),
         currency,
       });
       setMensaje("✅ PVP guardado correctamente");
       setAlerta(null);
-    } catch (err) {
-      setMensaje("❌ Error al guardar el PVP");
+      
+      // Redirigir al menú de stock después de 1 segundo
+      setTimeout(() => {
+        navigate("/stock");
+      }, 1000);
+    } catch (err: any) {
+      console.error("Error al guardar PVP:", err);
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.error || 
+                          err.message || 
+                          "❌ Error al guardar el PVP";
+      setMensaje(errorMessage);
     }
   };
 
@@ -196,58 +240,58 @@ export default function AsignarPVP() {
                           {variantName.replace(/([A-Z])/g, " $1")}
                         </p>
                         <ul className="space-y-1 ml-2">
-                          {"market" in variantPrices && (
+                          {"market" in variantPrices && variantPrices.market && (
                             <li>
                               💸 <strong>Market:</strong> $
-                              {variantPrices.market?.toFixed(2)} |{" "}
+                              {variantPrices.market.toFixed(2)} |{" "}
                               {formatCOP(
                                 convert
                                   .toCopFromUsd(variantPrices.market)
-                                  ?.toFixed(0)
+                                  ?.toFixed(0) || "0"
                               )}
                             </li>
                           )}
-                          {"low" in variantPrices && (
+                          {"low" in variantPrices && variantPrices.low && (
                             <li>
                               📉 <strong>Low:</strong> $
-                              {variantPrices.low?.toFixed(2)} |{" "}
+                              {variantPrices.low.toFixed(2)} |{" "}
                               {formatCOP(
                                 convert
                                   .toCopFromUsd(variantPrices.low)
-                                  ?.toFixed(0)
+                                  ?.toFixed(0) || "0"
                               )}
                             </li>
                           )}
-                          {"high" in variantPrices && (
+                          {"high" in variantPrices && variantPrices.high && (
                             <li>
                               📈 <strong>High:</strong> $
-                              {variantPrices.high?.toFixed(2)} |{" "}
+                              {variantPrices.high.toFixed(2)} |{" "}
                               {formatCOP(
                                 convert
                                   .toCopFromUsd(variantPrices.high)
-                                  ?.toFixed(0)
+                                  ?.toFixed(0) || "0"
                               )}
                             </li>
                           )}
-                          {"mid" in variantPrices && (
+                          {"mid" in variantPrices && variantPrices.mid && (
                             <li>
                               📊 <strong>Mid:</strong> $
-                              {variantPrices.mid?.toFixed(2)} |{" "}
+                              {variantPrices.mid.toFixed(2)} |{" "}
                               {formatCOP(
                                 convert
                                   .toCopFromUsd(variantPrices.mid)
-                                  ?.toFixed(0)
+                                  ?.toFixed(0) || "0"
                               )}
                             </li>
                           )}
-                          {"directLow" in variantPrices && (
+                          {"directLow" in variantPrices && variantPrices.directLow && (
                             <li>
                               🏷 <strong>Direct Low:</strong> $
-                              {variantPrices.directLow?.toFixed(2)} |{" "}
+                              {variantPrices.directLow.toFixed(2)} |{" "}
                               {formatCOP(
                                 convert
                                   .toCopFromUsd(variantPrices.directLow)
-                                  ?.toFixed(0)
+                                  ?.toFixed(0) || "0"
                               )}
                             </li>
                           )}
@@ -280,27 +324,43 @@ export default function AsignarPVP() {
               {stockData?.quantity ?? "No disponible"}
             </p>
             <p>
-              <strong>Precio en EUR:</strong>{" "}
-              {stockData?.card_value_EUR != null ? (
-                <>
-                  €{stockData.card_value_EUR.toFixed(2)}{" "}
-                  <span className="text-gray-500">
-                    (~
-                    {formatCOP(
-                      convert.toCopFromEur(stockData.card_value_EUR)?.toFixed(0)
-                    )}
-                    )
+              <strong>Precio:</strong>{" "}
+              {(() => {
+                const monedaCompra = stockData?.primary_currency || "EUR";
+                let precioCOP = 0;
+                let precioEUR = 0;
+                let precioUSD = 0;
+                
+                if (stockData?.card_value_COP && stockData.card_value_COP > 0) {
+                  precioCOP = stockData.card_value_COP;
+                  precioEUR = convert.toEurFromCop(precioCOP) ?? 0;
+                  precioUSD = convert.toUsdFromCop(precioCOP) ?? 0;
+                } else if (stockData?.card_value_EUR && stockData.card_value_EUR > 0) {
+                  precioEUR = stockData.card_value_EUR;
+                  precioCOP = convert.toCopFromEur(precioEUR) ?? 0;
+                  precioUSD = convert.toUsdFromCop(precioCOP) ?? 0;
+                }
+                
+                if (precioCOP === 0 && precioEUR === 0) {
+                  return "No disponible";
+                }
+                
+                return (
+                  <span className="flex gap-2 flex-wrap">
+                    <span className={monedaCompra === "COP" ? "font-bold text-blue-600" : ""}>
+                      COP {formatCOP(precioCOP.toFixed(0))}
+                    </span>
+                    <span>/</span>
+                    <span className={monedaCompra === "EUR" ? "font-bold text-blue-600" : ""}>
+                      EUR {precioEUR.toFixed(2)}
+                    </span>
+                    <span>/</span>
+                    <span className={monedaCompra === "USD" ? "font-bold text-blue-600" : ""}>
+                      USD {precioUSD.toFixed(2)}
+                    </span>
                   </span>
-                </>
-              ) : (
-                "No disponible"
-              )}
-            </p>
-            <p>
-              <strong>Precio en COP:</strong>{" "}
-              {stockData?.card_value_COP != null
-                ? formatCOP(stockData.card_value_COP.toFixed(0))
-                : "No disponible"}
+                );
+              })()}
             </p>
           </div>
 
@@ -432,17 +492,87 @@ export default function AsignarPVP() {
                 Precio de venta (PVP)
               </label>
               <input
-                type="number"
-                step="0.01"
-                value={pvp}
-                onChange={(e) =>
-                  setPvp(
-                    e.target.value === "" ? "" : parseFloat(e.target.value)
-                  )
-                }
+                type="text"
+                inputMode="decimal"
+                value={pvp === "" ? "" : typeof pvp === "number" ? pvp.toString().replace(".", ",") : pvp}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Permitir vacío, números, punto y coma
+                  if (value === "" || /^[0-9]*[.,]?[0-9]*$/.test(value)) {
+                    // Convertir coma a punto para el parseFloat
+                    const normalizedValue = value.replace(",", ".");
+                    if (normalizedValue === "" || normalizedValue === ".") {
+                      setPvp("");
+                    } else {
+                      const num = parseFloat(normalizedValue);
+                      setPvp(isNaN(num) ? "" : num);
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  // Al perder el foco, asegurar que el valor esté formateado correctamente
+                  const value = e.target.value.replace(",", ".");
+                  if (value === "" || value === ".") {
+                    setPvp("");
+                  } else {
+                    const num = parseFloat(value);
+                    setPvp(isNaN(num) ? "" : num);
+                  }
+                }}
                 className="w-full border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Introduce el precio de venta"
+                placeholder="Introduce el precio de venta (0,00 o 0.00)"
               />
+              {typeof pvp === "number" && pvp > 0 && costoCOP > 0 && (
+                <div className="mt-2">
+                  {(() => {
+                    // Convertir PVP a COP para comparar
+                    const pvpEnCOP = currency === "EUR" 
+                      ? (convert.toCopFromEur(pvp) ?? 0)
+                      : pvp;
+                    
+                    const diferencia = pvpEnCOP - costoCOP;
+                    const porcentaje = (diferencia / costoCOP) * 100;
+                    const esGanancia = diferencia > 0;
+                    const esPerdida = diferencia < 0;
+                    
+                    return (
+                      <div className={`text-sm p-2 rounded ${
+                        esGanancia 
+                          ? "bg-green-100 text-green-800 border border-green-300" 
+                          : esPerdida
+                          ? "bg-red-100 text-red-800 border border-red-300"
+                          : "bg-gray-100 text-gray-800 border border-gray-300"
+                      }`}>
+                        {esGanancia && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">✅ Ganancia:</span>
+                            <span className="font-bold">
+                              {formatCOP(diferencia.toFixed(0))} ({porcentaje.toFixed(1)}%)
+                            </span>
+                          </div>
+                        )}
+                        {esPerdida && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">❌ Pérdida:</span>
+                            <span className="font-bold">
+                              {formatCOP(Math.abs(diferencia).toFixed(0))} ({Math.abs(porcentaje).toFixed(1)}%)
+                            </span>
+                          </div>
+                        )}
+                        {!esGanancia && !esPerdida && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">⚖️ Sin ganancia ni pérdida</span>
+                          </div>
+                        )}
+                        <div className="text-xs mt-1 text-gray-600">
+                          Costo: {formatCOP(costoCOP.toFixed(0))} | 
+                          PVP: {formatCOP(pvpEnCOP.toFixed(0))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
             <div>

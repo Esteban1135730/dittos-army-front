@@ -45,6 +45,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
           >
             Ventas
           </Link>
+          <Link
+            to="/propiedad"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Cartas en Propiedad
+          </Link>
           <EuroToCOPConverter />
         </nav>
         <button

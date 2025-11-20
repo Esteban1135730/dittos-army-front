@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import CardDetail from "./components/card.detail";
@@ -33,7 +33,10 @@ export default function Stock() {
   const [costoEnvio, setCostoEnvio] = useState<number>(0);
   const [cartasEnvio, setCartasEnvio] = useState<number>(1);
   const [copias, setCopias] = useState<number>(1);
-  const [cardState, setCardState] = useState<string>("");
+  const [cardState, setCardState] = useState<string>("near_mint");
+  const [holofoil, setHolofoil] = useState<boolean>(false);
+  const [language, setLanguage] = useState<string>("");
+  const [leagueCard, setLeagueCard] = useState<boolean>(false);
 
   // ------------------ MODO EXPANSIÓN ------------------
   const [busqueda, setBusqueda] = useState("");
@@ -42,6 +45,9 @@ export default function Stock() {
   const [expansionSeleccionada, setExpansionSeleccionada] = useState("");
   const [expansion, setExpansion] = useState<Expansion | null>(null);
   const [currency, setCurrency] = useState<"EUR" | "COP">("EUR");
+  const [paginaActual, setPaginaActual] = useState(1);
+  const cartasPorPagina = 12;
+  const [modalAbierto, setModalAbierto] = useState(false);
 
   const { data: expansiones = [], isLoading: cargandoExpansiones } = useQuery({
     queryKey: ["expansiones"],
@@ -78,7 +84,17 @@ export default function Stock() {
             carta.name.toLowerCase().includes(busqueda.toLowerCase()) ||
             carta.localId?.includes(busqueda.toLowerCase())
         )
-      : cartas.slice(0, 3);
+      : cartas;
+
+  // Resetear página cuando cambia la búsqueda o la expansión
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [busqueda, expansionSeleccionada]);
+
+  const totalPaginas = Math.ceil(cartasFiltradas.length / cartasPorPagina);
+  const indiceInicio = (paginaActual - 1) * cartasPorPagina;
+  const indiceFin = indiceInicio + cartasPorPagina;
+  const cartasPagina = cartasFiltradas.slice(indiceInicio, indiceFin);
 
   const expansionesFiltradas = expansiones.filter(
     (exp) =>
@@ -138,15 +154,26 @@ export default function Stock() {
       return;
     }
 
-    const body = {
+    const body: any = {
       card_id: cartaSeleccionada.id,
       shipment: costoEnvio,
       unity_cost: costoCarta,
       cards_in_shipmet: cartasEnvio,
-      card_state: cardState,
       image_url: (cartaSeleccionada as any)?.image || "",
       currency: currency
     };
+
+    // Agregar campos opcionales solo si tienen valores
+    body.card_state = cardState; // Siempre tiene valor por defecto (near_mint)
+    if (language) {
+      body.language = language;
+    }
+    if (holofoil) {
+      body.holofoil = holofoil;
+    }
+    if (leagueCard) {
+      body.league_card = leagueCard;
+    }
 
     try {
       setGuardando(true);
@@ -159,6 +186,13 @@ export default function Stock() {
       await Promise.all(peticiones);
 
       setMensaje(`✅ Se guardaron ${copias} copias exitosamente.`);
+      
+      // Cerrar modal después de guardar exitosamente
+      setTimeout(() => {
+        setModalAbierto(false);
+        setCartaSeleccionada(null);
+        setMensaje("");
+      }, 1500);
     } catch (err) {
       setMensaje("❌ Error al guardar una o más copias.");
     } finally {
@@ -220,13 +254,13 @@ export default function Stock() {
                       onClick={() => {
                         setExpansionSeleccionada(exp.id);
                         setExpansion(exp);
-                        setFiltroExpansion(`${exp.name} (${exp.ptcgoCode})`);
+                        setFiltroExpansion(exp.ptcgoCode ? `${exp.name} (${exp.ptcgoCode})` : exp.name);
                         setMostrarLista(false);
                         setCartaSeleccionada(null);
                       }}
                       className="px-4 py-2 cursor-pointer hover:bg-blue-100"
                     >
-                      {exp.name} ({exp.ptcgoCode})
+                      {exp.name}{exp.ptcgoCode ? ` (${exp.ptcgoCode})` : ''}
                     </li>
                   ))
                 ) : (
@@ -262,14 +296,17 @@ export default function Stock() {
           {/* Listado de cartas */}
           {cargandoCartas || buscandoCartas ? (
             <p className="text-gray-500 text-center">Cargando cartas...</p>
-          ) : busqueda && cartasFiltradas.length > 0 ? (
+          ) : cartasFiltradas.length > 0 ? (
             <>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cartasFiltradas.map((carta: CartaBusquedaDirecta) => (
+                {cartasPagina.map((carta: CartaBusquedaDirecta) => (
                   <div
                     key={carta.id}
-                    onClick={() => setCartaSeleccionada(carta)}
-                    className={`bg-white rounded-lg shadow p-4 border flex flex-col cursor-pointer ${
+                    onClick={() => {
+                      setCartaSeleccionada(carta);
+                      setModalAbierto(true);
+                    }}
+                    className={`bg-white rounded-lg shadow p-4 border flex flex-col cursor-pointer transition-all hover:shadow-lg ${
                       cartaSeleccionada?.id === carta.id
                         ? "border-4 border-blue-500 shadow-lg"
                         : "border-gray-200"
@@ -281,11 +318,64 @@ export default function Stock() {
                       className="w-full h-40 object-contain mb-2"
                     />
                     <h3 className="text-lg font-semibold text-gray-800">
-                      {carta.name} - {expansion?.ptcgoCode} - {carta.localId}
+                      {carta.name}{expansion?.ptcgoCode ? ` - ${expansion.ptcgoCode}` : ''} - {carta.localId}
                     </h3>
                   </div>
                 ))}
               </div>
+              
+              {/* Controles de paginación */}
+              {totalPaginas > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setPaginaActual((prev) => Math.max(1, prev - 1))}
+                    disabled={paginaActual === 1}
+                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+                  
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((num) => {
+                      // Mostrar solo algunas páginas alrededor de la actual
+                      if (
+                        num === 1 ||
+                        num === totalPaginas ||
+                        (num >= paginaActual - 1 && num <= paginaActual + 1)
+                      ) {
+                        return (
+                          <button
+                            key={num}
+                            onClick={() => setPaginaActual(num)}
+                            className={`px-3 py-2 border rounded-md ${
+                              paginaActual === num
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      } else if (num === paginaActual - 2 || num === paginaActual + 2) {
+                        return <span key={num} className="px-2">...</span>;
+                      }
+                      return null;
+                    })}
+                  </div>
+                  
+                  <button
+                    onClick={() => setPaginaActual((prev) => Math.min(totalPaginas, prev + 1))}
+                    disabled={paginaActual === totalPaginas}
+                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              )}
+              
+              <p className="text-sm text-gray-500 text-center mt-2">
+                Mostrando {indiceInicio + 1}-{Math.min(indiceFin, cartasFiltradas.length)} de {cartasFiltradas.length} cartas
+              </p>
             </>
           ) : (
             busqueda && (
@@ -330,6 +420,7 @@ export default function Stock() {
                   key={carta.id}
                   onClick={() => {
                     setCartaSeleccionada(carta);
+                    setModalAbierto(true);
                   }}
                   className={`cursor-pointer border rounded-lg p-2 shadow hover:shadow-lg transition ${
                     cartaSeleccionada?.id === carta.id
@@ -352,50 +443,108 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Detalles de la carta seleccionada */}
-      {cartaSeleccionada && (
-        <>
-          <CardDetail
-            carta={cartaSeleccionada}
-            costoCarta={costoCarta}
-            setCostoCarta={setCostoCarta}
-            costoEnvio={costoEnvio}
-            setCostoEnvio={setCostoEnvio}
-            cartasEnvio={cartasEnvio}
-            setCartasEnvio={setCartasEnvio}
-            copias={copias}
-            setCopias={setCopias}
-            cardState={cardState}
-            setCardState={setCardState}
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mt-4">
-              Moneda
-            </label>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as "EUR" | "COP")}
-              className="w-full px-3 py-2 border rounded-lg border-gray-300 focus:ring-blue-500 focus:outline-none"
-            >
-              <option value="EUR">EUR</option>
-              <option value="COP">COP</option>
-            </select>
+      {/* Modal de detalles de la carta seleccionada */}
+      {modalAbierto && cartaSeleccionada && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setModalAbierto(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-xl flex justify-between items-center z-10">
+              <h2 className="text-xl font-bold">Detalles de la carta</h2>
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                aria-label="Cerrar"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Contenido del modal */}
+            <div className="p-6">
+              <CardDetail
+                carta={cartaSeleccionada}
+                costoCarta={costoCarta}
+                setCostoCarta={setCostoCarta}
+                costoEnvio={costoEnvio}
+                setCostoEnvio={setCostoEnvio}
+                cartasEnvio={cartasEnvio}
+                setCartasEnvio={setCartasEnvio}
+                copias={copias}
+                setCopias={setCopias}
+                cardState={cardState}
+                setCardState={setCardState}
+                holofoil={holofoil}
+                setHolofoil={setHolofoil}
+                language={language}
+                setLanguage={setLanguage}
+                leagueCard={leagueCard}
+                setLeagueCard={setLeagueCard}
+              />
+              
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Moneda
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value as "EUR" | "COP")}
+                  className="w-full px-3 py-2 border rounded-lg border-gray-300 focus:ring-blue-500 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="EUR">EUR</option>
+                  <option value="COP">COP</option>
+                </select>
+              </div>
+              
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={guardarStock}
+                  disabled={guardando}
+                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors shadow-md hover:shadow-lg"
+                >
+                  {guardando ? "Guardando..." : "Guardar stock"}
+                </button>
+                <button
+                  onClick={() => setModalAbierto(false)}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+              
+              {mensaje && (
+                <div className={`mt-4 p-3 rounded-lg text-sm text-center ${
+                  mensaje.includes("✅") 
+                    ? "bg-green-50 text-green-800 border border-green-200" 
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}>
+                  {mensaje}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="mt-4">
-            <button
-              onClick={guardarStock}
-              disabled={guardando}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {guardando ? "Guardando..." : "Guardar stock"}
-            </button>
-            {mensaje && (
-              <p className="mt-2 text-sm text-center text-gray-700">
-                {mensaje}
-              </p>
-            )}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );

@@ -23,7 +23,10 @@ export default function ModificarStock() {
     shipment: 0,
     unity_cost: 0,
     cards_in_shipmet: 1,
-    card_state: "",
+    card_state: "near_mint",
+    language: "",
+    holofoil: false,
+    league_card: false,
   });
 
   const [mensaje, setMensaje] = useState("");
@@ -54,23 +57,57 @@ export default function ModificarStock() {
       shipment: data.shipment || 0,
       unity_cost: data.unity_cost || 0,
       cards_in_shipmet: data.cards_in_shipmet || 1,
-      card_state: data.card_state || "",
+      card_state: data.card_state || "near_mint",
+      language: data.language || "",
+      holofoil: data.holofoil || false,
+      league_card: data.league_card || false,
     });
   }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]:
-        name === "shipment" ||
-        name === "unity_cost" ||
-        name === "cards_in_shipmet"
-          ? parseFloat(value)
-          : value,
-    }));
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
+    if (type === "checkbox") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+      return;
+    }
+    
+    // Para campos numéricos, permitir punto y coma
+    if (name === "shipment" || name === "unity_cost") {
+      // Permitir vacío, números, punto y coma
+      if (value === "" || /^[0-9]*[.,]?[0-9]*$/.test(value)) {
+        const normalizedValue = value.replace(",", ".");
+        if (normalizedValue === "" || normalizedValue === ".") {
+          setForm((prev) => ({
+            ...prev,
+            [name]: 0,
+          }));
+        } else {
+          const num = parseFloat(normalizedValue);
+          setForm((prev) => ({
+            ...prev,
+            [name]: isNaN(num) ? 0 : num,
+          }));
+        }
+      }
+    } else if (name === "cards_in_shipmet") {
+      const num = parseInt(value);
+      setForm((prev) => ({
+        ...prev,
+        [name]: isNaN(num) || num < 1 ? 1 : num,
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleGuardar = () => {
@@ -115,24 +152,42 @@ export default function ModificarStock() {
               Costo unidad (€)
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               name="unity_cost"
-              step="0.01"
-              value={form.unity_cost}
+              value={form.unity_cost === 0 ? "" : form.unity_cost.toString().replace(".", ",")}
               onChange={handleChange}
+              onBlur={(e) => {
+                const value = e.target.value.replace(",", ".");
+                const num = parseFloat(value);
+                setForm((prev) => ({
+                  ...prev,
+                  unity_cost: isNaN(num) || num < 0 ? 0 : num,
+                }));
+              }}
               className="w-full px-3 py-2 border rounded"
+              placeholder="0,00 o 0.00"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium">Costo envío (€)</label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               name="shipment"
-              step="0.01"
-              value={form.shipment}
+              value={form.shipment === 0 ? "" : form.shipment.toString().replace(".", ",")}
               onChange={handleChange}
+              onBlur={(e) => {
+                const value = e.target.value.replace(",", ".");
+                const num = parseFloat(value);
+                setForm((prev) => ({
+                  ...prev,
+                  shipment: isNaN(num) || num < 0 ? 0 : num,
+                }));
+              }}
               className="w-full px-3 py-2 border rounded"
+              placeholder="0,00 o 0.00"
             />
           </div>
 
@@ -159,14 +214,60 @@ export default function ModificarStock() {
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded"
             >
-              <option value="">Selecciona un estado</option>
-              <option value="en_envio_cardmarket">En envío (CardMarket)</option>
-              <option value="en_stock_espana">En stock (España)</option>
-              <option value="en_envio_colombia">En envío (Colombia)</option>
-              <option value="en_stock_colombia">En stock (Colombia)</option>
-              <option value="vendida">Vendida</option>
+              <option value="mint">Mint</option>
+              <option value="near_mint">Near Mint</option>
+              <option value="played">Played</option>
+              <option value="good">Good</option>
+              <option value="poor">Poor</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">Idioma</label>
+            <select
+              name="language"
+              value={form.language}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded"
+            >
+              <option value="">Selecciona un idioma</option>
+              <option value="es">Español</option>
+              <option value="en">Inglés</option>
+              <option value="fr">Francés</option>
+              <option value="de">Alemán</option>
+              <option value="it">Italiano</option>
+              <option value="pt">Portugués</option>
+              <option value="ja">Japonés</option>
+              <option value="ko">Coreano</option>
+              <option value="zh">Chino</option>
               <option value="otro">Otro</option>
             </select>
+          </div>
+
+          <div className="flex items-center">
+            <label className="flex items-center text-sm font-medium">
+              <input
+                type="checkbox"
+                name="holofoil"
+                checked={form.holofoil}
+                onChange={handleChange}
+                className="mr-2 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              Holofoil
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <label className="flex items-center text-sm font-medium">
+              <input
+                type="checkbox"
+                name="league_card"
+                checked={form.league_card}
+                onChange={handleChange}
+                className="mr-2 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              Carta de Liga
+            </label>
           </div>
         </div>
       </div>
