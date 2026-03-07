@@ -508,11 +508,33 @@ export default function StockGrid() {
 
   const [exportando, setExportando] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [limpiandoPvp, setLimpiandoPvp] = useState(false);
+
+  const handleLimpiarTodosPvp = async () => {
+    const confirmar = window.confirm(
+      "¿Eliminar todos los PVP asignados? Las cartas quedarán sin precio de venta. Esta acción no se puede deshacer."
+    );
+    if (!confirmar) return;
+
+    try {
+      setLimpiandoPvp(true);
+      const res = await axios.delete("http://localhost:3000/pvp");
+      const deleted = res.data?.deletedCount ?? 0;
+      await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      if (deleted > 0) {
+        window.alert(`Se eliminaron ${deleted} PVP correctamente.`);
+      }
+    } catch (err) {
+      window.alert("No se pudieron eliminar los PVP. Intenta más tarde.");
+    } finally {
+      setLimpiandoPvp(false);
+    }
+  };
 
   const handleExportar = () => {
     setExportando(true);
     exportToPDF(
-      stock.filter((stockItem) => stockItem.card_state == "en_stock_colombia"),
+      stock.filter((stockItem: StockItem) => stockItem.card_state == "en_stock_colombia"),
       convert.toCopFromEur,
       () => setExportando(false)
     );
@@ -639,6 +661,13 @@ export default function StockGrid() {
               </div>
             )}
           </div>
+          <button
+            onClick={handleLimpiarTodosPvp}
+            disabled={limpiandoPvp}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
+          </button>
         </div>
         <div className="flex flex-col gap-4 mt-4">
           <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">

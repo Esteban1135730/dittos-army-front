@@ -1,6 +1,4 @@
-import { Routes, Route } from "react-router-dom";
-import Login from "./pages/login/login";
-import ProtectedRoute from "./components/protected.route";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/home/home";
 import SideLayout from "./components/layout/side-layout";
 import Stock from "./pages/stock/create-stock/stock";
@@ -9,94 +7,102 @@ import ModificarStock from "./pages/stock/update-stock/update-stock";
 import AddPVP from "./pages/pvp/add-pvp/add-pvp";
 import PropertyList from "./pages/sales/property-list";
 import SalesDashboard from "./pages/sales/sales-dashboard";
+import ClientesPage from "./pages/clientes/clientes";
+import ReservarCartasPage from "./pages/clientes/reservar-cartas";
+import ImprimirPedidosPage from "./pages/clientes/imprimir-pedidos";
 
 export default function AppRouter() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <Home />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <Home />
+          </SideLayout>
         }
       />
       <Route
         path="/stock"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <StockGrid />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <StockGrid />
+          </SideLayout>
         }
       />
-
       <Route
         path="/stock/update/:id"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <ModificarStock />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <ModificarStock />
+          </SideLayout>
         }
       />
       <Route
         path="/add-stock"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <Stock />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <Stock />
+          </SideLayout>
         }
       />
       <Route
         path="/add-pvp/:id"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <AddPVP />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <AddPVP />
+          </SideLayout>
         }
       />
       <Route
         path="/cotizar"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <div>2</div>
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <div>2</div>
+          </SideLayout>
         }
       />
       <Route
         path="/ventas"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <SalesDashboard />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <SalesDashboard />
+          </SideLayout>
         }
       />
       <Route
         path="/propiedad"
         element={
-          <ProtectedRoute>
-            <SideLayout>
-              <PropertyList />
-            </SideLayout>
-          </ProtectedRoute>
+          <SideLayout>
+            <PropertyList />
+          </SideLayout>
         }
       />
-      {/* Fallback */}
-      <Route path="*" element={<Login />} />
+      <Route
+        path="/clientes"
+        element={
+          <SideLayout>
+            <ClientesPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/clientes/:clientId/reservar"
+        element={
+          <SideLayout>
+            <ReservarCartasPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/clientes/imprimir-pedidos"
+        element={
+          <SideLayout>
+            <ImprimirPedidosPage />
+          </SideLayout>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

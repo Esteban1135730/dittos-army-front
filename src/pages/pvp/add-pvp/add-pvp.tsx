@@ -5,36 +5,42 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
 
+/** Respuesta estándar de carta desde TCGdex (mapeada en backend) */
 type CardDetail = {
+  id?: string;
+  localId?: string;
   name: string;
-  images: {
+  image?: string;
+  images?: {
     small: string;
     large: string;
   };
   tcgplayer?: {
-    prices?: {
-      holofoil?: {
+    unit?: string;
+    updated?: string;
+    prices?: Record<
+      string,
+      {
         low?: number;
         mid?: number;
         high?: number;
         market?: number;
         directLow?: number;
-      };
-      reverseHolofoil?: {
-        low?: number;
-        mid?: number;
-        high?: number;
-        market?: number;
-        directLow?: number;
-      };
-      normal?: {
-        low?: number;
-        mid?: number;
-        high?: number;
-        market?: number;
-        directLow?: number;
-      };
-    };
+      }
+    >;
+  };
+  cardmarket?: {
+    unit?: string;
+    updated?: string;
+    avg?: number;
+    low?: number;
+    trend?: number;
+    avg1?: number;
+    avg7?: number;
+    avg30?: number;
+    avgHolo?: number;
+    lowHolo?: number;
+    trendHolo?: number;
   };
 };
 
@@ -65,13 +71,31 @@ export default function AsignarPVP() {
       enabled: !!id,
     });
 
-  const { data: cardData, isLoading: loadingCard } = useQuery<CardDetail>({
+  const { data: cardData, isLoading: loadingCard, isError: cardError, error: cardQueryError } = useQuery<CardDetail>({
     queryKey: ["cardDetail", id],
     queryFn: async () => {
-      const res = await axios.get(
-        `http://localhost:3000/tcg-sdk/card/alter/${id}`
-      );
-      return res.data;
+      const url = `http://localhost:3000/card/${id}`;
+      try {
+        const res = await axios.get<CardDetail | null>(url);
+        if (res.data === null || res.data === undefined) {
+          console.error("[add-pvp] Carta no encontrada (respuesta null/undefined)", { cardId: id, url });
+          throw new Error("Carta no encontrada");
+        }
+        return res.data as CardDetail;
+      } catch (err) {
+        if (axios.isAxiosError(err)) {
+          console.error("[add-pvp] Error al cargar carta (axios)", {
+            cardId: id,
+            url,
+            status: err.response?.status,
+            data: err.response?.data,
+            message: err.message,
+          });
+        } else {
+          console.error("[add-pvp] Error al cargar carta", { cardId: id, url, error: err });
+        }
+        throw err;
+      }
     },
     enabled: !!id,
   });
@@ -92,6 +116,17 @@ export default function AsignarPVP() {
       setCurrency(existingPvp.currency as "EUR" | "COP");
     }
   }, [existingPvp]);
+
+  // Traza de error al cargar la carta
+  useEffect(() => {
+    if (cardError && cardQueryError) {
+      console.error("[add-pvp] useQuery cardDetail en estado de error", {
+        cardId: id,
+        error: cardQueryError,
+        message: cardQueryError instanceof Error ? cardQueryError.message : String(cardQueryError),
+      });
+    }
+  }, [cardError, cardQueryError, id]);
 
   const priceVariants = cardData?.tcgplayer?.prices
     ? Object.keys(cardData.tcgplayer.prices)
@@ -216,31 +251,35 @@ export default function AsignarPVP() {
             <p className="text-gray-500">Cargando información de la carta...</p>
           )}
 
-          {!loadingCard && !cardData && (
+          {!loadingCard && (cardError || !cardData) && (
             <p className="text-red-500">
-              No se pudo cargar la información de la carta.
+              {cardError
+                ? "Error al cargar la carta. Comprueba la conexión o que el ID sea correcto."
+                : "No se pudo cargar la información de la carta."}
             </p>
           )}
 
           {cardData && (
             <>
               <img
-                src={cardData.images.large}
+                src={cardData.image ?? cardData.images?.large ?? ""}
                 alt={cardData.name}
                 className="w-auto h-500 mx-auto rounded shadow"
               />
               <h3 className="text-lg font-semibold mt-4">{cardData.name}</h3>
 
+              {/* Precios TCGplayer (USD) */}
               {cardData?.tcgplayer?.prices ? (
                 <div className="text-sm mt-3 text-gray-700 space-y-3 text-left max-h-[300px] overflow-y-auto">
+                  <p className="font-semibold text-gray-900">TCGplayer (USD)</p>
                   {Object.entries(cardData.tcgplayer.prices).map(
                     ([variantName, variantPrices]) => (
                       <div key={variantName}>
-                        <p className="font-semibold capitalize text-gray-900 mb-1">
+                        <p className="font-medium capitalize text-gray-800 mb-1">
                           {variantName.replace(/([A-Z])/g, " $1")}
                         </p>
                         <ul className="space-y-1 ml-2">
-                          {"market" in variantPrices && variantPrices.market && (
+                          {"market" in variantPrices && variantPrices.market != null && (
                             <li>
                               💸 <strong>Market:</strong> $
                               {variantPrices.market.toFixed(2)} |{" "}
@@ -251,7 +290,7 @@ export default function AsignarPVP() {
                               )}
                             </li>
                           )}
-                          {"low" in variantPrices && variantPrices.low && (
+                          {"low" in variantPrices && variantPrices.low != null && (
                             <li>
                               📉 <strong>Low:</strong> $
                               {variantPrices.low.toFixed(2)} |{" "}
@@ -262,7 +301,7 @@ export default function AsignarPVP() {
                               )}
                             </li>
                           )}
-                          {"high" in variantPrices && variantPrices.high && (
+                          {"high" in variantPrices && variantPrices.high != null && (
                             <li>
                               📈 <strong>High:</strong> $
                               {variantPrices.high.toFixed(2)} |{" "}
@@ -273,7 +312,7 @@ export default function AsignarPVP() {
                               )}
                             </li>
                           )}
-                          {"mid" in variantPrices && variantPrices.mid && (
+                          {"mid" in variantPrices && variantPrices.mid != null && (
                             <li>
                               📊 <strong>Mid:</strong> $
                               {variantPrices.mid.toFixed(2)} |{" "}
@@ -284,7 +323,7 @@ export default function AsignarPVP() {
                               )}
                             </li>
                           )}
-                          {"directLow" in variantPrices && variantPrices.directLow && (
+                          {"directLow" in variantPrices && variantPrices.directLow != null && (
                             <li>
                               🏷 <strong>Direct Low:</strong> $
                               {variantPrices.directLow.toFixed(2)} |{" "}
@@ -300,7 +339,53 @@ export default function AsignarPVP() {
                     )
                   )}
                 </div>
-              ) : (
+              ) : null}
+
+              {/* Precios Cardmarket (EUR) */}
+              {cardData?.cardmarket && (cardData.cardmarket.trend != null || cardData.cardmarket.avg != null || cardData.cardmarket.low != null) ? (
+                <div className="text-sm mt-3 text-gray-700 space-y-1 text-left border-t pt-3">
+                  <p className="font-semibold text-gray-900">Cardmarket (EUR)</p>
+                  <ul className="space-y-1 ml-2">
+                    {cardData.cardmarket.trend != null && (
+                      <li>
+                        💸 <strong>Trend:</strong> €{cardData.cardmarket.trend.toFixed(2)} |{" "}
+                        {formatCOP(
+                          convert
+                            .toCopFromEur(cardData.cardmarket.trend)
+                            ?.toFixed(0) || "0"
+                        )}
+                      </li>
+                    )}
+                    {cardData.cardmarket.avg != null && (
+                      <li>
+                        📊 <strong>Avg:</strong> €{cardData.cardmarket.avg.toFixed(2)} |{" "}
+                        {formatCOP(
+                          convert
+                            .toCopFromEur(cardData.cardmarket.avg)
+                            ?.toFixed(0) || "0"
+                        )}
+                      </li>
+                    )}
+                    {cardData.cardmarket.low != null && (
+                      <li>
+                        📉 <strong>Low:</strong> €{cardData.cardmarket.low.toFixed(2)} |{" "}
+                        {formatCOP(
+                          convert
+                            .toCopFromEur(cardData.cardmarket.low)
+                            ?.toFixed(0) || "0"
+                        )}
+                      </li>
+                    )}
+                    {cardData.cardmarket.avg30 != null && (
+                      <li>
+                        📈 <strong>Avg 30d:</strong> €{cardData.cardmarket.avg30.toFixed(2)}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ) : null}
+
+              {!cardData?.tcgplayer?.prices && !(cardData?.cardmarket && (cardData.cardmarket.trend != null || cardData.cardmarket.avg != null || cardData.cardmarket.low != null)) && (
                 <p className="text-gray-500 mt-4">
                   No hay precios disponibles para esta carta.
                 </p>

@@ -1,17 +1,8 @@
 import type { ReactNode } from "react";
-import { useAuth } from "../../context/auth.context";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import EuroToCOPConverter from "../../utils/tasa";
 
 export default function SideLayout({ children }: { children: ReactNode }) {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
-
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
@@ -51,14 +42,20 @@ export default function SideLayout({ children }: { children: ReactNode }) {
           >
             Cartas en Propiedad
           </Link>
+          <Link
+            to="/clientes"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Clientes
+          </Link>
+          <Link
+            to="/clientes/imprimir-pedidos"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Imprimir pedidos
+          </Link>
           <EuroToCOPConverter />
         </nav>
-        <button
-          onClick={handleLogout}
-          className="mt-auto bg-red-500 px-3 py-2 rounded hover:bg-red-600"
-        >
-          Cerrar sesión
-        </button>
       </aside>
 
       {/* Contenido */}

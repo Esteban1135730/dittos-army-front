@@ -2,7 +2,6 @@ import React from "react";
 import { BrowserRouter } from "react-router-dom";
 import AppRouter from "./app.route";
 import { createRoot } from "react-dom/client";
-import { AuthProvider } from "./context/auth.context";
 import "./index.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
@@ -30,9 +29,7 @@ createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <AppRouter />
-        </AuthProvider>
+        <AppRouter />
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>
