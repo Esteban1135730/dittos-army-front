@@ -49,10 +49,10 @@ export default function StockGrid() {
       const res = await axios.get("http://localhost:3000/stock");
       return Array.isArray(res.data)
         ? res.data.filter(
-            (stockItem) =>
-              stockItem.card_state != "vendida" &&
-              stockItem.card_state != "propiedad"
-          )
+          (stockItem) =>
+            stockItem.card_state != "vendida" &&
+            stockItem.card_state != "propiedad"
+        )
         : [];
     },
   });
@@ -62,7 +62,7 @@ export default function StockGrid() {
   // Calcular precio del inventario en COP/EUR/USD
   const precioInventario = useMemo(() => {
     let totalCOP = 0;
-    
+
     stock.forEach((item) => {
       if (item.currency === "COP") {
         totalCOP += item.card_cost;
@@ -123,7 +123,7 @@ export default function StockGrid() {
     return [...stock].sort((a, b) => {
       const aTienePvp = a.pvp && a.pvp > 0;
       const bTienePvp = b.pvp && b.pvp > 0;
-      
+
       if (!aTienePvp && bTienePvp) return -1; // a sin PVP va primero
       if (aTienePvp && !bTienePvp) return 1;  // b sin PVP va primero
       return 0; // mantener orden original si ambos tienen o no tienen PVP
@@ -163,7 +163,7 @@ export default function StockGrid() {
 
   const handleMarcarPropiedad = async (stockId: string, cardId: string) => {
     const confirmar = window.confirm(
-      "¿Marcar esta carta como propiedad? Se contará como pérdida."
+      "¿Marcar esta carta como propiedad?"
     );
     if (!confirmar) return;
 
@@ -185,7 +185,7 @@ export default function StockGrid() {
   const handleAbrirModalVenta = (stockId: string, cardId: string, pvp?: number, pvpCurrency?: string) => {
     setVentaStockId(stockId);
     setVentaCardId(cardId);
-    
+
     // Si existe PVP, convertirlo a COP y establecerlo como valor por defecto
     if (pvp && pvp > 0 && pvpCurrency) {
       let pvpEnCOP = 0;
@@ -200,7 +200,7 @@ export default function StockGrid() {
     } else {
       setPrecioVenta("");
     }
-    
+
     setErrorVenta("");
     setMostrarModalVenta(true);
   };
@@ -238,7 +238,7 @@ export default function StockGrid() {
     } catch (error: any) {
       setErrorVenta(
         error?.response?.data?.message ||
-          "No fue posible registrar la venta. Intenta más tarde."
+        "No fue posible registrar la venta. Intenta más tarde."
       );
     } finally {
       setVendiendo(false);
@@ -281,9 +281,9 @@ export default function StockGrid() {
           {params.row.currency == "COP"
             ? "COP " + params.value.toFixed(2)
             : "EURO " +
-              params.value.toFixed(2) +
-              " - COP " +
-              formatCOP(convert.toCopFromEur(params.value)?.toFixed(0))}
+            params.value.toFixed(2) +
+            " - COP " +
+            formatCOP(convert.toCopFromEur(params.value)?.toFixed(0))}
         </>
       ),
       width: 200,
@@ -297,7 +297,7 @@ export default function StockGrid() {
           let pvpCOP = 0;
           let pvpEUR = 0;
           let pvpUSD = 0;
-          
+
           if (params.row.pvp_currency === "COP") {
             pvpCOP = params.row.pvp;
             pvpEUR = convert.toEurFromCop(pvpCOP) ?? 0;
@@ -307,10 +307,10 @@ export default function StockGrid() {
             pvpCOP = convert.toCopFromEur(pvpEUR) ?? 0;
             pvpUSD = convert.toUsdFromCop(pvpCOP) ?? 0;
           }
-          
+
           // Moneda de compra (currency del stock)
           const monedaCompra = params.row.currency;
-          
+
           return (
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex gap-2 flex-wrap">
@@ -367,25 +367,23 @@ export default function StockGrid() {
         return (
           <div className="flex items-center gap-3">
             <span
-              className={`font-semibold ${
-                esGanancia
+              className={`font-semibold ${esGanancia
                   ? "text-green-600"
                   : esPerdida
-                  ? "text-red-600"
-                  : "text-gray-600"
-              }`}
+                    ? "text-red-600"
+                    : "text-gray-600"
+                }`}
             >
               {esGanancia ? "+" : ""}
               {formatCOP(ganancia.toFixed(0))}
             </span>
             <span
-              className={`text-sm font-medium ${
-                esGanancia
+              className={`text-sm font-medium ${esGanancia
                   ? "text-green-600"
                   : esPerdida
-                  ? "text-red-600"
-                  : "text-gray-600"
-              }`}
+                    ? "text-red-600"
+                    : "text-gray-600"
+                }`}
             >
               ({esGanancia ? "+" : ""}
               {porcentaje.toFixed(1)}%)
@@ -463,11 +461,10 @@ export default function StockGrid() {
             params.row.card_state === "propiedad" ||
             marcandoPropiedad === params.row._id
           }
-          className={`px-3 py-1 rounded ${
-            params.row.card_state === "propiedad"
+          className={`px-3 py-1 rounded ${params.row.card_state === "propiedad"
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"
               : "bg-rose-600 text-white hover:bg-rose-700"
-          }`}
+            }`}
         >
           {marcandoPropiedad === params.row._id ? "Marcando..." : "Propiedad"}
         </button>
@@ -493,12 +490,11 @@ export default function StockGrid() {
             params.row.card_state === "vendida" ||
             params.row.card_state === "propiedad"
           }
-          className={`px-3 py-1 rounded ${
-            params.row.card_state === "vendida" ||
-            params.row.card_state === "propiedad"
+          className={`px-3 py-1 rounded ${params.row.card_state === "vendida" ||
+              params.row.card_state === "propiedad"
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"
               : "bg-green-600 text-white hover:bg-green-700"
-          }`}
+            }`}
         >
           Vendido
         </button>
@@ -509,6 +505,7 @@ export default function StockGrid() {
   const [exportando, setExportando] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
   const [limpiandoPvp, setLimpiandoPvp] = useState(false);
+  const [actualizandoTienda, setActualizandoTienda] = useState(false);
 
   const handleLimpiarTodosPvp = async () => {
     const confirmar = window.confirm(
@@ -550,6 +547,28 @@ export default function StockGrid() {
     );
   };
 
+  const handleActualizarInformacionTienda = async () => {
+    try {
+      setActualizandoTienda(true);
+      const res = await axios.post("http://localhost:3000/stock/export-store-inventory");
+      const data = res.data;
+      if (data?.success) {
+        window.alert(
+          `Inventario de la tienda actualizado correctamente. ${data.count ?? 0} cartas exportadas.`
+        );
+      } else {
+        window.alert("Error al actualizar: " + (data?.error || "Respuesta inesperada"));
+      }
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : null;
+      window.alert("No se pudo actualizar la información de la tienda. " + (msg || "Intenta más tarde."));
+    } finally {
+      setActualizandoTienda(false);
+    }
+  };
+
   if (isLoading)
     return <p className="text-center text-gray-500">Cargando stock...</p>;
 
@@ -561,6 +580,7 @@ export default function StockGrid() {
     );
 
   return (
+
     <div style={{ height: "90%", width: "100%", margin: "2rem auto" }}>
       {cartasSinPvp > 0 && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
@@ -633,208 +653,214 @@ export default function StockGrid() {
             </div>
           </div>
           <div className="flex gap-2">
-          <div className="relative">
-            <button
-              onClick={handleExportar}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Exportar PDF
-            </button>
+            <div className="relative">
+              <button
+                onClick={handleExportar}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Exportar PDF
+              </button>
 
-            {exportando && (
-              <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
-                Generando PDF...
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            <button
-              onClick={handleImprimirCatalogo}
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              Imprimir Catálogo
-            </button>
-
-            {imprimiendo && (
-              <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
-                Generando catálogo...
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleLimpiarTodosPvp}
-            disabled={limpiandoPvp}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
-          </button>
-        </div>
-        <div className="flex flex-col gap-4 mt-4">
-          <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
-            <h3 className="text-lg font-semibold mb-3 text-gray-700">
-              Estadísticas del Inventario
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 mb-2">Precio del Inventario</p>
-                <div className="flex flex-col gap-1">
-                  <span className="font-bold text-blue-600 text-lg">
-                    COP {formatCOP(precioInventario.cop.toFixed(0))}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    EUR {precioInventario.eur.toFixed(2)} / USD {precioInventario.usd.toFixed(2)}
-                  </span>
+              {exportando && (
+                <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
+                  Generando PDF...
                 </div>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 mb-2">Ganancia Esperada</p>
-                <div className="flex flex-col gap-1">
-                  <span
-                    className={`font-bold text-lg ${
-                      gananciaEsperada.cop > 0
-                        ? "text-green-600"
-                        : gananciaEsperada.cop < 0
-                        ? "text-red-600"
-                        : "text-gray-600"
-                    }`}
-                  >
-                    {gananciaEsperada.cop > 0 ? "+" : ""}
-                    COP {formatCOP(gananciaEsperada.cop.toFixed(0))}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {gananciaEsperada.eur > 0 ? "+" : ""}
-                    EUR {gananciaEsperada.eur.toFixed(2)} /{" "}
-                    {gananciaEsperada.usd > 0 ? "+" : ""}
-                    USD {gananciaEsperada.usd.toFixed(2)}
-                  </span>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                onClick={handleImprimirCatalogo}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              >
+                Imprimir Catálogo
+              </button>
+
+              {imprimiendo && (
+                <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
+                  Generando catálogo...
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleLimpiarTodosPvp}
+              disabled={limpiandoPvp}
+              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
+            </button>
+            <button
+              onClick={handleActualizarInformacionTienda}
+              disabled={actualizandoTienda}
+              className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actualizandoTienda ? "Actualizando..." : "Actualizar información tienda"}
+            </button>
+          </div>
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+              <h3 className="text-lg font-semibold mb-3 text-gray-700">
+                Estadísticas del Inventario
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Precio del Inventario</p>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-blue-600 text-lg">
+                      COP {formatCOP(precioInventario.cop.toFixed(0))}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      EUR {precioInventario.eur.toFixed(2)} / USD {precioInventario.usd.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Ganancia Esperada</p>
+                  <div className="flex flex-col gap-1">
+                    <span
+                      className={`font-bold text-lg ${gananciaEsperada.cop > 0
+                          ? "text-green-600"
+                          : gananciaEsperada.cop < 0
+                            ? "text-red-600"
+                            : "text-gray-600"
+                        }`}
+                    >
+                      {gananciaEsperada.cop > 0 ? "+" : ""}
+                      COP {formatCOP(gananciaEsperada.cop.toFixed(0))}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {gananciaEsperada.eur > 0 ? "+" : ""}
+                      EUR {gananciaEsperada.eur.toFixed(2)} /{" "}
+                      {gananciaEsperada.usd > 0 ? "+" : ""}
+                      USD {gananciaEsperada.usd.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
+            {busqueda && (
+              <p className="text-sm text-gray-600 text-center md:text-left">
+                Mostrando {stockFiltrado.length}{" "}
+                {stockFiltrado.length === 1 ? "resultado" : "resultados"} de{" "}
+                {stock.length} cartas
+              </p>
+            )}
           </div>
-          {busqueda && (
-            <p className="text-sm text-gray-600 text-center md:text-left">
-              Mostrando {stockFiltrado.length}{" "}
-              {stockFiltrado.length === 1 ? "resultado" : "resultados"} de{" "}
-              {stock.length} cartas
+          {errorPropiedad && (
+            <p className="text-sm text-red-600 text-center mt-2">
+              {errorPropiedad}
             </p>
           )}
         </div>
-        {errorPropiedad && (
-          <p className="text-sm text-red-600 text-center mt-2">
-            {errorPropiedad}
-          </p>
-        )}
-      </div>
 
-      {/* Modal de Venta */}
-      {mostrarModalVenta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">
-              Registrar Venta
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Ingresa el precio en el que se vendió la carta (en COP):
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Precio de Venta (COP)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={
-                  precioVenta === ""
-                    ? ""
-                    : typeof precioVenta === "number"
-                    ? precioVenta.toString().replace(".", ",")
-                    : precioVenta
-                }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === "" || /^[0-9]*[.,]?[0-9]*$/.test(value)) {
-                    const normalizedValue = value.replace(",", ".");
-                    if (normalizedValue === "" || normalizedValue === ".") {
+        {/* Modal de Venta */}
+        {mostrarModalVenta && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">
+                Registrar Venta
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Ingresa el precio en el que se vendió la carta (en COP):
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Precio de Venta (COP)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={
+                    precioVenta === ""
+                      ? ""
+                      : typeof precioVenta === "number"
+                        ? precioVenta.toString().replace(".", ",")
+                        : precioVenta
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "" || /^[0-9]*[.,]?[0-9]*$/.test(value)) {
+                      const normalizedValue = value.replace(",", ".");
+                      if (normalizedValue === "" || normalizedValue === ".") {
+                        setPrecioVenta("");
+                      } else {
+                        const num = parseFloat(normalizedValue);
+                        setPrecioVenta(isNaN(num) ? "" : num);
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = e.target.value.replace(",", ".");
+                    if (value === "" || value === ".") {
                       setPrecioVenta("");
                     } else {
-                      const num = parseFloat(normalizedValue);
+                      const num = parseFloat(value);
                       setPrecioVenta(isNaN(num) ? "" : num);
                     }
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value.replace(",", ".");
-                  if (value === "" || value === ".") {
-                    setPrecioVenta("");
-                  } else {
-                    const num = parseFloat(value);
-                    setPrecioVenta(isNaN(num) ? "" : num);
-                  }
-                }}
-                className="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Ej: 50000 o 50.000"
-                autoFocus
-              />
-            </div>
-            {errorVenta && (
-              <p className="text-sm text-red-600 mb-4">{errorVenta}</p>
-            )}
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handleCerrarModalVenta}
-                disabled={vendiendo}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleVender}
-                disabled={vendiendo || precioVenta === "" || precioVenta <= 0}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {vendiendo ? "Registrando..." : "Registrar Venta"}
-              </button>
+                  }}
+                  className="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Ej: 50000 o 50.000"
+                  autoFocus
+                />
+              </div>
+              {errorVenta && (
+                <p className="text-sm text-red-600 mb-4">{errorVenta}</p>
+              )}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleCerrarModalVenta}
+                  disabled={vendiendo}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleVender}
+                  disabled={vendiendo || precioVenta === "" || precioVenta <= 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {vendiendo ? "Registrando..." : "Registrar Venta"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <DataGrid
-        rows={stockFiltrado}
-        columns={columns}
-        getRowId={(row) => row._id}
-        pageSizeOptions={[20, 30, 40]}
-        initialState={{
-          pagination: {
-            paginationModel: { pageSize: 20, page: 0 },
-          },
-        }}
-        pagination
-        disableRowSelectionOnClick
-        autosizeOptions={{ includeHeaders: true }}
-        getRowClassName={(params) => {
-          const tienePvp = params.row.pvp && params.row.pvp > 0;
-          if (params.row.card_state === "propiedad") {
-            return "propiedad-row";
-          }
-          return !tienePvp ? "sin-pvp-row" : "";
-        }}
-        sx={{
-          "& .sin-pvp-row": {
-            backgroundColor: "#fee2e2 !important", // rojo claro
-            "&:hover": {
-              backgroundColor: "#fecaca !important", // rojo más oscuro al hover
+        <DataGrid
+          rows={stockFiltrado}
+          columns={columns}
+          getRowId={(row) => row._id}
+          pageSizeOptions={[20, 30, 40]}
+          initialState={{
+            pagination: {
+              paginationModel: { pageSize: 20, page: 0 },
             },
-          },
-          "& .propiedad-row": {
-            backgroundColor: "#ffe4e6 !important",
-            "&:hover": {
-              backgroundColor: "#fecdd3 !important",
+          }}
+          pagination
+          disableRowSelectionOnClick
+          autosizeOptions={{ includeHeaders: true }}
+          getRowClassName={(params) => {
+            const tienePvp = params.row.pvp && params.row.pvp > 0;
+            if (params.row.card_state === "propiedad") {
+              return "propiedad-row";
+            }
+            return !tienePvp ? "sin-pvp-row" : "";
+          }}
+          sx={{
+            "& .sin-pvp-row": {
+              backgroundColor: "#fee2e2 !important", // rojo claro
+              "&:hover": {
+                backgroundColor: "#fecaca !important", // rojo más oscuro al hover
+              },
             },
-          },
-        }}
-      />
-    </div>
+            "& .propiedad-row": {
+              backgroundColor: "#ffe4e6 !important",
+              "&:hover": {
+                backgroundColor: "#fecdd3 !important",
+              },
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }

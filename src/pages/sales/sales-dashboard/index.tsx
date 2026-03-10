@@ -34,6 +34,9 @@ export default function SalesDashboard() {
   const [editando, setEditando] = useState(false);
   const [errorEditar, setErrorEditar] = useState("");
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+  const [mostrarModalCerrarCiclo, setMostrarModalCerrarCiclo] = useState(false);
+  const [cerrandoCiclo, setCerrandoCiclo] = useState(false);
+  const [mensajeCierreCiclo, setMensajeCierreCiclo] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
 
   const {
     data: sales = [],
@@ -203,6 +206,44 @@ export default function SalesDashboard() {
     }
   };
 
+  const handleCerrarCiclo = async () => {
+    try {
+      setCerrandoCiclo(true);
+      setMensajeCierreCiclo(null);
+      const res = await axios.post<{ success: boolean; closedCount?: number; message?: string }>(
+        "http://localhost:3000/sales/close-cycle"
+      );
+      if (res.data.success) {
+        const count = res.data.closedCount ?? 0;
+        setMensajeCierreCiclo({
+          tipo: "success",
+          texto: count > 0
+            ? `Ciclo cerrado. ${count} venta(s) pasaron a histórico. Las ganancias se reiniciaron para el nuevo ciclo.`
+            : "No había ventas activas para cerrar.",
+        });
+        await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+        await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
+        await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
+        setTimeout(() => {
+          setMostrarModalCerrarCiclo(false);
+          setMensajeCierreCiclo(null);
+        }, 2500);
+      } else {
+        setMensajeCierreCiclo({
+          tipo: "error",
+          texto: res.data.message ?? "No se pudo cerrar el ciclo.",
+        });
+      }
+    } catch (err: any) {
+      setMensajeCierreCiclo({
+        tipo: "error",
+        texto: err?.response?.data?.message ?? "Error al cerrar el ciclo. Intenta más tarde.",
+      });
+    } finally {
+      setCerrandoCiclo(false);
+    }
+  };
+
   const columns: GridColDef[] = [
     {
       field: "image_url",
@@ -224,7 +265,7 @@ export default function SalesDashboard() {
     {
       field: "card_name",
       headerName: "Nombre",
-      valueGetter: (params: any) => params?.row?.stock_info?.card_name || "",
+      valueGetter: (_value, row) => row?.stock_info?.card_name ?? "",
       width: 250,
     },
     {
@@ -447,7 +488,66 @@ export default function SalesDashboard() {
 
   return (
     <div className="w-full p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Dashboard de Ventas</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Dashboard de Ventas</h1>
+        <button
+          type="button"
+          onClick={() => {
+            setMostrarModalCerrarCiclo(true);
+            setMensajeCierreCiclo(null);
+          }}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium"
+        >
+          Cerrar ciclo de ventas
+        </button>
+      </div>
+
+      {/* Modal Cerrar ciclo */}
+      {mostrarModalCerrarCiclo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-xl font-bold mb-3 text-gray-800">Cerrar ciclo de ventas</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Se marcarán todas las ventas actuales como histórico. Las ganancias de este dashboard
+              se reiniciarán (solo se tendrán en cuenta las nuevas ventas y el stock actual). El
+              historial seguirá visible en &quot;Histórico de ventas&quot;. Esta acción no borra
+              ningún dato.
+            </p>
+            {mensajeCierreCiclo && (
+              <p
+                className={`text-sm mb-4 ${
+                  mensajeCierreCiclo.tipo === "success" ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {mensajeCierreCiclo.texto}
+              </p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!cerrandoCiclo) {
+                    setMostrarModalCerrarCiclo(false);
+                    setMensajeCierreCiclo(null);
+                  }
+                }}
+                disabled={cerrandoCiclo}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCerrarCiclo}
+                disabled={cerrandoCiclo}
+                className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cerrandoCiclo ? "Cerrando..." : "Cerrar ciclo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Estadísticas Generales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">

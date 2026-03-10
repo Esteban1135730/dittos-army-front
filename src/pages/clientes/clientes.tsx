@@ -26,6 +26,7 @@ export default function ClientesPage() {
   const [metodoContacto, setMetodoContacto] = useState<"whatsapp" | "facebook">("whatsapp");
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [finalizandoClienteId, setFinalizandoClienteId] = useState<string | null>(null);
 
   const { data: clientes = [], isLoading } = useQuery<ClientItem[]>({
     queryKey: ["clientes"],
@@ -83,9 +84,29 @@ export default function ClientesPage() {
     navigate(`/clientes/${cliente._id}/reservar`);
   };
 
-  const handleFinalizarVenta = (cliente: ClientItem) => {
-    // Sin funcionalidad por ahora
-    alert(`"Finalizar venta" para ${cliente.nombre} — en desarrollo.`);
+  const handleFinalizarVenta = async (cliente: ClientItem) => {
+    setMensaje("");
+    setFinalizandoClienteId(cliente._id);
+    try {
+      const res = await axios.post<{ success: boolean; vendidas?: number; error?: string }>(
+        `${API_RESERVA}/client/${cliente._id}/finalizar-venta`
+      );
+      const data = res.data;
+      if (data.success) {
+        setMensaje(`Venta finalizada: ${data.vendidas ?? 0} carta(s) marcadas como vendidas.`);
+        await queryClient.invalidateQueries({ queryKey: ["reservas"] });
+        await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+        await queryClient.invalidateQueries({ queryKey: ["stock"] });
+        await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      } else {
+        setMensaje(data.error ?? "Error al finalizar la venta.");
+      }
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err) && err.response?.data?.error ? err.response.data.error : "Error al finalizar la venta.";
+      setMensaje(msg);
+    } finally {
+      setFinalizandoClienteId(null);
+    }
   };
 
   const columns: GridColDef[] = [
@@ -123,19 +144,20 @@ export default function ClientesPage() {
       renderCell: (params) => {
         const cliente = params.row as ClientItem;
         const tieneReservas = (reservasPorCliente[cliente._id] ?? 0) > 0;
+        const finalizando = finalizandoClienteId === cliente._id;
         return (
           <button
             type="button"
             onClick={() => handleFinalizarVenta(cliente)}
-            disabled={!tieneReservas}
+            disabled={!tieneReservas || finalizando}
             title={tieneReservas ? "Finalizar venta" : "El cliente no tiene cartas reservadas"}
             className={
-              tieneReservas
+              tieneReservas && !finalizando
                 ? "bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed px-3 py-1 rounded text-sm"
             }
           >
-            Finalizar venta
+            {finalizando ? "..." : "Finalizar venta"}
           </button>
         );
       },

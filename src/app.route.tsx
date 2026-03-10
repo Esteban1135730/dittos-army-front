@@ -7,6 +7,8 @@ import ModificarStock from "./pages/stock/update-stock/update-stock";
 import AddPVP from "./pages/pvp/add-pvp/add-pvp";
 import PropertyList from "./pages/sales/property-list";
 import SalesDashboard from "./pages/sales/sales-dashboard";
+import SalesConsistency from "./pages/sales/sales-consistency";
+import SalesHistory from "./pages/sales/sales-history";
 import ClientesPage from "./pages/clientes/clientes";
 import ReservarCartasPage from "./pages/clientes/reservar-cartas";
 import ImprimirPedidosPage from "./pages/clientes/imprimir-pedidos";
@@ -67,6 +69,22 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <SalesDashboard />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/ventas/consistencia"
+        element={
+          <SideLayout>
+            <SalesConsistency />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/ventas/historico"
+        element={
+          <SideLayout>
+            <SalesHistory />
           </SideLayout>
         }
       />

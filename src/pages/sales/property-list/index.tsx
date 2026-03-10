@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatCOP } from "../../../utils/convert";
+import { useExchangeRates } from "../../../utils/tasa";
 
 type KeepSale = {
   _id: string;
@@ -22,6 +23,7 @@ type StockItem = {
 };
 
 export default function PropertyList() {
+  const { convert } = useExchangeRates();
   const [stockData, setStockData] = useState<Record<string, StockItem>>({});
 
   const { data: keepCards = [], isLoading } = useQuery<KeepSale[]>({
@@ -64,6 +66,23 @@ export default function PropertyList() {
     }
   }, [keepCards]);
 
+  const valorInvertidoCOP = useMemo(() => {
+    let total = 0;
+    keepCards.forEach((sale) => {
+      const stock = stockData[sale.stock_id];
+      if (!stock?.card_cost) return;
+      const moneda = stock.currency;
+      if (moneda === "COP") {
+        total += stock.card_cost;
+      } else if (moneda === "EUR") {
+        total += convert.toCopFromEur(stock.card_cost) ?? 0;
+      } else if (moneda === "USD") {
+        total += convert.toCopFromUsd(stock.card_cost) ?? 0;
+      }
+    });
+    return total;
+  }, [keepCards, stockData, convert]);
+
   if (isLoading) {
     return <p className="text-center text-gray-500">Cargando cartas...</p>;
   }
@@ -79,6 +98,19 @@ export default function PropertyList() {
           {keepCards.length === 1 ? "carta" : "cartas"}
         </p>
       </div>
+
+      {keepCards.length > 0 && (
+        <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 shadow-sm">
+          <p className="text-sm text-gray-600 mb-1">Valor invertido en estas cartas</p>
+          <p className="text-xl font-bold text-gray-800">
+            COP {formatCOP(valorInvertidoCOP.toFixed(0))}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            EUR {convert.toEurFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"} / USD{" "}
+            {convert.toUsdFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"}
+          </p>
+        </div>
+      )}
 
       {keepCards.length === 0 ? (
         <p className="text-center text-gray-500">
@@ -121,12 +153,6 @@ export default function PropertyList() {
                   <p className="text-sm text-gray-500">Fecha</p>
                   <p className="font-semibold text-gray-800">
                     {new Date(sale.created_at).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-2">Pérdida</p>
-                  <p className="font-bold text-rose-600">
-                    {stock
-                      ? formatCOP(stock.card_cost.toFixed(0))
-                      : "COP 0"}
                   </p>
                 </div>
               </div>

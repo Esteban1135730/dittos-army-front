@@ -50,6 +50,12 @@ export default function ReservarCartasPage() {
   const [actualizandoPrecioId, setActualizandoPrecioId] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [modalEditarCliente, setModalEditarCliente] = useState(false);
+  const [editNombre, setEditNombre] = useState("");
+  const [editTienda, setEditTienda] = useState("");
+  const [editCelular, setEditCelular] = useState("");
+  const [editMetodoContacto, setEditMetodoContacto] = useState<"whatsapp" | "facebook">("whatsapp");
+  const [guardandoCliente, setGuardandoCliente] = useState(false);
 
   const { data: client, isLoading: loadingClient } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
@@ -59,6 +65,46 @@ export default function ReservarCartasPage() {
     },
     enabled: !!clientId,
   });
+
+  const abrirModalEditar = () => {
+    if (client) {
+      setEditNombre(client.nombre);
+      setEditTienda(client.tienda_entrega);
+      setEditCelular(client.celular ?? "");
+      setEditMetodoContacto((client.metodo_contacto as "whatsapp" | "facebook") || "whatsapp");
+      setModalEditarCliente(true);
+      setMensaje("");
+    }
+  };
+
+  const cerrarModalEditar = () => setModalEditarCliente(false);
+
+  const guardarCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientId || !client) return;
+    if (!editNombre.trim() || !editTienda.trim()) {
+      setMensaje("Nombre y tienda de entrega son obligatorios.");
+      return;
+    }
+    setGuardandoCliente(true);
+    setMensaje("");
+    try {
+      await axios.put(`${API_CLIENT}/${clientId}`, {
+        nombre: editNombre.trim(),
+        tienda_entrega: editTienda.trim(),
+        celular: editCelular.trim() || undefined,
+        metodo_contacto: editMetodoContacto,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["client", clientId] });
+      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      setMensaje("Datos del cliente actualizados.");
+      cerrarModalEditar();
+    } catch {
+      setMensaje("Error al guardar los datos del cliente.");
+    } finally {
+      setGuardandoCliente(false);
+    }
+  };
 
   const { data: stockRaw = [], isLoading: loadingStock } = useQuery<StockItem[]>({
     queryKey: ["stock"],
@@ -322,10 +368,19 @@ export default function ReservarCartasPage() {
           Reservar cartas para {client.nombre}
         </h1>
       </div>
-      <p className="text-sm text-gray-600 mb-4">
-        Tienda de entrega: {client.tienda_entrega}
-        {client.celular && ` · Cel: ${client.celular}`}
-      </p>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <p className="text-sm text-gray-600">
+          Tienda de entrega: {client.tienda_entrega}
+          {client.celular && ` · Cel: ${client.celular}`}
+        </p>
+        <button
+          type="button"
+          onClick={abrirModalEditar}
+          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+        >
+          Modificar información del cliente
+        </button>
+      </div>
 
       {mensaje && (
         <p
@@ -432,6 +487,80 @@ export default function ReservarCartasPage() {
           </div>
         )}
       </section>
+
+      {/* Modal editar cliente */}
+      {modalEditarCliente && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={cerrarModalEditar}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Modificar información del cliente</h2>
+            <form onSubmit={guardarCliente} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input
+                  type="text"
+                  value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tienda de entrega *</label>
+                <input
+                  type="text"
+                  value={editTienda}
+                  onChange={(e) => setEditTienda(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Ej: Tienda Norte"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Celular (opcional)</label>
+                <input
+                  type="text"
+                  value={editCelular}
+                  onChange={(e) => setEditCelular(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Número de celular"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Método de contacto</label>
+                <select
+                  value={editMetodoContacto}
+                  onChange={(e) => setEditMetodoContacto(e.target.value as "whatsapp" | "facebook")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="facebook">Facebook</option>
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={cerrarModalEditar}
+                  className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoCliente}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {guardandoCliente ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

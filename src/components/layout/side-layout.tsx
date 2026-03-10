@@ -37,6 +37,18 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             Ventas
           </Link>
           <Link
+            to="/ventas/consistencia"
+            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
+          >
+            Consistencia stock vs ventas
+          </Link>
+          <Link
+            to="/ventas/historico"
+            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
+          >
+            Histórico de ventas
+          </Link>
+          <Link
             to="/propiedad"
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >
