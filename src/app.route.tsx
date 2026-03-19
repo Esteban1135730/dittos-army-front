@@ -12,6 +12,11 @@ import SalesHistory from "./pages/sales/sales-history";
 import ClientesPage from "./pages/clientes/clientes";
 import ReservarCartasPage from "./pages/clientes/reservar-cartas";
 import ImprimirPedidosPage from "./pages/clientes/imprimir-pedidos";
+import IncomingListPage from "./pages/incoming/incoming-list/incoming-list";
+import IncomingCreatePage from "./pages/incoming/create/incoming-create";
+import IncomingBatchRoundsPage from "./pages/incoming/batch-rounds/incoming-batch-rounds";
+import IncomingRoundReviewPage from "./pages/incoming/round-review/incoming-round-review";
+import IncomingShipRoundReviewPage from "./pages/incoming/ship-round-review/incoming-ship-round-review";
 
 export default function AppRouter() {
   return (
@@ -37,6 +42,46 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <ModificarStock />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming"
+        element={
+          <SideLayout>
+            <IncomingListPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming/new"
+        element={
+          <SideLayout>
+            <IncomingCreatePage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming/batch/:batchId"
+        element={
+          <SideLayout>
+            <IncomingBatchRoundsPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming/batch/:batchId/round/:roundId"
+        element={
+          <SideLayout>
+            <IncomingRoundReviewPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming/ship-round/:roundId"
+        element={
+          <SideLayout>
+            <IncomingShipRoundReviewPage />
           </SideLayout>
         }
       />

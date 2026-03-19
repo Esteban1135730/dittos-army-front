@@ -25,6 +25,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             Stock
           </Link>
           <Link
+            to="/incoming"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Compras en camino
+          </Link>
+          <Link
             to="/cotizar"
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >

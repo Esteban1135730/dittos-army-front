@@ -48,7 +48,7 @@ export default function PropertyList() {
         );
         const responses = await Promise.allSettled(requests);
         const updated: Record<string, StockItem> = {};
-        responses.forEach((res, index) => {
+        responses.forEach((res) => {
           if (res.status === "fulfilled" && res.value?.data?._id) {
             updated[res.value.data._id] = res.value.data;
           }

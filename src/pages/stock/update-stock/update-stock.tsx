@@ -1,12 +1,11 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 
 export default function ModificarStock() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stock", id],
