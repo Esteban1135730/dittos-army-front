@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import CardDetail from "./components/card.detail";
+import type { CreateStockRequestBody } from "../../../types/stock";
 
 export type Expansion = {
   id: string;
@@ -154,17 +155,17 @@ export default function Stock() {
       return;
     }
 
-    const body: any = {
+    const body: CreateStockRequestBody = {
       card_id: cartaSeleccionada.id,
+      card_name: cartaSeleccionada.name,
       shipment: costoEnvio,
       unity_cost: costoCarta,
       cards_in_shipmet: cartasEnvio,
       image_url: (cartaSeleccionada as any)?.image || "",
-      currency: currency
+      currency: currency,
+      card_state: cardState,
     };
 
-    // Agregar campos opcionales solo si tienen valores
-    body.card_state = cardState; // Siempre tiene valor por defecto (near_mint)
     if (language) {
       body.language = language;
     }

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { formatCOP } from "../../utils/convert";
+import type { StockListItem } from "../../types/stock";
 
 type ClientItem = {
   _id: string;
@@ -19,10 +20,7 @@ type ReservaItem = {
   currency: string;
 };
 
-type StockItem = {
-  _id: string;
-  card_name: string;
-};
+type StockItem = Pick<StockListItem, "_id" | "card_name">;
 
 type PedidoCard = {
   client: ClientItem;

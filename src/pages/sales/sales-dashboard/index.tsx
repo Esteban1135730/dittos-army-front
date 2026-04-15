@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
+import type { StockListItem } from "../../../types/stock";
 
 type SaleWithStock = {
   _id: string;
@@ -53,7 +54,7 @@ export default function SalesDashboard() {
   // Obtener valor total del inventario actual
   const {
     data: stockData = [],
-  } = useQuery<any[]>({
+  } = useQuery<StockListItem[]>({
     queryKey: ["stock-for-dashboard"],
     queryFn: async () => {
       const res = await axios.get("http://localhost:3000/stock");

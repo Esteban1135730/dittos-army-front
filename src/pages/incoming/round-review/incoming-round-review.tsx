@@ -11,6 +11,7 @@ type IncomingRoundReviewItem = {
   quantity_ordered: number;
   remaining_quantity: number;
   unit_cost_cop: number;
+  rareza?: string | null;
   arrived_quantity: number;
   novedad_quantity: number;
   novedad_notes: string;
@@ -267,7 +268,9 @@ export default function IncomingRoundReviewPage() {
                       </div>
                       <div className="text-xs text-gray-500 break-all">{it.card_id}</div>
                       <div className="text-xs text-gray-500 mt-1">
-                        Idioma: {it.language} · Pedido: {it.quantity_ordered} · Pendiente: {it.remaining_quantity}
+                        Idioma: {it.language}
+                        {it.rareza ? ` · Rareza: ${it.rareza}` : ""} · Pedido: {it.quantity_ordered} · Pendiente:{" "}
+                        {it.remaining_quantity}
                       </div>
                       <div className="text-xs text-gray-700 mt-1">
                         COP sin envío (real): {Math.round(it.unit_cost_cop).toLocaleString("es-CO")}

@@ -5,18 +5,9 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../utils/tasa";
 import { formatCOP } from "../../utils/convert";
+import type { StockListItem } from "../../types/stock";
 
-type StockItem = {
-  _id: string;
-  card_id: string;
-  card_name: string;
-  card_state: string;
-  image_url: string;
-  card_cost: number;
-  currency: string;
-  pvp?: number;
-  pvp_currency?: string;
-};
+type StockItem = StockListItem;
 
 type ClientItem = {
   _id: string;

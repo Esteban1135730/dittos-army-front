@@ -7,22 +7,9 @@ import { useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
+import type { StockListItem } from "../../../types/stock";
 
-export type StockItem = {
-  _id: string;
-  card_id: string;
-  shipment: number;
-  unity_cost: number;
-  cards_in_shipmet: number;
-  image_url: string;
-  card_state: string;
-  card_name: string;
-  card_cost: number;
-  currency: string;
-  pvp?: number;
-  pvp_currency?: string;
-  league_card?: boolean;
-};
+export type StockItem = StockListItem;
 
 export default function StockGrid() {
   const navigate = useNavigate();
@@ -137,7 +124,7 @@ export default function StockGrid() {
     }
     const terminoBusqueda = busqueda.toLowerCase().trim();
     return stockOrdenado.filter((item) =>
-      item.card_name.toLowerCase().includes(terminoBusqueda)
+      (item.card_name ?? "").toLowerCase().includes(terminoBusqueda)
     );
   }, [stockOrdenado, busqueda]);
 
@@ -550,14 +537,23 @@ export default function StockGrid() {
   const handleActualizarInformacionTienda = async () => {
     try {
       setActualizandoTienda(true);
-      const res = await axios.post("http://localhost:3000/stock/export-store-inventory");
-      const data = res.data;
-      if (data?.success) {
+      const [invRes, upRes] = await Promise.all([
+        axios.post("http://localhost:3000/stock/export-store-inventory"),
+        axios.post("http://localhost:3000/stock/export-store-upcoming"),
+      ]);
+      const inv = invRes.data;
+      const up = upRes.data;
+      const invOk = inv?.success === true;
+      const upOk = up?.success === true;
+      if (invOk && upOk) {
         window.alert(
-          `Inventario de la tienda actualizado correctamente. ${data.count ?? 0} cartas exportadas.`
+          `Tienda actualizada: ${inv.count ?? 0} cartas en catálogo, ${up.count ?? 0} en Próximamente (compras en camino).`
         );
       } else {
-        window.alert("Error al actualizar: " + (data?.error || "Respuesta inesperada"));
+        const parts: string[] = [];
+        if (!invOk) parts.push("Inventario: " + (inv?.error || "error"));
+        if (!upOk) parts.push("Próximamente: " + (up?.error || "error"));
+        window.alert("Error al actualizar la tienda. " + parts.join(" "));
       }
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
@@ -689,11 +685,13 @@ export default function StockGrid() {
               {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
             </button>
             <button
+              type="button"
+              title="Genera inventory.json (catálogo) y upcoming.json (compras en camino) en dittos-army-store/public"
               onClick={handleActualizarInformacionTienda}
               disabled={actualizandoTienda}
               className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {actualizandoTienda ? "Actualizando..." : "Actualizar información tienda"}
+              {actualizandoTienda ? "Actualizando..." : "Actualizar tienda (catálogo + Próximamente)"}
             </button>
           </div>
           <div className="flex flex-col gap-4 mt-4">

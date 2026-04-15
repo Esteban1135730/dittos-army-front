@@ -3,6 +3,7 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
+import type { StockListItem } from "../../../types/stock";
 
 type KeepSale = {
   _id: string;
@@ -13,14 +14,10 @@ type KeepSale = {
   created_at: string;
 };
 
-type StockItem = {
-  _id: string;
-  card_name: string;
-  image_url: string;
-  card_cost: number;
-  currency: string;
-  card_state: string;
-};
+type StockItem = Pick<
+  StockListItem,
+  "_id" | "card_name" | "image_url" | "card_cost" | "currency" | "card_state"
+>;
 
 export default function PropertyList() {
   const { convert } = useExchangeRates();

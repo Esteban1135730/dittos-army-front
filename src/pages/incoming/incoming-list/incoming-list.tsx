@@ -2,6 +2,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  exportAllOpenIncomingBatchesToPdf,
+  type BatchItemPdf,
+  type BatchMetaPdf,
+} from "../export-incoming-batch-pdf";
 
 type IncomingBatchItemRow = {
   batch_id: string;
@@ -25,12 +30,13 @@ const API_INCOMING = "http://localhost:3000/incoming";
 export default function IncomingListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [errorMsg] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("");
   const [shippingInput, setShippingInput] = useState<string>("");
   const [creatingShipRound, setCreatingShipRound] = useState(false);
   const [mensaje, setMensaje] = useState<string>("");
   const [deletingRoundId, setDeletingRoundId] = useState<string | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const { data, isLoading, error } = useQuery<IncomingBatchItemRow[]>({
     queryKey: ["incoming-batch-open"],
@@ -137,18 +143,59 @@ export default function IncomingListPage() {
     }
   };
 
+  const exportarPdfLotesAbiertos = async () => {
+    if (batches.length === 0) return;
+    setErrorMsg("");
+    setExportingPdf(true);
+    try {
+      const sections = await Promise.all(
+        batches.map(async (b) => {
+          const [metaRes, itemsRes] = await Promise.all([
+            axios.get(`${API_INCOMING}/batch/${b.batch_id}`),
+            axios.get(`${API_INCOMING}/batch/${b.batch_id}/items`),
+          ]);
+          return {
+            meta: metaRes.data as BatchMetaPdf,
+            items: (Array.isArray(itemsRes.data) ? itemsRes.data : []) as BatchItemPdf[],
+          };
+        }),
+      );
+      exportAllOpenIncomingBatchesToPdf(sections);
+    } catch {
+      setErrorMsg("No se pudo generar el PDF. Revisa la conexión con el servidor.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <h1 className="text-2xl font-bold text-gray-800">Compras en camino</h1>
-        <button
-          type="button"
-          onClick={() => navigate("/incoming/new")}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
-        >
-          Nueva compra
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={exportarPdfLotesAbiertos}
+            disabled={isLoading || batches.length === 0 || exportingPdf}
+            className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingPdf ? "Generando PDF…" : "Exportar PDF (lotes abiertos)"}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/incoming/new")}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+          >
+            Nueva compra
+          </button>
+        </div>
       </div>
+
+      {errorMsg ? (
+        <p className="text-red-600 text-sm mb-3" role="alert">
+          {errorMsg}
+        </p>
+      ) : null}
 
       {/* Nueva tanda global */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
@@ -251,12 +298,6 @@ export default function IncomingListPage() {
           </div>
         )}
       </div>
-
-      {errorMsg && (
-        <p className="text-red-600 text-sm mb-3" role="alert">
-          {errorMsg}
-        </p>
-      )}
 
       {isLoading && <p className="text-gray-600">Cargando...</p>}
       {!isLoading && error && (

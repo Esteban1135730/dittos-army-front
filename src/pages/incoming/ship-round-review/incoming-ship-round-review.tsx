@@ -11,6 +11,7 @@ type IncomingShipRoundReviewItem = {
   quantity_ordered: number;
   remaining_quantity: number;
   unit_cost_cop: number;
+  rareza?: string | null;
   arrived_quantity: number;
   novedad_quantity: number;
   novedad_notes: string;
@@ -233,6 +234,7 @@ export default function IncomingShipRoundReviewPage() {
                         </div>
                         <div className="text-xs text-gray-500 break-all">
                           {it.card_id} · Idioma: {it.language}
+                          {it.rareza ? ` · Rareza: ${it.rareza}` : ""}
                         </div>
                         <div className="text-xs text-gray-700 mt-1">
                           COP sin envío (real):{" "}

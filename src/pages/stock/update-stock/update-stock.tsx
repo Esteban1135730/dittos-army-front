@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
+import type { UpdateStockRequestBody } from "../../../types/stock";
 
 export default function ModificarStock() {
   const { id } = useParams();
@@ -16,9 +17,12 @@ export default function ModificarStock() {
     enabled: !!id,
   });
 
-  const [form, setForm] = useState({
-    id: id,
+  const [form, setForm] = useState<UpdateStockRequestBody>({
+    id: id ?? "",
     card_id: "",
+    card_name: "",
+    image_url: "",
+    currency: "EUR",
     shipment: 0,
     unity_cost: 0,
     cards_in_shipmet: 1,
@@ -32,7 +36,7 @@ export default function ModificarStock() {
   const [guardando, setGuardando] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: async (nuevo: any) => {
+    mutationFn: async (nuevo: UpdateStockRequestBody) => {
       const res = await axios.post(`http://localhost:3000/stock/update`, nuevo);
       return res.data;
     },
@@ -51,8 +55,11 @@ export default function ModificarStock() {
   // Inicializar datos cuando lleguen
   if (data && form.card_id === "") {
     setForm({
-      id: id,
+      id: id ?? "",
       card_id: data.card_id || "",
+      card_name: data.card_name ?? "",
+      image_url: data.image_url || "",
+      currency: data.currency || "EUR",
       shipment: data.shipment || 0,
       unity_cost: data.unity_cost || 0,
       cards_in_shipmet: data.cards_in_shipmet || 1,
@@ -142,6 +149,18 @@ export default function ModificarStock() {
             value={form.card_id}
             disabled
             className="w-full px-3 py-2 border rounded bg-gray-100 text-gray-600 cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Nombre de la carta</label>
+          <input
+            type="text"
+            name="card_name"
+            value={form.card_name}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border rounded"
+            placeholder="Nombre visible en listados"
           />
         </div>
 
