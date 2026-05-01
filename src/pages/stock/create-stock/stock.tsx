@@ -35,9 +35,9 @@ export default function Stock() {
   const [cartasEnvio, setCartasEnvio] = useState<number>(1);
   const [copias, setCopias] = useState<number>(1);
   const [cardState, setCardState] = useState<string>("near_mint");
-  const [holofoil, setHolofoil] = useState<boolean>(false);
   const [language, setLanguage] = useState<string>("");
-  const [leagueCard, setLeagueCard] = useState<boolean>(false);
+  /** "" = sin variante (mismo catálogo que incoming / PVP) */
+  const [operationalRareza, setOperationalRareza] = useState<string>("");
 
   // ------------------ MODO EXPANSIÓN ------------------
   const [busqueda, setBusqueda] = useState("");
@@ -91,6 +91,10 @@ export default function Stock() {
   useEffect(() => {
     setPaginaActual(1);
   }, [busqueda, expansionSeleccionada]);
+
+  useEffect(() => {
+    setOperationalRareza("");
+  }, [cartaSeleccionada?.id]);
 
   const totalPaginas = Math.ceil(cartasFiltradas.length / cartasPorPagina);
   const indiceInicio = (paginaActual - 1) * cartasPorPagina;
@@ -169,12 +173,12 @@ export default function Stock() {
     if (language) {
       body.language = language;
     }
-    if (holofoil) {
-      body.holofoil = holofoil;
+    const rzTrim = operationalRareza.trim();
+    if (rzTrim !== "") {
+      body.rareza = rzTrim;
     }
-    if (leagueCard) {
-      body.league_card = leagueCard;
-    }
+    body.holofoil = rzTrim === "holofoil";
+    body.league_card = rzTrim === "league card";
 
     try {
       setGuardando(true);
@@ -496,12 +500,10 @@ export default function Stock() {
                 setCopias={setCopias}
                 cardState={cardState}
                 setCardState={setCardState}
-                holofoil={holofoil}
-                setHolofoil={setHolofoil}
                 language={language}
                 setLanguage={setLanguage}
-                leagueCard={leagueCard}
-                setLeagueCard={setLeagueCard}
+                operationalRareza={operationalRareza}
+                setOperationalRareza={setOperationalRareza}
               />
               
               <div className="mt-6">

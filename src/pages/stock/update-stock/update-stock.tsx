@@ -1,8 +1,12 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import axios from "axios";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { UpdateStockRequestBody } from "../../../types/stock";
+import {
+  OPERATIONAL_RAREZA_VALUES,
+  operationalRarezaLabel,
+} from "../../../constants/item-rareza";
 
 export default function ModificarStock() {
   const { id } = useParams();
@@ -30,7 +34,14 @@ export default function ModificarStock() {
     language: "",
     holofoil: false,
     league_card: false,
+    rareza: "",
   });
+
+  const loadedForIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    loadedForIdRef.current = null;
+  }, [id]);
 
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -52,10 +63,23 @@ export default function ModificarStock() {
     },
   });
 
-  // Inicializar datos cuando lleguen
-  if (data && form.card_id === "") {
+  useEffect(() => {
+    if (!data || !id) return;
+    if (loadedForIdRef.current === id) return;
+    loadedForIdRef.current = id;
+    const d = data as {
+      rareza?: string | null;
+      holofoil?: boolean;
+      league_card?: boolean;
+    };
+    let rz =
+      d.rareza != null && String(d.rareza).trim() !== ""
+        ? String(d.rareza).trim()
+        : "";
+    if (rz === "" && d.holofoil) rz = "holofoil";
+    if (rz === "" && d.league_card) rz = "league card";
     setForm({
-      id: id ?? "",
+      id,
       card_id: data.card_id || "",
       card_name: data.card_name ?? "",
       image_url: data.image_url || "",
@@ -65,10 +89,11 @@ export default function ModificarStock() {
       cards_in_shipmet: data.cards_in_shipmet || 1,
       card_state: data.card_state || "near_mint",
       language: data.language || "",
-      holofoil: data.holofoil || false,
-      league_card: data.league_card || false,
+      holofoil: rz === "holofoil",
+      league_card: rz === "league card",
+      rareza: rz,
     });
-  }
+  }, [data, id]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -108,6 +133,13 @@ export default function ModificarStock() {
         ...prev,
         [name]: isNaN(num) || num < 1 ? 1 : num,
       }));
+    } else if (name === "rareza") {
+      setForm((prev) => ({
+        ...prev,
+        rareza: value,
+        holofoil: value === "holofoil",
+        league_card: value === "league card",
+      }));
     } else {
       setForm((prev) => ({
         ...prev,
@@ -118,7 +150,17 @@ export default function ModificarStock() {
 
   const handleGuardar = () => {
     setGuardando(true);
-    mutation.mutate(form);
+    const rz =
+      form.rareza && String(form.rareza).trim() !== ""
+        ? String(form.rareza).trim()
+        : null;
+    const payload: UpdateStockRequestBody = {
+      ...form,
+      rareza: rz,
+      holofoil: rz === "holofoil",
+      league_card: rz === "league card",
+    };
+    mutation.mutate(payload);
   };
 
   if (isLoading) return <p className="text-center">⏳ Cargando datos...</p>;
@@ -262,30 +304,21 @@ export default function ModificarStock() {
             </select>
           </div>
 
-          <div className="flex items-center">
-            <label className="flex items-center text-sm font-medium">
-              <input
-                type="checkbox"
-                name="holofoil"
-                checked={form.holofoil}
-                onChange={handleChange}
-                className="mr-2 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              Holofoil
-            </label>
-          </div>
-
-          <div className="flex items-center">
-            <label className="flex items-center text-sm font-medium">
-              <input
-                type="checkbox"
-                name="league_card"
-                checked={form.league_card}
-                onChange={handleChange}
-                className="mr-2 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              Carta de Liga
-            </label>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium">Variante (rareza)</label>
+            <select
+              name="rareza"
+              value={form.rareza === null || form.rareza === undefined ? "" : form.rareza}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded"
+            >
+              <option value="">Sin variante</option>
+              {OPERATIONAL_RAREZA_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {operationalRarezaLabel(v)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

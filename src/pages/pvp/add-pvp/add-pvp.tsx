@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
+import { operationalRarezaLabel } from "../../../constants/item-rareza";
 
 /** Respuesta estándar de carta desde TCGdex (mapeada en backend) */
 type CardDetail = {
@@ -51,14 +52,26 @@ type StockGroupResponse = {
   primary_currency?: string;
 };
 
+/** Filas `GET /pvp/:card_id` — variante operativa (stock / PVP). */
+type PvpCardRow = {
+  card_id: string;
+  rareza: string | null;
+  pvp: number | null;
+  currency: string | null;
+  has_stock: boolean;
+};
+
 export default function AsignarPVP() {
   const { id } = useParams(); // card_id
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [currency, setCurrency] = useState<"EUR" | "COP">("COP");
   const [pvp, setPvp] = useState<number | "">("");
   const [mensaje, setMensaje] = useState("");
   const [alerta, setAlerta] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  /** null = PVP base; string = rareza operativa; undefined = aún no elegida (varias con stock) */
+  const [selectedOpRareza, setSelectedOpRareza] = useState<string | null | undefined>(undefined);
   const { convert } = useExchangeRates();
 
   const { data: stockData } =
@@ -100,22 +113,50 @@ export default function AsignarPVP() {
     enabled: !!id,
   });
 
-  const { data: existingPvp } = useQuery<{ pvp: number; currency: string }>({
-    queryKey: ["pvp", id],
+  const { data: pvpRows } = useQuery<PvpCardRow[]>({
+    queryKey: ["pvp-rows", id],
     queryFn: async () => {
-      const res = await axios.get(`http://localhost:3000/pvp/${id}`);
-      return res.data;
+      const res = await axios.get<PvpCardRow[]>(`http://localhost:3000/pvp/${id}`);
+      return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!id,
   });
 
-  // Cargar PVP existente cuando se obtiene
+  const rowsWithStock = useMemo(
+    () => (pvpRows ?? []).filter((r) => r.has_stock),
+    [pvpRows],
+  );
+
   useEffect(() => {
-    if (existingPvp) {
-      setPvp(existingPvp.pvp);
-      setCurrency(existingPvp.currency as "EUR" | "COP");
+    if (!pvpRows?.length || selectedOpRareza !== undefined) return;
+    if (rowsWithStock.length === 0) {
+      setSelectedOpRareza(null);
+      return;
     }
-  }, [existingPvp]);
+    if (rowsWithStock.length === 1) {
+      setSelectedOpRareza(rowsWithStock[0].rareza);
+    }
+  }, [pvpRows, rowsWithStock, selectedOpRareza]);
+
+  const activePvpRow = useMemo(() => {
+    if (selectedOpRareza === undefined || !pvpRows?.length) return null;
+    return (
+      pvpRows.find(
+        (r) =>
+          (r.rareza ?? null) === (selectedOpRareza === null ? null : selectedOpRareza),
+      ) ?? null
+    );
+  }, [pvpRows, selectedOpRareza]);
+
+  useEffect(() => {
+    if (selectedOpRareza === undefined) return;
+    if (activePvpRow?.pvp != null && activePvpRow.currency) {
+      setPvp(activePvpRow.pvp);
+      setCurrency(activePvpRow.currency as "EUR" | "COP");
+    } else if (activePvpRow) {
+      setPvp("");
+    }
+  }, [selectedOpRareza, activePvpRow?.pvp, activePvpRow?.currency]);
 
   // Traza de error al cargar la carta
   useEffect(() => {
@@ -209,20 +250,28 @@ export default function AsignarPVP() {
       return;
     }
     
-    if (multipleVariants && !selectedVariant) {
-      setMensaje("❌ Debes seleccionar una variante de rareza para guardar.");
+    if (rowsWithStock.length > 1 && selectedOpRareza === undefined) {
+      setMensaje("❌ Debes elegir para qué variante de stock es este PVP.");
       return;
     }
 
     try {
       setMensaje(""); // Limpiar mensaje anterior
+      const rz =
+        rowsWithStock.length === 0
+          ? null
+          : selectedOpRareza === undefined
+            ? rowsWithStock[0]?.rareza ?? null
+            : selectedOpRareza;
       await axios.post("http://localhost:3000/pvp", {
         card_id: id,
         pvp: Number(pvp),
         currency,
+        rareza: rz,
       });
       setMensaje("✅ PVP guardado correctamente");
       setAlerta(null);
+      await queryClient.invalidateQueries({ queryKey: ["pvp-rows", id] });
       
       // Redirigir al menú de stock después de 1 segundo
       setTimeout(() => {
@@ -572,6 +621,64 @@ export default function AsignarPVP() {
 
           {/* Formulario para ingresar PVP */}
           <div className="bg-white p-4 rounded-md border border-gray-200 space-y-4">
+            {rowsWithStock.length > 0 && (
+              <div className="mb-4">
+                <label className="block mb-1 text-sm font-medium text-gray-700">
+                  Variante de stock (PVP operativo)
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Solo aparecen variantes con unidades en inventario. Es independiente de las
+                  variantes TCGplayer (referencia de mercado).
+                </p>
+                <select
+                  value={
+                    selectedOpRareza === undefined
+                      ? ""
+                      : selectedOpRareza === null
+                        ? "__base__"
+                        : selectedOpRareza
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "") setSelectedOpRareza(undefined);
+                    else if (v === "__base__") setSelectedOpRareza(null);
+                    else setSelectedOpRareza(v);
+                  }}
+                  className="w-full border px-3 py-2 rounded-md"
+                >
+                  {rowsWithStock.length > 1 && (
+                    <option value="" disabled>
+                      — Elige variante —
+                    </option>
+                  )}
+                  {rowsWithStock.map((r) => (
+                    <option
+                      key={r.rareza === null ? "__base__" : r.rareza}
+                      value={r.rareza === null ? "__base__" : (r.rareza as string)}
+                    >
+                      {operationalRarezaLabel(r.rareza)}
+                      {r.pvp != null ? ` — ${r.pvp} ${r.currency ?? ""}` : " — sin PVP"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {pvpRows && pvpRows.length > 1 && (
+              <div className="text-xs text-gray-600 border rounded p-2 bg-gray-50">
+                <p className="font-medium text-gray-700 mb-1">Resumen PVP por variante</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {pvpRows.map((r) => (
+                    <li key={r.rareza === null ? "base" : r.rareza}>
+                      {operationalRarezaLabel(r.rareza)}:{" "}
+                      {r.pvp != null ? `${r.pvp} ${r.currency ?? ""}` : "—"}{" "}
+                      {r.has_stock ? "(con stock)" : "(sin stock)"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div>
               <label className="block mb-1 text-sm font-medium text-gray-700">
                 Precio de venta (PVP)
@@ -683,10 +790,14 @@ export default function AsignarPVP() {
             <button
               onClick={handleGuardar}
               disabled={
-                pvp === "" || pvp <= 0 || (multipleVariants && !selectedVariant)
+                pvp === "" ||
+                (typeof pvp === "number" && pvp <= 0) ||
+                (rowsWithStock.length > 1 && selectedOpRareza === undefined)
               }
               className={`w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition ${
-                pvp === "" || pvp <= 0 || (multipleVariants && !selectedVariant)
+                pvp === "" ||
+                (typeof pvp === "number" && pvp <= 0) ||
+                (rowsWithStock.length > 1 && selectedOpRareza === undefined)
                   ? "opacity-50 cursor-not-allowed"
                   : ""
               }`}

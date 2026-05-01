@@ -16,6 +16,8 @@ export type CreateStockRequestBody = {
   holofoil?: boolean;
   league_card?: boolean;
   incoming_notes?: string;
+  /** Variante operativa; omitir o vacío = sin variante */
+  rareza?: string | null;
 };
 
 export type UpdateStockRequestBody = CreateStockRequestBody & {
@@ -39,5 +41,6 @@ export type StockListItem = {
   league_card?: boolean;
   language?: string;
   holofoil?: boolean;
+  rareza?: string | null;
 };
 

@@ -1,4 +1,8 @@
 import type { CartaBusquedaDirecta } from "../stock";
+import {
+  OPERATIONAL_RAREZA_VALUES,
+  operationalRarezaLabel,
+} from "../../../../constants/item-rareza";
 
 interface Props {
   carta: CartaBusquedaDirecta;
@@ -7,17 +11,16 @@ interface Props {
   cartasEnvio: number;
   copias: number;
   cardState: string;
-  holofoil: boolean;
   language: string;
-  leagueCard: boolean;
+  /** "" = sin variante */
+  operationalRareza: string;
+  setOperationalRareza: (s: string) => void;
   setCostoCarta: (n: number) => void;
   setCostoEnvio: (n: number) => void;
   setCartasEnvio: (n: number) => void;
   setCopias: (n: number) => void;
   setCardState: (n: string) => void;
-  setHolofoil: (b: boolean) => void;
   setLanguage: (s: string) => void;
-  setLeagueCard: (b: boolean) => void;
 }
 
 export default function CardDetail({
@@ -27,17 +30,15 @@ export default function CardDetail({
   cartasEnvio,
   copias,
   cardState,
-  holofoil,
   language,
-  leagueCard,
+  operationalRareza,
+  setOperationalRareza,
   setCostoCarta,
   setCostoEnvio,
   setCartasEnvio,
   setCopias,
   setCardState,
-  setHolofoil,
   setLanguage,
-  setLeagueCard,
 }: Props) {
   return (
     <div className="bg-white">
@@ -183,25 +184,22 @@ export default function CardDetail({
             <option value="otro">Otro</option>
           </select>
         </div>
-        <div className="col-span-2 flex gap-6 mt-2">
-          <label className="flex items-center text-sm font-medium text-gray-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={holofoil}
-              onChange={(e) => setHolofoil(e.target.checked)}
-              className="mr-2 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-            />
-            Holofoil
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Variante (rareza)
           </label>
-          <label className="flex items-center text-sm font-medium text-gray-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={leagueCard}
-              onChange={(e) => setLeagueCard(e.target.checked)}
-              className="mr-2 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-            />
-            Carta de Liga
-          </label>
+          <select
+            value={operationalRareza}
+            onChange={(e) => setOperationalRareza(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+          >
+            <option value="">Sin variante</option>
+            {OPERATIONAL_RAREZA_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {operationalRarezaLabel(v)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>

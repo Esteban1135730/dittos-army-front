@@ -8,6 +8,7 @@ import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
 import type { StockListItem } from "../../../types/stock";
+import { operationalRarezaLabel } from "../../../constants/item-rareza";
 
 export type StockItem = StockListItem;
 
@@ -254,11 +255,28 @@ export default function StockGrid() {
       renderCell: (params) => (
         <span>
           {params.row.card_name}
-          {params.row.league_card && (
+          {(params.row.league_card ||
+            params.row.rareza === "league card") && (
             <span className="text-blue-600 font-semibold ml-1">(liga)</span>
           )}
         </span>
       ),
+    },
+    {
+      field: "rareza",
+      headerName: "Rareza",
+      width: 130,
+      renderCell: (params) => {
+        const r = params.row.rareza;
+        if (r == null || String(r).trim() === "") {
+          return <span className="text-gray-400">—</span>;
+        }
+        return (
+          <span className="text-sm text-gray-800">
+            {operationalRarezaLabel(String(r).trim())}
+          </span>
+        );
+      },
     },
     {
       field: "card_cost",
