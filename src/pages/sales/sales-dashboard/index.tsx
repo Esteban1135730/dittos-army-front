@@ -35,6 +35,7 @@ export default function SalesDashboard() {
   const [editando, setEditando] = useState(false);
   const [errorEditar, setErrorEditar] = useState("");
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+  const [finalizandoCicloId, setFinalizandoCicloId] = useState<string | null>(null);
   const [mostrarModalCerrarCiclo, setMostrarModalCerrarCiclo] = useState(false);
   const [cerrandoCiclo, setCerrandoCiclo] = useState(false);
   const [mensajeCierreCiclo, setMensajeCierreCiclo] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
@@ -182,6 +183,42 @@ export default function SalesDashboard() {
       );
     } finally {
       setEditando(false);
+    }
+  };
+
+  const handleFinalizarCicloVenta = async (ventaId: string) => {
+    const confirmar = window.confirm(
+      "¿Finalizar el ciclo solo para esta venta? Pasará al histórico; el resto de ventas activas no se modifica."
+    );
+    if (!confirmar) return;
+
+    try {
+      setFinalizandoCicloId(ventaId);
+      const res = await axios.post<{
+        success: boolean;
+        closed?: boolean;
+        message?: string;
+      }>(`http://localhost:3000/sales/finalize-cycle/${ventaId}`);
+
+      if (!res.data.success) {
+        alert(res.data.message ?? "No se pudo finalizar el ciclo de esta venta.");
+        return;
+      }
+
+      if (res.data.closed === false && res.data.message) {
+        alert(res.data.message);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
+    } catch (error: any) {
+      alert(
+        error?.response?.data?.message ??
+          "Error al finalizar el ciclo de la venta. Intenta más tarde."
+      );
+    } finally {
+      setFinalizandoCicloId(null);
     }
   };
 
@@ -454,16 +491,26 @@ export default function SalesDashboard() {
       headerName: "Acciones",
       sortable: false,
       filterable: false,
-      width: 200,
+      width: 340,
       renderCell: (params) => (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => handleAbrirModalEditar(params.row)}
             className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
           >
             Editar
           </button>
           <button
+            type="button"
+            onClick={() => handleFinalizarCicloVenta(params.row._id)}
+            disabled={finalizandoCicloId === params.row._id}
+            className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {finalizandoCicloId === params.row._id ? "Finalizando..." : "Finalizar ciclo"}
+          </button>
+          <button
+            type="button"
             onClick={() => handleDeshacerVenta(params.row._id)}
             disabled={deshaciendo === params.row._id}
             className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"

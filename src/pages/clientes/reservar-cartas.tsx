@@ -3,6 +3,23 @@ import axios from "axios";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useExchangeRates } from "../../utils/tasa";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
@@ -14,7 +31,9 @@ type ClientItem = {
   nombre: string;
   tienda_entrega: string;
   celular?: string;
+  facebook_usuario?: string;
   metodo_contacto: string;
+  notas?: string;
 };
 
 type ReservaItem = {
@@ -23,11 +42,19 @@ type ReservaItem = {
   stock_id: string;
   precio: number;
   currency: string;
+  created_at?: string;
 };
 
 const API_STOCK = "http://localhost:3000/stock";
 const API_CLIENT = "http://localhost:3000/client";
 const API_RESERVA = "http://localhost:3000/reserva";
+
+function formatReservaFecha(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+}
 
 export default function ReservarCartasPage() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -39,14 +66,23 @@ export default function ReservarCartasPage() {
   const [reservandoId, setReservandoId] = useState<string | null>(null);
   const [quitandoId, setQuitandoId] = useState<string | null>(null);
   const [actualizandoPrecioId, setActualizandoPrecioId] = useState<string | null>(null);
-  const [mensaje, setMensaje] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [editNombre, setEditNombre] = useState("");
   const [editTienda, setEditTienda] = useState("");
   const [editCelular, setEditCelular] = useState("");
   const [editMetodoContacto, setEditMetodoContacto] = useState<"whatsapp" | "facebook">("whatsapp");
+  const [editFacebookUsuario, setEditFacebookUsuario] = useState("");
+  const [editNotas, setEditNotas] = useState("");
   const [guardandoCliente, setGuardandoCliente] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error";
+  }>({ open: false, message: "", severity: "success" });
+
+  const toast = (message: string, severity: "success" | "error") =>
+    setSnackbar({ open: true, message, severity });
 
   const { data: client, isLoading: loadingClient } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
@@ -63,8 +99,9 @@ export default function ReservarCartasPage() {
       setEditTienda(client.tienda_entrega);
       setEditCelular(client.celular ?? "");
       setEditMetodoContacto((client.metodo_contacto as "whatsapp" | "facebook") || "whatsapp");
+      setEditFacebookUsuario(client.facebook_usuario ?? "");
+      setEditNotas(client.notas ?? "");
       setModalEditarCliente(true);
-      setMensaje("");
     }
   };
 
@@ -74,24 +111,30 @@ export default function ReservarCartasPage() {
     e.preventDefault();
     if (!clientId || !client) return;
     if (!editNombre.trim() || !editTienda.trim()) {
-      setMensaje("Nombre y tienda de entrega son obligatorios.");
+      toast("Nombre y tienda de entrega son obligatorios.", "error");
+      return;
+    }
+    if (editMetodoContacto === "facebook" && !editFacebookUsuario.trim()) {
+      toast("Usuario de Facebook es obligatorio para contacto Facebook.", "error");
       return;
     }
     setGuardandoCliente(true);
-    setMensaje("");
     try {
       await axios.put(`${API_CLIENT}/${clientId}`, {
         nombre: editNombre.trim(),
         tienda_entrega: editTienda.trim(),
         celular: editCelular.trim() || undefined,
         metodo_contacto: editMetodoContacto,
+        facebook_usuario:
+          editMetodoContacto === "facebook" ? editFacebookUsuario.trim() : undefined,
+        notas: editNotas.trim() || undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["client", clientId] });
       await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      setMensaje("Datos del cliente actualizados.");
+      toast("Datos del cliente actualizados.", "success");
       cerrarModalEditar();
     } catch {
-      setMensaje("Error al guardar los datos del cliente.");
+      toast("Error al guardar los datos del cliente.", "error");
     } finally {
       setGuardandoCliente(false);
     }
@@ -120,9 +163,9 @@ export default function ReservarCartasPage() {
         (s) =>
           s.card_state !== "vendida" &&
           s.card_state !== "propiedad" &&
-          s.card_state !== "reserva"
+          s.card_state !== "reserva",
       ),
-    [stockRaw]
+    [stockRaw],
   );
 
   const stockDisponibleFiltrado = useMemo(() => {
@@ -131,7 +174,7 @@ export default function ReservarCartasPage() {
     return stockDisponible.filter(
       (s) =>
         s.card_name.toLowerCase().includes(q) ||
-        (s.card_id && s.card_id.toLowerCase().includes(q))
+        (s.card_id && s.card_id.toLowerCase().includes(q)),
     );
   }, [stockDisponible, busqueda]);
 
@@ -139,9 +182,19 @@ export default function ReservarCartasPage() {
     return reservasRaw
       .map((r) => {
         const stock = stockRaw.find((s) => s._id === r.stock_id);
-        return stock ? { ...r, card_name: stock.card_name, image_url: stock.image_url, card_id: stock.card_id } : null;
+        return stock
+          ? {
+              ...r,
+              card_name: stock.card_name,
+              image_url: stock.image_url,
+              card_id: stock.card_id,
+            }
+          : null;
       })
-      .filter((r): r is ReservaItem & { card_name: string; image_url: string; card_id: string } => r !== null);
+      .filter(
+        (r): r is ReservaItem & { card_name: string; image_url: string; card_id: string } =>
+          r !== null,
+      );
   }, [reservasRaw, stockRaw]);
 
   const getPrecioDefault = (item: StockItem): number => {
@@ -166,10 +219,9 @@ export default function ReservarCartasPage() {
     if (!clientId || !client) return;
     const precio = getPrecioReserva(item._id, item);
     if (precio <= 0) {
-      setMensaje("Ingresa un precio mayor a 0.");
+      toast("Ingresa un precio mayor a 0.", "error");
       return;
     }
-    setMensaje("");
     setReservandoId(item._id);
     try {
       const res = await axios.post(API_RESERVA, {
@@ -179,7 +231,7 @@ export default function ReservarCartasPage() {
         currency: "COP",
       });
       if (res.data && (res.data as { error?: string }).error) {
-        setMensaje((res.data as { error: string }).error);
+        toast((res.data as { error: string }).error, "error");
         return;
       }
       const next = { ...precios };
@@ -187,21 +239,20 @@ export default function ReservarCartasPage() {
       setPrecios(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      setMensaje(`Carta "${item.card_name}" reservada correctamente.`);
+      toast(`«${item.card_name}» añadida al pedido.`, "success");
     } catch {
-      setMensaje("Error al reservar la carta.");
+      toast("Error al reservar la carta.", "error");
     } finally {
       setReservandoId(null);
     }
   };
 
   const handleQuitarReserva = async (stockId: string) => {
-    setMensaje("");
     setQuitandoId(stockId);
     try {
       const res = await axios.delete(`${API_RESERVA}/stock/${stockId}`);
       if ((res.data as { success?: boolean }).success !== true) {
-        setMensaje((res.data as { error?: string }).error ?? "Error al quitar reserva.");
+        toast((res.data as { error?: string }).error ?? "Error al quitar reserva.", "error");
         return;
       }
       const next = { ...preciosReservadas };
@@ -209,9 +260,9 @@ export default function ReservarCartasPage() {
       setPreciosReservadas(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      setMensaje("Carta quitada de la reserva.");
+      toast("Línea quitada del pedido.", "success");
     } catch {
-      setMensaje("Error al quitar la reserva.");
+      toast("Error al quitar la reserva.", "error");
     } finally {
       setQuitandoId(null);
     }
@@ -221,14 +272,13 @@ export default function ReservarCartasPage() {
     const n = parseFloat(precioStr.replace(",", "."));
     if (Number.isNaN(n) || n < 0) return;
     setActualizandoPrecioId(stockId);
-    setMensaje("");
     try {
       const res = await axios.put(`${API_RESERVA}/stock/${stockId}`, {
         precio: Math.round(n),
         currency: "COP",
       });
       if (res.data && (res.data as { error?: string }).error) {
-        setMensaje((res.data as { error: string }).error);
+        toast((res.data as { error: string }).error, "error");
         return;
       }
       setPreciosReservadas((prev) => {
@@ -237,8 +287,9 @@ export default function ReservarCartasPage() {
         return next;
       });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      toast("Precio actualizado.", "success");
     } catch {
-      setMensaje("Error al actualizar el precio.");
+      toast("Error al actualizar el precio.", "error");
     } finally {
       setActualizandoPrecioId(null);
     }
@@ -252,53 +303,61 @@ export default function ReservarCartasPage() {
   const columns: GridColDef[] = [
     {
       field: "image_url",
-      headerName: "Imagen",
-      width: 80,
+      headerName: "",
+      width: 72,
+      sortable: false,
       renderCell: (params) => (
-        <img
-          src={params.value}
-          alt="carta"
-          className="object-contain w-12 h-16"
+        <Box
+          component="img"
+          src={params.value as string}
+          alt=""
+          sx={{ width: 44, height: 60, objectFit: "contain", borderRadius: 1, bgcolor: "grey.100" }}
         />
       ),
-      sortable: false,
     },
-    { field: "card_name", headerName: "Nombre", flex: 1, minWidth: 200 },
-    { field: "card_id", headerName: "Carta ID", width: 120 },
+    { field: "card_name", headerName: "Carta", flex: 1, minWidth: 180 },
+    { field: "card_id", headerName: "ID", width: 110 },
     {
       field: "pvp",
-      headerName: "PVP",
-      width: 140,
+      headerName: "PVP ref.",
+      width: 120,
       renderCell: (params) => {
         const pvp = params.row.pvp;
         const cur = params.row.pvp_currency;
         if (pvp == null || pvp <= 0)
-          return <span className="text-gray-400">—</span>;
+          return (
+            <Typography variant="body2" color="text.disabled">
+              —
+            </Typography>
+          );
         let cop = 0;
         if (cur === "COP") cop = pvp;
         else if (cur === "EUR") cop = convert.toCopFromEur(pvp) ?? 0;
         else if (cur === "USD") cop = convert.toCopFromUsd(pvp) ?? 0;
-        return <span>COP {formatCOP(cop.toFixed(0))}</span>;
+        return (
+          <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatCOP(cop.toFixed(0))}
+          </Typography>
+        );
       },
     },
     {
       field: "precio_reserva",
-      headerName: "Precio reserva (COP)",
-      width: 180,
+      headerName: "Precio pedido (COP)",
+      width: 160,
       renderCell: (params) => {
         const item = params.row as StockItem;
         const defaultVal = getPrecioDefault(item);
         const value = precios[item._id] ?? (defaultVal > 0 ? String(defaultVal) : "");
         return (
-          <input
+          <TextField
+            size="small"
             type="text"
             inputMode="decimal"
             value={value}
-            onChange={(e) =>
-              setPrecios((prev) => ({ ...prev, [item._id]: e.target.value }))
-            }
+            onChange={(e) => setPrecios((prev) => ({ ...prev, [item._id]: e.target.value }))}
             placeholder={defaultVal > 0 ? String(defaultVal) : "0"}
-            className="w-full max-w-[140px] px-2 py-1 border border-gray-300 rounded text-sm"
+            sx={{ width: 130, "& .MuiInputBase-input": { py: 0.75 } }}
           />
         );
       },
@@ -306,21 +365,22 @@ export default function ReservarCartasPage() {
     },
     {
       field: "reservar",
-      headerName: "Reservar",
-      width: 120,
+      headerName: "",
+      width: 112,
       sortable: false,
       renderCell: (params) => {
         const item = params.row as StockItem;
         const loading = reservandoId === item._id;
         return (
-          <button
-            type="button"
+          <Button
+            variant="contained"
+            size="small"
             onClick={() => handleReservar(item)}
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            sx={{ textTransform: "none", minWidth: 96 }}
           >
-            {loading ? "..." : "Reservar"}
-          </button>
+            {loading ? "…" : "Añadir"}
+          </Button>
         );
       },
     },
@@ -328,88 +388,121 @@ export default function ReservarCartasPage() {
 
   if (!clientId) {
     return (
-      <div className="p-6">
-        <p className="text-red-500">Falta el cliente. Ve desde Clientes → Agregar cartas al pedido.</p>
-        <button
-          type="button"
-          onClick={() => navigate("/clientes")}
-          className="mt-4 text-blue-600 hover:underline"
-        >
-          Ir a Clientes
-        </button>
-      </div>
+      <Stack spacing={2} sx={{ p: 3 }}>
+        <Alert severity="warning">Falta el cliente en la URL.</Alert>
+        <Button variant="outlined" onClick={() => navigate("/clientes")}>
+          Ir al listado
+        </Button>
+      </Stack>
     );
   }
 
   if (loadingClient || !client) {
-    return <p className="text-center text-gray-500 p-6">Cargando cliente...</p>;
+    return (
+      <Stack alignItems="center" justifyContent="center" minHeight={240} gap={2}>
+        <CircularProgress size={32} />
+        <Typography color="text.secondary">Cargando cliente…</Typography>
+      </Stack>
+    );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          type="button"
-          onClick={() => navigate("/clientes")}
-          className="text-gray-600 hover:text-gray-800"
+    <Stack spacing={3} sx={{ maxWidth: 1100, mx: "auto", p: { xs: 2, sm: 3 } }}>
+      <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
+        <Button
+          color="inherit"
+          size="small"
+          onClick={() => navigate(clientId ? `/clientes/${clientId}` : "/clientes")}
         >
-          ← Clientes
-        </button>
-        <h1 className="text-2xl font-bold text-gray-800">
-          Reservar cartas para {client.nombre}
-        </h1>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <p className="text-sm text-gray-600">
-          Tienda de entrega: {client.tienda_entrega}
-          {client.celular && ` · Cel: ${client.celular}`}
-        </p>
-        <button
-          type="button"
-          onClick={abrirModalEditar}
-          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-        >
-          Modificar información del cliente
-        </button>
-      </div>
+          ← Detalle cliente
+        </Button>
+        <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1 }}>
+          Editar pedido · {client.nombre}
+        </Typography>
+      </Stack>
 
-      {mensaje && (
-        <p
-          className={`mb-4 text-sm ${
-            mensaje.includes("Error") || mensaje.includes("ya") ? "text-red-600" : "text-green-600"
-          }`}
-        >
-          {mensaje}
-        </p>
-      )}
+      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
+          <Stack spacing={0.5} flex={1}>
+            <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
+              <Chip label={client.tienda_entrega} size="small" variant="outlined" />
+              {client.celular ? (
+                <Typography variant="body2" color="text.secondary">
+                  {client.celular}
+                </Typography>
+              ) : null}
+            </Stack>
+            {client.notas?.trim() ? (
+              <Alert severity="info" icon={false} sx={{ py: 0.5, mt: 1 }}>
+                <Typography variant="caption" component="span" fontWeight={600}>
+                  Notas:{" "}
+                </Typography>
+                <Typography variant="body2" component="span" sx={{ whiteSpace: "pre-wrap" }}>
+                  {client.notas.trim()}
+                </Typography>
+              </Alert>
+            ) : null}
+          </Stack>
+          <Button variant="outlined" size="small" onClick={abrirModalEditar} sx={{ alignSelf: "flex-start" }}>
+            Datos del cliente
+          </Button>
+        </Stack>
+      </Paper>
 
-      {/* Cartas reservadas: siempre visible */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">Cartas reservadas</h2>
+      <Paper
+        variant="outlined"
+        sx={{ p: 2.5, borderRadius: 2, bgcolor: "warning.50", borderColor: "warning.light" }}
+      >
+        <Typography variant="subtitle1" fontWeight={700} color="warning.dark" gutterBottom>
+          Pedido actual
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Líneas reservadas para este cliente. Ajusta precios aquí o quita líneas.
+        </Typography>
         {loadingReservas ? (
-          <p className="text-gray-500 text-sm">Cargando reservas...</p>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <CircularProgress size={20} />
+            <Typography variant="body2">Cargando…</Typography>
+          </Stack>
         ) : reservasConStock.length === 0 ? (
-          <p className="text-gray-500 text-sm">No hay cartas reservadas para este cliente.</p>
+          <Typography variant="body2" color="text.secondary">
+            Aún no hay cartas en el pedido. Usa la tabla inferior para añadirlas.
+          </Typography>
         ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <ul className="space-y-3">
-              {reservasConStock.map((r) => (
-                <li
+          <Stack divider={<Divider flexItem />} spacing={0}>
+            {reservasConStock.map((r) => {
+              const fechaTxt = formatReservaFecha(r.created_at);
+              return (
+                <Stack
                   key={r._id}
-                  className="flex flex-wrap items-center gap-4 py-2 border-b border-amber-100 last:border-0"
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  alignItems={{ sm: "center" }}
+                  py={2}
                 >
-                  <img
+                  <Box
+                    component="img"
                     src={r.image_url}
-                    alt={r.card_name}
-                    className="object-contain w-12 h-16 flex-shrink-0"
+                    alt=""
+                    sx={{ width: 52, height: 72, objectFit: "contain", borderRadius: 1, bgcolor: "background.paper" }}
                   />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-800 truncate">{r.card_name}</p>
-                    <p className="text-xs text-gray-500">{r.card_id}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Precio (COP):</label>
-                    <input
+                  <Box flex={1} minWidth={0}>
+                    <Typography fontWeight={600} noWrap title={r.card_name}>
+                      {r.card_name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {r.card_id}
+                    </Typography>
+                    {fechaTxt ? (
+                      <Typography variant="caption" color="text.secondary">
+                        Reservado: {fechaTxt}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                  <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+                    <TextField
+                      label="COP"
+                      size="small"
                       type="text"
                       inputMode="decimal"
                       value={getPrecioReservaInput(r.stock_id, r.precio)}
@@ -422,136 +515,158 @@ export default function ReservarCartasPage() {
                         const n = parseFloat(v.replace(",", "."));
                         if (n !== r.precio) handleActualizarPrecioReserva(r.stock_id, v);
                       }}
-                      className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                      sx={{ width: 120 }}
                     />
-                    {actualizandoPrecioId === r.stock_id && (
-                      <span className="text-xs text-gray-500">Guardando...</span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleQuitarReserva(r.stock_id)}
-                    disabled={quitandoId === r.stock_id}
-                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {quitandoId === r.stock_id ? "..." : "Quitar de reserva"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+                    {actualizandoPrecioId === r.stock_id ? (
+                      <CircularProgress size={18} />
+                    ) : null}
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleQuitarReserva(r.stock_id)}
+                      disabled={quitandoId === r.stock_id}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {quitandoId === r.stock_id ? "…" : "Quitar"}
+                    </Button>
+                  </Stack>
+                </Stack>
+              );
+            })}
+          </Stack>
         )}
-      </section>
+      </Paper>
 
-      {/* Buscador y tabla de cartas disponibles */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">Cartas disponibles para reservar</h2>
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Buscar por nombre o ID de carta..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
+      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+          Catálogo disponible
+        </Typography>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Buscar por nombre o ID de carta…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          sx={{ maxWidth: 420, mb: 2 }}
+        />
         {loadingStock ? (
-          <p className="text-gray-500">Cargando stock...</p>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <CircularProgress size={20} />
+            <Typography variant="body2">Cargando stock…</Typography>
+          </Stack>
         ) : stockDisponibleFiltrado.length === 0 ? (
-          <p className="text-gray-500">
+          <Typography variant="body2" color="text.secondary">
             {busqueda.trim()
-              ? "No hay cartas que coincidan con la búsqueda."
+              ? "Ninguna carta coincide con la búsqueda."
               : "No hay cartas disponibles para reservar."}
-          </p>
+          </Typography>
         ) : (
-          <div className="bg-white rounded-lg shadow border border-gray-200" style={{ minHeight: 400 }}>
+          <Box
+            sx={{
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 1,
+              overflow: "hidden",
+              "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
+            }}
+          >
             <DataGrid
               rows={stockDisponibleFiltrado}
               columns={columns}
               getRowId={(row) => row._id}
               pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 25, page: 0 } } }}
+              initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
               disableRowSelectionOnClick
               autoHeight
+              rowHeight={68}
+              sx={{ border: 0 }}
             />
-          </div>
+          </Box>
         )}
-      </section>
+      </Paper>
 
-      {/* Modal editar cliente */}
-      {modalEditarCliente && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={cerrarModalEditar}
+      <Dialog open={modalEditarCliente} onClose={guardandoCliente ? undefined : cerrarModalEditar} maxWidth="sm" fullWidth>
+        <form onSubmit={guardarCliente}>
+          <DialogTitle>Datos del cliente</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={2} sx={{ pt: 0.5 }}>
+              <TextField
+                label="Nombre"
+                required
+                fullWidth
+                value={editNombre}
+                onChange={(e) => setEditNombre(e.target.value)}
+              />
+              <TextField
+                label="Tienda de entrega"
+                required
+                fullWidth
+                value={editTienda}
+                onChange={(e) => setEditTienda(e.target.value)}
+              />
+              <TextField
+                label="Celular"
+                fullWidth
+                value={editCelular}
+                onChange={(e) => setEditCelular(e.target.value)}
+              />
+              <TextField
+                select
+                label="Canal"
+                fullWidth
+                value={editMetodoContacto}
+                onChange={(e) => setEditMetodoContacto(e.target.value as "whatsapp" | "facebook")}
+                SelectProps={{ native: true }}
+              >
+                <option value="whatsapp">WhatsApp</option>
+                <option value="facebook">Facebook</option>
+              </TextField>
+              {editMetodoContacto === "facebook" && (
+                <TextField
+                  label="Usuario Facebook"
+                  required
+                  fullWidth
+                  value={editFacebookUsuario}
+                  onChange={(e) => setEditFacebookUsuario(e.target.value)}
+                />
+              )}
+              <TextField
+                label="Notas internas"
+                fullWidth
+                multiline
+                minRows={3}
+                value={editNotas}
+                onChange={(e) => setEditNotas(e.target.value)}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button onClick={cerrarModalEditar} disabled={guardandoCliente} color="inherit">
+              Cancelar
+            </Button>
+            <Button type="submit" variant="contained" disabled={guardandoCliente}>
+              {guardandoCliente ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4500}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          severity={snackbar.severity}
+          variant="filled"
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          sx={{ width: "100%" }}
         >
-          <div
-            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Modificar información del cliente</h2>
-            <form onSubmit={guardarCliente} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                <input
-                  type="text"
-                  value={editNombre}
-                  onChange={(e) => setEditNombre(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nombre del cliente"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tienda de entrega *</label>
-                <input
-                  type="text"
-                  value={editTienda}
-                  onChange={(e) => setEditTienda(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Ej: Tienda Norte"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Celular (opcional)</label>
-                <input
-                  type="text"
-                  value={editCelular}
-                  onChange={(e) => setEditCelular(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Número de celular"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Método de contacto</label>
-                <select
-                  value={editMetodoContacto}
-                  onChange={(e) => setEditMetodoContacto(e.target.value as "whatsapp" | "facebook")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="facebook">Facebook</option>
-                </select>
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={cerrarModalEditar}
-                  className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoCliente}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {guardandoCliente ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Stack>
   );
 }

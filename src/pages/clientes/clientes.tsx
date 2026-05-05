@@ -1,32 +1,52 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { DataGrid, type GridColDef, type GridRowParams } from "@mui/x-data-grid";
+import { useState, useMemo, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  FormControlLabel,
+  Snackbar,
+  Stack,
+  Switch,
+  Typography,
+} from "@mui/material";
+import type { StockListItem } from "../../types/stock";
+import ClienteFormDialog from "./cliente-form-dialog";
+import {
+  ALERTA_HORAS_AMARILLO,
+  ALERTA_HORAS_ROJO,
+  API_CLIENT,
+  API_RESERVA,
+  API_STOCK,
+  type ClientItem,
+  type ReservaItem,
+} from "./cliente-types";
+import {
+  abrirWhatsAppConTexto,
+  buildWhatsAppPedidoText,
+} from "./mensaje-reserva-pedido";
 
-export type ClientItem = {
-  _id: string;
-  nombre: string;
-  tienda_entrega: string;
-  celular?: string;
-  metodo_contacto: "whatsapp" | "facebook";
-};
-
-type ReservaItem = { _id: string; client_id: string; stock_id: string; precio: number; currency: string };
-
-const API_CLIENT = "http://localhost:3000/client";
-const API_RESERVA = "http://localhost:3000/reserva";
+export type { ClientItem } from "./cliente-types";
 
 export default function ClientesPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [nombre, setNombre] = useState("");
-  const [tiendaEntrega, setTiendaEntrega] = useState("");
-  const [celular, setCelular] = useState("");
-  const [metodoContacto, setMetodoContacto] = useState<"whatsapp" | "facebook">("whatsapp");
-  const [guardando, setGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [finalizandoClienteId, setFinalizandoClienteId] = useState<string | null>(null);
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error";
+  }>({ open: false, message: "", severity: "success" });
+
+  const showSnackbar = (message: string, severity: "success" | "error") => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const [soloConPedido, setSoloConPedido] = useState(false);
+  const [contactoLoadingId, setContactoLoadingId] = useState<string | null>(null);
 
   const { data: clientes = [], isLoading } = useQuery<ClientItem[]>({
     queryKey: ["clientes"],
@@ -44,6 +64,22 @@ export default function ClientesPage() {
     },
   });
 
+  const { data: stockRaw = [] } = useQuery<StockListItem[]>({
+    queryKey: ["stock"],
+    queryFn: async () => {
+      const res = await axios.get(API_STOCK);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
+  const stockMap = useMemo(() => {
+    const m: Record<string, StockListItem> = {};
+    stockRaw.forEach((s) => {
+      m[s._id] = s;
+    });
+    return m;
+  }, [stockRaw]);
+
   const reservasPorCliente = useMemo(() => {
     const map: Record<string, number> = {};
     reservas.forEach((r) => {
@@ -52,205 +88,256 @@ export default function ClientesPage() {
     return map;
   }, [reservas]);
 
-  const handleCrearCliente = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre.trim() || !tiendaEntrega.trim()) {
-      setMensaje("Nombre y tienda de entrega son obligatorios.");
-      return;
+  const statsPorCliente = useMemo(() => {
+    const byClient: Record<string, { count: number; oldestMs: number }> = {};
+    reservas.forEach((r) => {
+      const t = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+      if (!byClient[r.client_id]) {
+        byClient[r.client_id] = { count: 0, oldestMs: t };
+      }
+      const e = byClient[r.client_id];
+      e.count += 1;
+      e.oldestMs = Math.min(e.oldestMs, t);
+    });
+    return byClient;
+  }, [reservas]);
+
+  const sortedClientes = useMemo(() => {
+    let list = [...clientes];
+    if (soloConPedido) {
+      list = list.filter((c) => (statsPorCliente[c._id]?.count ?? 0) > 0);
     }
-    setMensaje("");
-    setGuardando(true);
+    list.sort((a, b) => {
+      const ca = statsPorCliente[a._id]?.count ?? 0;
+      const cb = statsPorCliente[b._id]?.count ?? 0;
+      if ((ca > 0) !== (cb > 0)) return cb > 0 ? 1 : -1;
+      if (ca === 0 && cb === 0) return a.nombre.localeCompare(b.nombre, "es");
+      const oa = statsPorCliente[a._id]?.oldestMs ?? 0;
+      const ob = statsPorCliente[b._id]?.oldestMs ?? 0;
+      return oa - ob;
+    });
+    return list;
+  }, [clientes, soloConPedido, statsPorCliente]);
+
+  const getRowClassName = useCallback(
+    (params: { id: string | number }) => {
+      const id = String(params.id);
+      const st = statsPorCliente[id];
+      if (!st?.count) return "";
+      const hours = (Date.now() - st.oldestMs) / 3600000;
+      if (hours >= ALERTA_HORAS_ROJO) return "row-pedido-critico";
+      if (hours >= ALERTA_HORAS_AMARILLO) return "row-pedido-alerta";
+      return "";
+    },
+    [statsPorCliente],
+  );
+
+  const enviarResumenWhatsApp = async (cliente: ClientItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rs = reservas.filter((r) => r.client_id === cliente._id);
+    if (rs.length === 0) return;
+    setContactoLoadingId(cliente._id);
     try {
-      await axios.post(API_CLIENT, {
-        nombre: nombre.trim(),
-        tienda_entrega: tiendaEntrega.trim(),
-        celular: celular.trim() || undefined,
-        metodo_contacto: metodoContacto,
+      const lines = rs.map((r) => {
+        const st = stockMap[r.stock_id];
+        return {
+          card_id: st?.card_id ?? "",
+          card_name: st?.card_name ?? "Carta",
+          precio: r.precio,
+          rareza: st?.rareza,
+        };
       });
-      setNombre("");
-      setTiendaEntrega("");
-      setCelular("");
-      setMetodoContacto("whatsapp");
-      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      setMensaje("Cliente agregado correctamente.");
-    } catch {
-      setMensaje("Error al guardar el cliente.");
+      const texto = await buildWhatsAppPedidoText({
+        clientName: cliente.nombre,
+        tiendaEntrega: cliente.tienda_entrega,
+        lines,
+      });
+      abrirWhatsAppConTexto(cliente.celular, texto);
     } finally {
-      setGuardando(false);
+      setContactoLoadingId(null);
     }
   };
 
-  const handleAgregarCartasPedido = (cliente: ClientItem) => {
+  const irReservar = (cliente: ClientItem, e: React.MouseEvent) => {
+    e.stopPropagation();
     navigate(`/clientes/${cliente._id}/reservar`);
   };
 
-  const handleFinalizarVenta = async (cliente: ClientItem) => {
-    setMensaje("");
-    setFinalizandoClienteId(cliente._id);
-    try {
-      const res = await axios.post<{ success: boolean; vendidas?: number; error?: string }>(
-        `${API_RESERVA}/client/${cliente._id}/finalizar-venta`
-      );
-      const data = res.data;
-      if (data.success) {
-        setMensaje(`Venta finalizada: ${data.vendidas ?? 0} carta(s) marcadas como vendidas.`);
-        await queryClient.invalidateQueries({ queryKey: ["reservas"] });
-        await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-        await queryClient.invalidateQueries({ queryKey: ["stock"] });
-        await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-      } else {
-        setMensaje(data.error ?? "Error al finalizar la venta.");
-      }
-    } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) && err.response?.data?.error ? err.response.data.error : "Error al finalizar la venta.";
-      setMensaje(msg);
-    } finally {
-      setFinalizandoClienteId(null);
-    }
-  };
-
   const columns: GridColDef[] = [
-    { field: "nombre", headerName: "Nombre", flex: 1, minWidth: 160 },
-    { field: "tienda_entrega", headerName: "Tienda de entrega", flex: 1, minWidth: 160 },
-    { field: "celular", headerName: "Celular", flex: 0.8, minWidth: 120 },
     {
-      field: "metodo_contacto",
-      headerName: "Método de contacto",
-      width: 140,
-      valueFormatter: (value) => (value === "whatsapp" ? "WhatsApp" : "Facebook"),
-    },
-    {
-      field: "agregar_pedido",
-      headerName: "Pedido",
+      field: "principal",
+      headerName: "Cliente",
+      flex: 1.2,
+      minWidth: 200,
       sortable: false,
-      filterable: false,
-      width: 180,
-      renderCell: (params) => (
-        <button
-          type="button"
-          onClick={() => handleAgregarCartasPedido(params.row)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-        >
-          Agregar cartas al pedido
-        </button>
-      ),
-    },
-    {
-      field: "finalizar_venta",
-      headerName: "Venta",
-      sortable: false,
-      filterable: false,
-      width: 140,
       renderCell: (params) => {
-        const cliente = params.row as ClientItem;
-        const tieneReservas = (reservasPorCliente[cliente._id] ?? 0) > 0;
-        const finalizando = finalizandoClienteId === cliente._id;
+        const c = params.row as ClientItem;
+        const n = reservasPorCliente[c._id] ?? 0;
         return (
-          <button
-            type="button"
-            onClick={() => handleFinalizarVenta(cliente)}
-            disabled={!tieneReservas || finalizando}
-            title={tieneReservas ? "Finalizar venta" : "El cliente no tiene cartas reservadas"}
-            className={
-              tieneReservas && !finalizando
-                ? "bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed px-3 py-1 rounded text-sm"
-            }
+          <Box sx={{ py: 0.5 }}>
+            <Typography fontWeight={600}>{c.nombre}</Typography>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {c.tienda_entrega}
+              {c.celular ? ` · ${c.celular}` : ""}
+            </Typography>
+            {n > 0 ? (
+              <Chip label={`${n} en pedido`} size="small" color="primary" sx={{ mt: 0.5, height: 22 }} />
+            ) : (
+              <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.25 }}>
+                Sin reservas
+              </Typography>
+            )}
+          </Box>
+        );
+      },
+    },
+    {
+      field: "wa",
+      headerName: "WhatsApp",
+      width: 130,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const c = params.row as ClientItem;
+        const tiene = (reservasPorCliente[c._id] ?? 0) > 0;
+        const busy = contactoLoadingId === c._id;
+        return (
+          <Button
+            variant="contained"
+            color="success"
+            size="small"
+            disabled={!tiene || busy}
+            onClick={(e) => enviarResumenWhatsApp(c, e)}
+            sx={{ textTransform: "none" }}
           >
-            {finalizando ? "..." : "Finalizar venta"}
-          </button>
+            {busy ? "…" : "WhatsApp"}
+          </Button>
+        );
+      },
+    },
+    {
+      field: "reservar",
+      headerName: "Reserva",
+      width: 120,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const c = params.row as ClientItem;
+        return (
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={(e) => irReservar(c, e)}
+            sx={{ textTransform: "none" }}
+          >
+            Reservar
+          </Button>
         );
       },
     },
   ];
 
+  const onRowClick = (params: GridRowParams<ClientItem>) => {
+    navigate(`/clientes/${params.row._id}`);
+  };
+
   if (isLoading) {
-    return <p className="text-center text-gray-500 p-6">Cargando clientes...</p>;
+    return (
+      <Stack alignItems="center" py={6}>
+        <Alert severity="info">Cargando clientes…</Alert>
+      </Stack>
+    );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Clientes</h1>
-
-      {/* Formulario nuevo cliente */}
-      <form
-        onSubmit={handleCrearCliente}
-        className="bg-white p-4 rounded-lg shadow border border-gray-200 mb-6"
+    <Stack spacing={2.5} sx={{ maxWidth: 960, mx: "auto", p: { xs: 2, sm: 3 } }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        justifyContent="space-between"
+        spacing={2}
       >
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Nuevo cliente</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-            <input
-              type="text"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Nombre del cliente"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tienda de entrega *</label>
-            <input
-              type="text"
-              value={tiendaEntrega}
-              onChange={(e) => setTiendaEntrega(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: Tienda Norte"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Celular (opcional)</label>
-            <input
-              type="text"
-              value={celular}
-              onChange={(e) => setCelular(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Número de celular"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Método de contacto</label>
-            <select
-              value={metodoContacto}
-              onChange={(e) => setMetodoContacto(e.target.value as "whatsapp" | "facebook")}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="whatsapp">WhatsApp</option>
-              <option value="facebook">Facebook</option>
-            </select>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={guardando}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {guardando ? "Guardando..." : "Agregar cliente"}
-          </button>
-          {mensaje && (
-            <span className={`text-sm ${mensaje.includes("Error") ? "text-red-600" : "text-green-600"}`}>
-              {mensaje}
-            </span>
-          )}
-        </div>
-      </form>
+        <Typography variant="h4" component="h1" fontWeight={700}>
+          Clientes
+        </Typography>
+        <Stack direction="row" flexWrap="wrap" alignItems="center" gap={2}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={soloConPedido}
+                onChange={(e) => setSoloConPedido(e.target.checked)}
+                color="primary"
+                size="small"
+              />
+            }
+            label="Solo con pedido"
+          />
+          <Button component={Link} to="/clientes/imprimir-pedidos" variant="text" size="small">
+            Imprimir pedidos
+          </Button>
+          <Button variant="contained" onClick={() => setNuevoOpen(true)}>
+            Nuevo cliente
+          </Button>
+        </Stack>
+      </Stack>
 
-      {/* Tabla de clientes */}
-      <div className="bg-white rounded-lg shadow border border-gray-200" style={{ minHeight: 400 }}>
+      <Typography variant="body2" color="text.secondary">
+        Pulsa una fila para abrir el <strong>detalle</strong> (pedido, historial, notas, finalizar venta).
+      </Typography>
+
+      <Stack
+        sx={{
+          bgcolor: "background.paper",
+          borderRadius: 2,
+          border: 1,
+          borderColor: "divider",
+          overflow: "hidden",
+        }}
+      >
         <DataGrid
-          rows={clientes}
+          rows={sortedClientes}
           columns={columns}
           getRowId={(row) => row._id}
+          getRowClassName={getRowClassName}
+          onRowClick={onRowClick}
           pageSizeOptions={[10, 25, 50]}
           initialState={{
             pagination: { paginationModel: { pageSize: 25, page: 0 } },
           }}
           disableRowSelectionOnClick
           autoHeight
+          rowHeight={72}
+          sx={{
+            border: 0,
+            cursor: "pointer",
+            "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
+            "& .row-pedido-alerta": { backgroundColor: "rgba(251, 191, 36, 0.16)" },
+            "& .row-pedido-critico": { backgroundColor: "rgba(248, 113, 113, 0.2)" },
+          }}
         />
-      </div>
-    </div>
+      </Stack>
+
+      <ClienteFormDialog
+        open={nuevoOpen}
+        mode="create"
+        onClose={() => setNuevoOpen(false)}
+        onSaved={() => showSnackbar("Cliente creado.", "success")}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          severity={snackbar.severity}
+          variant="filled"
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Stack>
   );
 }

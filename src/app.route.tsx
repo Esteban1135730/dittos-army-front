@@ -10,6 +10,7 @@ import SalesDashboard from "./pages/sales/sales-dashboard";
 import SalesConsistency from "./pages/sales/sales-consistency";
 import SalesHistory from "./pages/sales/sales-history";
 import ClientesPage from "./pages/clientes/clientes";
+import ClienteDetallePage from "./pages/clientes/cliente-detalle";
 import ReservarCartasPage from "./pages/clientes/reservar-cartas";
 import ImprimirPedidosPage from "./pages/clientes/imprimir-pedidos";
 import IncomingListPage from "./pages/incoming/incoming-list/incoming-list";
@@ -150,6 +151,14 @@ export default function AppRouter() {
         }
       />
       <Route
+        path="/clientes/imprimir-pedidos"
+        element={
+          <SideLayout>
+            <ImprimirPedidosPage />
+          </SideLayout>
+        }
+      />
+      <Route
         path="/clientes/:clientId/reservar"
         element={
           <SideLayout>
@@ -158,10 +167,10 @@ export default function AppRouter() {
         }
       />
       <Route
-        path="/clientes/imprimir-pedidos"
+        path="/clientes/:clientId"
         element={
           <SideLayout>
-            <ImprimirPedidosPage />
+            <ClienteDetallePage />
           </SideLayout>
         }
       />
