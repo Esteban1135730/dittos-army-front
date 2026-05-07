@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { exportIncomingBatchToPdf } from "../export-incoming-batch-pdf";
+import SimulateRealCardPriceDialog from "../simulate-real-card-price-dialog";
 
 type IncomingBatchItemRow = {
   batch_item_id: string;
@@ -38,6 +39,7 @@ export default function IncomingBatchRoundsPage() {
   const queryClient = useQueryClient();
   const [savingMeta, setSavingMeta] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [simulateItemId, setSimulateItemId] = useState<string | null>(null);
 
   const { data: batchItems = [], isLoading: isLoadingItems } = useQuery<IncomingBatchItemRow[]>({
     queryKey: ["incoming-batch-items", batchId],
@@ -111,6 +113,11 @@ export default function IncomingBatchRoundsPage() {
   };
 
   if (!batchId) return <p className="text-red-600">Falta batchId</p>;
+
+  const simulateItem =
+    simulateItemId === null
+      ? null
+      : batchItems.find((it) => it.batch_item_id === simulateItemId) ?? null;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -233,12 +240,29 @@ export default function IncomingBatchRoundsPage() {
                     ).toLocaleString("es-CO", { maximumFractionDigits: 0 })}{" "}
                     COP
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSimulateItemId(it.batch_item_id)}
+                    className="mt-2 text-xs font-medium text-blue-700 hover:text-blue-900 underline"
+                  >
+                    Simular precio real
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {simulateItem && (
+        <SimulateRealCardPriceDialog
+          key={simulateItem.batch_item_id}
+          open
+          onClose={() => setSimulateItemId(null)}
+          cardName={simulateItem.card_name}
+          unitCostCop={simulateItem.unit_cost_cop}
+        />
+      )}
     </div>
   );
 }

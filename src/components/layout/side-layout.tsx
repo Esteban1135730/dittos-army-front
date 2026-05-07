@@ -25,6 +25,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             Stock
           </Link>
           <Link
+            to="/stock/apertura-sellado"
+            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
+          >
+            Apertura sellado
+          </Link>
+          <Link
             to="/incoming"
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >

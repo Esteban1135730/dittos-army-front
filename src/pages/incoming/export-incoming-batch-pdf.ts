@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { autoTable } from "jspdf-autotable";
 
 function fmtCOP(n: number) {
   return Math.round(n).toLocaleString("es-CO", { maximumFractionDigits: 0 });
@@ -25,6 +26,9 @@ export type BatchItemPdf = {
   unit_cost_cop: number;
 };
 
+/** jsPDF tras autoTable (finalY del último dibujado). */
+type JsPdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number } };
+
 function addWrapped(
   doc: jsPDF,
   text: string,
@@ -50,9 +54,87 @@ function addWrapped(
   return cy + 1;
 }
 
+function drawItemsTable(doc: JsPdfWithAutoTable, items: BatchItemPdf[], startY: number, margin: number): number {
+  const head = [
+    [
+      "#",
+      "Carta",
+      "ID carta",
+      "Idioma",
+      "Rareza",
+      "Cant.",
+      "Pend.",
+      "EUR lote",
+      "EUR u.",
+      "COP u.",
+      "COP línea",
+    ],
+  ];
+
+  const body =
+    items.length === 0
+      ? [["—", "(Sin líneas en este pedido)", "", "", "", "", "", "", "", "", ""]]
+      : items.map((it, i) => {
+          const copLinea = Number(it.unit_cost_cop) * Number(it.quantity_ordered);
+          return [
+            String(i + 1),
+            it.card_name,
+            it.card_id,
+            it.language,
+            it.rareza?.trim() ? String(it.rareza) : "—",
+            String(it.quantity_ordered),
+            String(it.remaining_quantity),
+            Number(it.eur_total_lot).toFixed(2),
+            Number(it.eur_unit_price).toFixed(4),
+            fmtCOP(it.unit_cost_cop),
+            fmtCOP(copLinea),
+          ];
+        });
+
+  autoTable(doc, {
+    startY,
+    head,
+    body,
+    theme: "grid",
+    styles: {
+      fontSize: 7,
+      cellPadding: 1.2,
+      valign: "middle",
+      overflow: "linebreak",
+      lineColor: [200, 200, 200],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [51, 65, 85],
+      textColor: 255,
+      fontStyle: "bold",
+      halign: "center",
+      fontSize: 7,
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 8 },
+      1: { cellWidth: 52 },
+      2: { cellWidth: 24 },
+      3: { halign: "center", cellWidth: 14 },
+      4: { halign: "center", cellWidth: 12 },
+      5: { halign: "right", cellWidth: 11 },
+      6: { halign: "right", cellWidth: 11 },
+      7: { halign: "right", cellWidth: 18 },
+      8: { halign: "right", cellWidth: 18 },
+      9: { halign: "right", cellWidth: 22 },
+      10: { halign: "right", cellWidth: 26 },
+    },
+    margin: { left: margin, right: margin },
+    showHead: "everyPage",
+  });
+
+  return doc.lastAutoTable?.finalY ?? startY;
+}
+
 /** Contenido de un lote (sin título global de página). */
 function renderOneBatchBody(
-  doc: jsPDF,
+  doc: JsPdfWithAutoTable,
   meta: BatchMetaPdf,
   items: BatchItemPdf[],
   margin: number,
@@ -81,27 +163,18 @@ function renderOneBatchBody(
     maxW,
     9,
   );
-  cy += 2;
-  cy = addWrapped(doc, "Cartas del pedido", margin, cy, maxW, 11);
+  cy += 3;
 
-  items.forEach((it, i) => {
-    const copLinea = Number(it.unit_cost_cop) * Number(it.quantity_ordered);
-    const block = [
-      `${i + 1}. ${it.card_name}`,
-      `   ID: ${it.card_id}`,
-      `   Idioma: ${it.language}${it.rareza ? ` · Rareza: ${it.rareza}` : ""}`,
-      `   Cantidad pedida: ${it.quantity_ordered} · Pendiente: ${it.remaining_quantity}`,
-      `   EUR total lote: ${Number(it.eur_total_lot).toFixed(2)} · EUR unitario: ${Number(it.eur_unit_price).toFixed(4)}`,
-      `   COP unitario (real, sin envío): ${fmtCOP(it.unit_cost_cop)} · COP línea total pedido: ${fmtCOP(copLinea)}`,
-    ].join("\n");
-    cy = addWrapped(doc, block, margin, cy, maxW, 8);
-  });
-
+  cy = drawItemsTable(doc, items, cy, margin);
   return cy;
 }
 
+function createLandscapeDoc(): JsPdfWithAutoTable {
+  return new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" }) as JsPdfWithAutoTable;
+}
+
 export function exportIncomingBatchToPdf(meta: BatchMetaPdf, items: BatchItemPdf[]) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = createLandscapeDoc();
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 14;
   const maxW = pageW - 2 * margin;
@@ -117,7 +190,7 @@ export function exportIncomingBatchToPdf(meta: BatchMetaPdf, items: BatchItemPdf
 export function exportAllOpenIncomingBatchesToPdf(
   sections: Array<{ meta: BatchMetaPdf; items: BatchItemPdf[] }>,
 ) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = createLandscapeDoc();
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 14;
   const maxW = pageW - 2 * margin;

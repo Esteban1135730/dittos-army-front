@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/home/home";
 import SideLayout from "./components/layout/side-layout";
 import Stock from "./pages/stock/create-stock/stock";
+import AperturaSelladoPage from "./pages/stock/apertura-sellado/apertura-sellado";
 import StockGrid from "./pages/stock/grid-stock";
 import ModificarStock from "./pages/stock/update-stock/update-stock";
 import AddPVP from "./pages/pvp/add-pvp/add-pvp";
@@ -35,6 +36,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <StockGrid />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/apertura-sellado"
+        element={
+          <SideLayout>
+            <AperturaSelladoPage />
           </SideLayout>
         }
       />
