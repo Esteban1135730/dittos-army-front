@@ -23,6 +23,7 @@ import {
   API_RESERVA,
   API_STOCK,
   type ClientItem,
+  type ReservaIncomingItem,
   type ReservaItem,
 } from "./cliente-types";
 import {
@@ -64,6 +65,14 @@ export default function ClientesPage() {
     },
   });
 
+  const { data: incomingAll = [] } = useQuery<ReservaIncomingItem[]>({
+    queryKey: ["reservas-incoming"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_RESERVA}/incoming`);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
   const { data: stockRaw = [] } = useQuery<StockListItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
@@ -88,6 +97,14 @@ export default function ClientesPage() {
     return map;
   }, [reservas]);
 
+  const incomingUnitsPorCliente = useMemo(() => {
+    const m: Record<string, number> = {};
+    incomingAll.forEach((r) => {
+      m[r.client_id] = (m[r.client_id] ?? 0) + r.quantity;
+    });
+    return m;
+  }, [incomingAll]);
+
   const statsPorCliente = useMemo(() => {
     const byClient: Record<string, { count: number; oldestMs: number }> = {};
     reservas.forEach((r) => {
@@ -105,7 +122,10 @@ export default function ClientesPage() {
   const sortedClientes = useMemo(() => {
     let list = [...clientes];
     if (soloConPedido) {
-      list = list.filter((c) => (statsPorCliente[c._id]?.count ?? 0) > 0);
+      list = list.filter(
+        (c) =>
+          (statsPorCliente[c._id]?.count ?? 0) > 0 || (incomingUnitsPorCliente[c._id] ?? 0) > 0,
+      );
     }
     list.sort((a, b) => {
       const ca = statsPorCliente[a._id]?.count ?? 0;
@@ -135,7 +155,8 @@ export default function ClientesPage() {
   const enviarResumenWhatsApp = async (cliente: ClientItem, e: React.MouseEvent) => {
     e.stopPropagation();
     const rs = reservas.filter((r) => r.client_id === cliente._id);
-    if (rs.length === 0) return;
+    const incomingCliente = incomingAll.filter((r) => r.client_id === cliente._id);
+    if (rs.length === 0 && incomingCliente.length === 0) return;
     setContactoLoadingId(cliente._id);
     try {
       const lines = rs.map((r) => {
@@ -147,10 +168,17 @@ export default function ClientesPage() {
           rareza: st?.rareza,
         };
       });
+      const incomingLines = incomingCliente.map((x) => ({
+        card_id: x.card_id ?? "",
+        card_name: x.card_name ?? "Carta",
+        quantity: x.quantity,
+        rareza: x.rareza,
+      }));
       const texto = await buildWhatsAppPedidoText({
         clientName: cliente.nombre,
         tiendaEntrega: cliente.tienda_entrega,
         lines,
+        incomingLines: incomingLines.length ? incomingLines : undefined,
       });
       abrirWhatsAppConTexto(cliente.celular, texto);
     } finally {
@@ -173,6 +201,7 @@ export default function ClientesPage() {
       renderCell: (params) => {
         const c = params.row as ClientItem;
         const n = reservasPorCliente[c._id] ?? 0;
+        const inc = incomingUnitsPorCliente[c._id] ?? 0;
         return (
           <Box sx={{ py: 0.5 }}>
             <Typography fontWeight={600}>{c.nombre}</Typography>
@@ -180,8 +209,18 @@ export default function ClientesPage() {
               {c.tienda_entrega}
               {c.celular ? ` · ${c.celular}` : ""}
             </Typography>
-            {n > 0 ? (
-              <Chip label={`${n} en pedido`} size="small" color="primary" sx={{ mt: 0.5, height: 22 }} />
+            {n > 0 || inc > 0 ? (
+              <Chip
+                label={[
+                  n > 0 ? `${n} reserva(s)` : null,
+                  inc > 0 ? `${inc} en camino` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                size="small"
+                color="primary"
+                sx={{ mt: 0.5, height: 22 }}
+              />
             ) : (
               <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.25 }}>
                 Sin reservas
@@ -199,14 +238,15 @@ export default function ClientesPage() {
       filterable: false,
       renderCell: (params) => {
         const c = params.row as ClientItem;
-        const tiene = (reservasPorCliente[c._id] ?? 0) > 0;
+        const tieneWa =
+          (reservasPorCliente[c._id] ?? 0) > 0 || (incomingUnitsPorCliente[c._id] ?? 0) > 0;
         const busy = contactoLoadingId === c._id;
         return (
           <Button
             variant="contained"
             color="success"
             size="small"
-            disabled={!tiene || busy}
+            disabled={!tieneWa || busy}
             onClick={(e) => enviarResumenWhatsApp(c, e)}
             sx={{ textTransform: "none" }}
           >

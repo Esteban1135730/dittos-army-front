@@ -7,15 +7,61 @@ import { useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
-import type { StockListItem } from "../../../types/stock";
+import type { StockListItem, UpdateStockRequestBody } from "../../../types/stock";
 import { operationalRarezaLabel } from "../../../constants/item-rareza";
+import {
+  STOCK_TAG_LABEL,
+  STOCK_TAG_VALUES,
+  type StockTagId,
+} from "../../../constants/stock-tags";
 
 export type StockItem = StockListItem;
+
+function rarezaFromListRow(item: StockListItem): string | null {
+  let rz =
+    item.rareza != null && String(item.rareza).trim() !== ""
+      ? String(item.rareza).trim()
+      : "";
+  if (rz === "" && item.holofoil) rz = "holofoil";
+  if (rz === "" && item.league_card) rz = "league card";
+  return rz === "" ? null : rz;
+}
+
+function listRowToUpdateBody(
+  item: StockListItem,
+  tags: string[]
+): UpdateStockRequestBody {
+  const rz = rarezaFromListRow(item);
+  const body: UpdateStockRequestBody = {
+    id: item._id,
+    card_id: item.card_id,
+    card_name: item.card_name ?? "",
+    image_url: item.image_url ?? "",
+    currency: item.currency,
+    shipment: item.shipment,
+    unity_cost: item.unity_cost,
+    cards_in_shipmet: item.cards_in_shipmet,
+    card_state: item.card_state,
+    language: item.language ?? "",
+    holofoil: rz === "holofoil",
+    league_card: rz === "league card",
+    rareza: rz,
+    tags: STOCK_TAG_VALUES.filter((t) => tags.includes(t)),
+  };
+  if (item.incoming_notes != null && item.incoming_notes !== "") {
+    body.incoming_notes = item.incoming_notes;
+  }
+  return body;
+}
 
 export default function StockGrid() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [busqueda, setBusqueda] = useState("");
+  /** Tags seleccionados en el filtro: la fila debe incluir todos (AND). */
+  const [filtroTags, setFiltroTags] = useState<StockTagId[]>([]);
+  /** Solo líneas sin ningún tag; incompatible con `filtroTags` (se limpia al elegir tags). */
+  const [filtroSinTags, setFiltroSinTags] = useState(false);
   const [marcandoPropiedad, setMarcandoPropiedad] = useState<string | null>(
     null
   );
@@ -26,6 +72,8 @@ export default function StockGrid() {
   const [precioVenta, setPrecioVenta] = useState<number | "">("");
   const [vendiendo, setVendiendo] = useState(false);
   const [errorVenta, setErrorVenta] = useState("");
+  /** Fila en la que se está guardando un cambio de tags (evita doble envío). */
+  const [tagSavingRowId, setTagSavingRowId] = useState<string | null>(null);
 
   const {
     data: stock = [],
@@ -118,16 +166,44 @@ export default function StockGrid() {
     });
   }, [stock]);
 
-  // Filtrar stock por búsqueda
-  const stockFiltrado = useMemo(() => {
-    if (!busqueda.trim()) {
-      return stockOrdenado;
-    }
-    const terminoBusqueda = busqueda.toLowerCase().trim();
-    return stockOrdenado.filter((item) =>
-      (item.card_name ?? "").toLowerCase().includes(terminoBusqueda)
+  const toggleFiltroTag = (tag: StockTagId) => {
+    setFiltroSinTags(false);
+    setFiltroTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
-  }, [stockOrdenado, busqueda]);
+  };
+
+  const toggleFiltroSinTags = () => {
+    if (filtroSinTags) {
+      setFiltroSinTags(false);
+    } else {
+      setFiltroTags([]);
+      setFiltroSinTags(true);
+    }
+  };
+
+  // Filtrar stock por búsqueda y por tags (AND entre tags seleccionados, o solo sin tags)
+  const stockFiltrado = useMemo(() => {
+    let rows = stockOrdenado;
+    if (busqueda.trim()) {
+      const terminoBusqueda = busqueda.toLowerCase().trim();
+      rows = rows.filter((item) =>
+        (item.card_name ?? "").toLowerCase().includes(terminoBusqueda)
+      );
+    }
+    if (filtroSinTags) {
+      rows = rows.filter((item) => {
+        const rowTags = Array.isArray(item.tags) ? item.tags : [];
+        return rowTags.length === 0;
+      });
+    } else if (filtroTags.length > 0) {
+      rows = rows.filter((item) => {
+        const rowTags = Array.isArray(item.tags) ? item.tags : [];
+        return filtroTags.every((t) => rowTags.includes(t));
+      });
+    }
+    return rows;
+  }, [stockOrdenado, busqueda, filtroTags, filtroSinTags]);
 
   // Contar cartas únicas sin PVP (agrupadas por card_id)
   const cartasSinPvp = useMemo(() => {
@@ -199,6 +275,30 @@ export default function StockGrid() {
     setVentaCardId(null);
     setPrecioVenta("");
     setErrorVenta("");
+  };
+
+  const handleToggleRowTag = async (row: StockItem, tag: StockTagId) => {
+    if (tagSavingRowId !== null) return;
+    const rowTags = Array.isArray(row.tags) ? [...row.tags] : [];
+    const set = new Set(rowTags);
+    if (set.has(tag)) {
+      set.delete(tag);
+    } else {
+      set.add(tag);
+    }
+    const nextTags = STOCK_TAG_VALUES.filter((t) => set.has(t));
+    setTagSavingRowId(row._id);
+    try {
+      await axios.post(
+        "http://localhost:3000/stock/update",
+        listRowToUpdateBody(row, nextTags)
+      );
+      await queryClient.invalidateQueries({ queryKey: ["stock"] });
+    } catch {
+      window.alert("No se pudo actualizar el tag. Revisa la consola o intenta de nuevo.");
+    } finally {
+      setTagSavingRowId(null);
+    }
   };
 
   const handleVender = async () => {
@@ -275,6 +375,41 @@ export default function StockGrid() {
           <span className="text-sm text-gray-800">
             {operationalRarezaLabel(String(r).trim())}
           </span>
+        );
+      },
+    },
+    {
+      field: "tags",
+      headerName: "Tags",
+      width: 260,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const row = params.row as StockItem;
+        const tags = Array.isArray(row.tags) ? row.tags : [];
+        const busy = tagSavingRowId === row._id;
+        return (
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {STOCK_TAG_VALUES.map((tagId) => (
+              <label
+                key={tagId}
+                className="inline-flex items-center gap-1 cursor-pointer text-xs text-gray-800 whitespace-nowrap"
+                title={STOCK_TAG_LABEL[tagId]}
+              >
+                <input
+                  type="checkbox"
+                  checked={tags.includes(tagId)}
+                  disabled={busy}
+                  onChange={() => void handleToggleRowTag(row, tagId)}
+                  className="rounded border-gray-400"
+                />
+                {STOCK_TAG_LABEL[tagId]}
+              </label>
+            ))}
+          </div>
         );
       },
     },
@@ -621,8 +756,8 @@ export default function StockGrid() {
         </div>
       )}
       <div className="mb-4">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-4 mb-3">
+          <div className="flex-1 min-w-[220px]">
             <div className="relative">
               <input
                 type="text"
@@ -646,6 +781,7 @@ export default function StockGrid() {
               </svg>
               {busqueda && (
                 <button
+                  type="button"
                   onClick={() => setBusqueda("")}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
@@ -666,7 +802,7 @@ export default function StockGrid() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <div className="relative">
               <button
                 onClick={handleExportar}
@@ -712,7 +848,53 @@ export default function StockGrid() {
               {actualizandoTienda ? "Actualizando..." : "Actualizar tienda (catálogo + Próximamente)"}
             </button>
           </div>
-          <div className="flex flex-col gap-4 mt-4">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mb-4 text-sm text-gray-700">
+          <span className="font-medium shrink-0">
+            Filtrar por tags (varias = deben tenerlas todas; “Sin tags” solo líneas vacías):
+          </span>
+          {STOCK_TAG_VALUES.map((tag) => {
+            const active = filtroTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleFiltroTag(tag)}
+                className={`px-3 py-1 rounded-full border transition ${
+                  active
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white border-gray-300 hover:border-gray-400"
+                }`}
+              >
+                {STOCK_TAG_LABEL[tag]}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={toggleFiltroSinTags}
+            className={`px-3 py-1 rounded-full border border-dashed transition ${
+              filtroSinTags
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white border-gray-400 hover:border-gray-500"
+            }`}
+          >
+            Sin tags
+          </button>
+          {(filtroTags.length > 0 || filtroSinTags) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroTags([]);
+                setFiltroSinTags(false);
+              }}
+              className="text-blue-600 hover:underline ml-1"
+            >
+              Quitar filtros de tags
+            </button>
+          )}
+        </div>
+        <div className="flex flex-col gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
               <h3 className="text-lg font-semibold mb-3 text-gray-700">
                 Estadísticas del Inventario
@@ -876,7 +1058,6 @@ export default function StockGrid() {
             },
           }}
         />
-      </div>
     </div>
   );
 }

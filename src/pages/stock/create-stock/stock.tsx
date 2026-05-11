@@ -3,6 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import CardDetail from "./components/card.detail";
 import type { CreateStockRequestBody } from "../../../types/stock";
+import {
+  STOCK_TAG_LABEL,
+  STOCK_TAG_VALUES,
+  type StockTagId,
+} from "../../../constants/stock-tags";
 
 export type Expansion = {
   id: string;
@@ -38,6 +43,7 @@ export default function Stock() {
   const [language, setLanguage] = useState<string>("");
   /** "" = sin variante (mismo catálogo que incoming / PVP) */
   const [operationalRareza, setOperationalRareza] = useState<string>("");
+  const [stockTags, setStockTags] = useState<StockTagId[]>([]);
 
   // ------------------ MODO EXPANSIÓN ------------------
   const [busqueda, setBusqueda] = useState("");
@@ -94,7 +100,14 @@ export default function Stock() {
 
   useEffect(() => {
     setOperationalRareza("");
+    setStockTags([]);
   }, [cartaSeleccionada?.id]);
+
+  const toggleStockTag = (tag: StockTagId) => {
+    setStockTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
 
   const totalPaginas = Math.ceil(cartasFiltradas.length / cartasPorPagina);
   const indiceInicio = (paginaActual - 1) * cartasPorPagina;
@@ -179,6 +192,7 @@ export default function Stock() {
     }
     body.holofoil = rzTrim === "holofoil";
     body.league_card = rzTrim === "league card";
+    body.tags = STOCK_TAG_VALUES.filter((t) => stockTags.includes(t));
 
     try {
       setGuardando(true);
@@ -506,6 +520,28 @@ export default function Stock() {
                 setOperationalRareza={setOperationalRareza}
               />
               
+              <div className="mt-6">
+                <span className="block text-sm font-medium text-gray-700 mb-2">
+                  Tags (filtro)
+                </span>
+                <div className="flex flex-wrap gap-3">
+                  {STOCK_TAG_VALUES.map((tag) => (
+                    <label
+                      key={tag}
+                      className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-800"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={stockTags.includes(tag)}
+                        onChange={() => toggleStockTag(tag)}
+                        className="rounded border-gray-300"
+                      />
+                      {STOCK_TAG_LABEL[tag]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Moneda

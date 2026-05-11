@@ -60,6 +60,23 @@ export const API_CLIENT = "http://localhost:3000/client";
 export const API_RESERVA = "http://localhost:3000/reserva";
 export const API_STOCK = "http://localhost:3000/stock";
 export const API_SALES = "http://localhost:3000/sales";
+export const API_INCOMING = "http://localhost:3000/incoming";
+
+/** Línea de reserva pendiente (en camino), respuesta de GET /reserva/incoming */
+export type ReservaIncomingItem = {
+  _id: string;
+  client_id: string;
+  batch_item_id: string;
+  quantity: number;
+  created_at?: string;
+  updated_at?: string;
+  card_name?: string;
+  card_id?: string;
+  image_url?: string;
+  rareza?: string;
+  remaining_quantity?: number;
+  language?: string;
+};
 
 export const ALERTA_HORAS_AMARILLO = 48;
 export const ALERTA_HORAS_ROJO = 168;

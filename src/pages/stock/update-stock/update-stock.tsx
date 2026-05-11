@@ -7,6 +7,11 @@ import {
   OPERATIONAL_RAREZA_VALUES,
   operationalRarezaLabel,
 } from "../../../constants/item-rareza";
+import {
+  STOCK_TAG_LABEL,
+  STOCK_TAG_VALUES,
+  type StockTagId,
+} from "../../../constants/stock-tags";
 
 export default function ModificarStock() {
   const { id } = useParams();
@@ -35,6 +40,7 @@ export default function ModificarStock() {
     holofoil: false,
     league_card: false,
     rareza: "",
+    tags: [] as string[],
   });
 
   const loadedForIdRef = useRef<string | null>(null);
@@ -71,6 +77,7 @@ export default function ModificarStock() {
       rareza?: string | null;
       holofoil?: boolean;
       league_card?: boolean;
+      tags?: string[];
     };
     let rz =
       d.rareza != null && String(d.rareza).trim() !== ""
@@ -78,6 +85,8 @@ export default function ModificarStock() {
         : "";
     if (rz === "" && d.holofoil) rz = "holofoil";
     if (rz === "" && d.league_card) rz = "league card";
+    const rawTags = Array.isArray(d.tags) ? d.tags : [];
+    const tagsNorm = STOCK_TAG_VALUES.filter((t) => rawTags.includes(t));
     setForm({
       id,
       card_id: data.card_id || "",
@@ -92,6 +101,7 @@ export default function ModificarStock() {
       holofoil: rz === "holofoil",
       league_card: rz === "league card",
       rareza: rz,
+      tags: tagsNorm,
     });
   }, [data, id]);
 
@@ -148,6 +158,19 @@ export default function ModificarStock() {
     }
   };
 
+  const toggleTag = (tag: StockTagId) => {
+    setForm((prev) => {
+      const has = prev.tags?.includes(tag);
+      const next = has
+        ? (prev.tags ?? []).filter((t) => t !== tag)
+        : [...(prev.tags ?? []), tag];
+      return {
+        ...prev,
+        tags: STOCK_TAG_VALUES.filter((t) => next.includes(t)),
+      };
+    });
+  };
+
   const handleGuardar = () => {
     setGuardando(true);
     const rz =
@@ -159,6 +182,7 @@ export default function ModificarStock() {
       rareza: rz,
       holofoil: rz === "holofoil",
       league_card: rz === "league card",
+      tags: STOCK_TAG_VALUES.filter((t) => (form.tags ?? []).includes(t)),
     };
     mutation.mutate(payload);
   };
@@ -319,6 +343,26 @@ export default function ModificarStock() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <span className="block text-sm font-medium mb-2">Tags (filtro)</span>
+            <div className="flex flex-wrap gap-3">
+              {STOCK_TAG_VALUES.map((tag) => (
+                <label
+                  key={tag}
+                  className="inline-flex items-center gap-2 cursor-pointer text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={(form.tags ?? []).includes(tag)}
+                    onChange={() => toggleTag(tag)}
+                    className="rounded border-gray-300"
+                  />
+                  {STOCK_TAG_LABEL[tag]}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       </div>

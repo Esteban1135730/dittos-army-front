@@ -18,6 +18,8 @@ export type CreateStockRequestBody = {
   incoming_notes?: string;
   /** Variante operativa; omitir o vacío = sin variante */
   rareza?: string | null;
+  /** Tags de clasificación (catálogo cerrado en API) */
+  tags?: string[];
 };
 
 export type UpdateStockRequestBody = CreateStockRequestBody & {
@@ -42,5 +44,7 @@ export type StockListItem = {
   language?: string;
   holofoil?: boolean;
   rareza?: string | null;
+  tags?: string[];
+  incoming_notes?: string;
 };
 

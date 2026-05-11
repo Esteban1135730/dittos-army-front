@@ -28,12 +28,24 @@ export type PedidoLineInput = {
   rareza?: string | null;
 };
 
+/** Líneas en camino (sin precio en el mensaje). */
+export type PedidoIncomingLineInput = {
+  card_id: string;
+  card_name: string;
+  quantity: number;
+  rareza?: string | null;
+};
+
 export async function buildWhatsAppPedidoText(opts: {
   clientName: string;
   tiendaEntrega: string;
   lines: PedidoLineInput[];
+  incomingLines?: PedidoIncomingLineInput[];
 }): Promise<string> {
-  const uniqueIds = [...new Set(opts.lines.map((l) => l.card_id))];
+  const idsStock = opts.lines.map((l) => l.card_id);
+  const idsInc = (opts.incomingLines ?? []).map((l) => l.card_id);
+  const uniqueIds = [...new Set([...idsStock, ...idsInc].filter(Boolean))];
+
   const expansions = new Map<string, string | undefined>();
   await Promise.all(
     uniqueIds.map(async (id) => {
@@ -41,7 +53,7 @@ export async function buildWhatsAppPedidoText(opts: {
     }),
   );
 
-  const lineasTexto = opts.lines.map((l) => {
+  const lineasStock = opts.lines.map((l) => {
     const exp = expansions.get(l.card_id);
     const rare = l.rareza?.trim() ? ` — Rareza: ${l.rareza}` : "";
     const exps = exp ? ` — Expansión: ${exp}` : "";
@@ -50,7 +62,15 @@ export async function buildWhatsAppPedidoText(opts: {
 
   const total = opts.lines.reduce((s, l) => s + l.precio, 0);
 
-  return [
+  const lineasIncoming = (opts.incomingLines ?? []).map((l) => {
+    const exp = expansions.get(l.card_id);
+    const rare = l.rareza?.trim() ? ` — Rareza: ${l.rareza}` : "";
+    const exps = exp ? ` — Expansión: ${exp}` : "";
+    const qty = l.quantity > 1 ? ` ×${l.quantity}` : "";
+    return `• ${l.card_name}${qty}${rare}${exps}`;
+  });
+
+  const parts: string[] = [
     "¡Hola!",
     "",
     "Te envío el resumen de tu pedido:",
@@ -58,13 +78,19 @@ export async function buildWhatsAppPedidoText(opts: {
     `*Pedido — ${opts.clientName}*`,
     `Tienda de entrega: ${opts.tiendaEntrega}`,
     "",
-    "Cartas reservadas:",
-    ...lineasTexto,
-    "",
-    `*Total: ${formatCOP(total)}*`,
-    "",
-    "Cualquier duda me escribes. ¡Gracias!",
-  ].join("\n");
+  ];
+
+  if (opts.lines.length > 0) {
+    parts.push("Cartas reservadas:", ...lineasStock, "", `*Total: ${formatCOP(total)}*`, "");
+  }
+
+  if (opts.incomingLines && opts.incomingLines.length > 0) {
+    parts.push("Cartas en camino (a tu nombre, sin precio todavía):", ...lineasIncoming, "");
+  }
+
+  parts.push("Cualquier duda me escribes. ¡Gracias!");
+
+  return parts.join("\n");
 }
 
 /** Igual que en imprimir-pedidos: dígitos; Colombia 10 dígitos empezando en 3 → prefijo 57 */

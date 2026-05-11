@@ -7,10 +7,6 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   Paper,
   Snackbar,
@@ -28,6 +24,7 @@ import {
   ALERTA_HORAS_AMARILLO,
   ALERTA_HORAS_ROJO,
   type ClientItem,
+  type ReservaIncomingItem,
   type ReservaItem,
   type VentaClienteRow,
 } from "./cliente-types";
@@ -51,7 +48,6 @@ export default function ClienteDetallePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
-  const [stubCaminoOpen, setStubCaminoOpen] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [waBusy, setWaBusy] = useState(false);
   const [snackbar, setSnackbar] = useState<{
@@ -76,6 +72,15 @@ export default function ClienteDetallePage() {
     queryKey: ["reservas", clientId],
     queryFn: async () => {
       const res = await axios.get(`${API_RESERVA}/client/${clientId}`);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: !!clientId,
+  });
+
+  const { data: incomingCliente = [] } = useQuery<ReservaIncomingItem[]>({
+    queryKey: ["reservas-incoming", clientId],
+    queryFn: async () => {
+      const res = await axios.get(`${API_RESERVA}/incoming`, { params: { client_id: clientId } });
       return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!clientId,
@@ -131,7 +136,8 @@ export default function ClienteDetallePage() {
   }, [reservas]);
 
   const enviarWhatsApp = async () => {
-    if (!client || reservas.length === 0) return;
+    if (!client) return;
+    if (reservas.length === 0 && incomingCliente.length === 0) return;
     setWaBusy(true);
     try {
       const lines = reservas.map((r) => {
@@ -143,10 +149,17 @@ export default function ClienteDetallePage() {
           rareza: st?.rareza,
         };
       });
+      const incomingLines = incomingCliente.map((x) => ({
+        card_id: x.card_id ?? "",
+        card_name: x.card_name ?? "Carta",
+        quantity: x.quantity,
+        rareza: x.rareza,
+      }));
       const texto = await buildWhatsAppPedidoText({
         clientName: client.nombre,
         tiendaEntrega: client.tienda_entrega,
         lines,
+        incomingLines: incomingLines.length ? incomingLines : undefined,
       });
       abrirWhatsAppConTexto(client.celular, texto);
     } finally {
@@ -172,6 +185,7 @@ export default function ClienteDetallePage() {
       if (data.success) {
         show(`Venta finalizada: ${data.vendidas ?? 0} carta(s).`, "success");
         await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+        await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
         await queryClient.invalidateQueries({ queryKey: ["reservas"] });
         await queryClient.invalidateQueries({ queryKey: ["clientes"] });
         await queryClient.invalidateQueries({ queryKey: ["stock"] });
@@ -254,7 +268,7 @@ export default function ClienteDetallePage() {
           <Button
             variant="contained"
             color="success"
-            disabled={reservas.length === 0 || waBusy}
+            disabled={(reservas.length === 0 && incomingCliente.length === 0) || waBusy}
             onClick={enviarWhatsApp}
           >
             {waBusy ? "…" : "WhatsApp (resumen pedido)"}
@@ -294,8 +308,14 @@ export default function ClienteDetallePage() {
             >
               Editar reserva
             </Button>
-            <Button variant="outlined" size="small" color="warning" onClick={() => setStubCaminoOpen(true)}>
-              En camino (pronto)
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              component={Link}
+              to={`/clientes/${clientId}/reservar?camino=1`}
+            >
+              Cartas en camino
             </Button>
             <Button
               variant="contained"
@@ -386,20 +406,6 @@ export default function ClienteDetallePage() {
         client={client}
         onClose={() => setFormOpen(false)}
       />
-
-      <Dialog open={stubCaminoOpen} onClose={() => setStubCaminoOpen(false)}>
-        <DialogTitle>Reservar cartas en camino</DialogTitle>
-        <DialogContent>
-          <Typography color="text.secondary">
-            Pronto podrás reservar cartas de compras en camino. Función en preparación.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button variant="contained" onClick={() => setStubCaminoOpen(false)}>
-            Entendido
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Snackbar
         open={snackbar.open}

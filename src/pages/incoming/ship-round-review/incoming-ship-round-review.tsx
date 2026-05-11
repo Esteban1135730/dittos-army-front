@@ -1,6 +1,13 @@
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import {
+  compareIncomingLinesByOldest,
+  distributeFifo,
+  incomingVariantGroupKey,
+  weightedAverageUnitCostCop,
+} from "../../incoming/incoming-variant-group";
 
 type IncomingShipRoundReviewItem = {
   batch_item_id: string;
@@ -15,6 +22,8 @@ type IncomingShipRoundReviewItem = {
   arrived_quantity: number;
   novedad_quantity: number;
   novedad_notes: string;
+  batch_purchase_date?: string | null;
+  item_created_at?: string | null;
 };
 
 type IncomingShipRoundReviewResponse = {
@@ -25,11 +34,48 @@ type IncomingShipRoundReviewResponse = {
   items: IncomingShipRoundReviewItem[];
 };
 
+/** Una fila de UI por variante (carta + rareza + idioma); costo unitario = promedio ponderado por unidades en camino. */
+type GroupedShipRoundRow = {
+  id: string;
+  lines: IncomingShipRoundReviewItem[];
+  ref: IncomingShipRoundReviewItem;
+  remaining_total: number;
+  quantity_ordered_total: number;
+  unit_cost_cop_ref: number;
+};
+
+function groupNotesDisplay(
+  lines: IncomingShipRoundReviewItem[],
+  notesByItem: Record<string, string>,
+): string {
+  const sorted = [...lines].sort(compareIncomingLinesByOldest);
+  for (const l of sorted) {
+    const raw = notesByItem[l.batch_item_id] ?? "";
+    if (raw.trim()) return raw;
+  }
+  return "";
+}
+
 const API_INCOMING = "http://localhost:3000/incoming";
 
-function parseIntOrZero(v: string): number {
+/** Enteros >= 0 (permite 0 explícito). */
+function parseNonNegativeInt(v: string): number {
   const n = parseInt(v, 10);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
+
+function axiosErrorMessage(e: unknown, fallback: string): string {
+  const err = e as {
+    response?: { data?: { message?: string; error?: string } };
+    message?: string;
+  };
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    fallback
+  );
 }
 
 export default function IncomingShipRoundReviewPage() {
@@ -44,9 +90,31 @@ export default function IncomingShipRoundReviewPage() {
   const [novedadByItem, setNovedadByItem] = useState<Record<string, number>>({});
   const [notesByItem, setNotesByItem] = useState<Record<string, string>>({});
 
+  const [busqueda, setBusqueda] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+
+  const reloadRound = useCallback(async (): Promise<IncomingShipRoundReviewResponse | null> => {
+    if (!roundId) return null;
+    const res = await axios.get(`${API_INCOMING}/ship-round/${roundId}`);
+    const payload = res.data as IncomingShipRoundReviewResponse;
+    setData(payload);
+
+    const nextArrived: Record<string, number> = {};
+    const nextNovedad: Record<string, number> = {};
+    const nextNotes: Record<string, string> = {};
+    payload.items.forEach((it) => {
+      nextArrived[it.batch_item_id] = it.arrived_quantity ?? 0;
+      nextNovedad[it.batch_item_id] = it.novedad_quantity ?? 0;
+      nextNotes[it.batch_item_id] = it.novedad_notes ?? "";
+    });
+    setArrivedByItem(nextArrived);
+    setNovedadByItem(nextNovedad);
+    setNotesByItem(nextNotes);
+    return payload;
+  }, [roundId]);
 
   useEffect(() => {
     const load = async () => {
@@ -54,35 +122,17 @@ export default function IncomingShipRoundReviewPage() {
       setLoading(true);
       setError("");
       try {
-        const res = await axios.get(
-          `${API_INCOMING}/ship-round/${roundId}`,
-        );
-        const payload = res.data as IncomingShipRoundReviewResponse;
-        setData(payload);
-
-        const nextArrived: Record<string, number> = {};
-        const nextNovedad: Record<string, number> = {};
-        const nextNotes: Record<string, string> = {};
-        payload.items.forEach((it) => {
-          nextArrived[it.batch_item_id] = it.arrived_quantity ?? 0;
-          nextNovedad[it.batch_item_id] = it.novedad_quantity ?? 0;
-          nextNotes[it.batch_item_id] = it.novedad_notes ?? "";
-        });
-        setArrivedByItem(nextArrived);
-        setNovedadByItem(nextNovedad);
-        setNotesByItem(nextNotes);
-      } catch (e: any) {
+        await reloadRound();
+      } catch (e: unknown) {
         setError(
-          e?.response?.data?.message ||
-            e?.response?.data?.error ||
-            "Error cargando la tanda global.",
+          axiosErrorMessage(e, "Error cargando la tanda global."),
         );
       } finally {
         setLoading(false);
       }
     };
-    load();
-  }, [roundId]);
+    void load();
+  }, [roundId, reloadRound]);
 
   const arrivedTotalForPreview = useMemo(() => {
     if (!data) return 0;
@@ -100,7 +150,118 @@ export default function IncomingShipRoundReviewPage() {
 
   const roundIsFinalized = data?.round_status === "finalized";
 
-  const buildDecisionsPayload = (): any[] => {
+  const groupedShipRoundRows = useMemo((): GroupedShipRoundRow[] => {
+    if (!data?.items?.length) return [];
+    const map = new Map<string, IncomingShipRoundReviewItem[]>();
+    for (const it of data.items) {
+      const k = incomingVariantGroupKey(it.card_id, it.rareza, it.language);
+      const arr = map.get(k) ?? [];
+      arr.push(it);
+      map.set(k, arr);
+    }
+    const out: GroupedShipRoundRow[] = [];
+    for (const [id, lines] of map) {
+      const sorted = [...lines].sort(compareIncomingLinesByOldest);
+      const ref = sorted[0];
+      out.push({
+        id,
+        lines: sorted,
+        ref,
+        remaining_total: sorted.reduce((s, x) => s + x.remaining_quantity, 0),
+        quantity_ordered_total: sorted.reduce((s, x) => s + x.quantity_ordered, 0),
+        unit_cost_cop_ref: weightedAverageUnitCostCop(sorted),
+      });
+    }
+    return out;
+  }, [data]);
+
+  const groupedFiltrados = useMemo(() => {
+    const t = busqueda.trim().toLowerCase();
+    if (!t) return groupedShipRoundRows;
+    return groupedShipRoundRows.filter((g) =>
+      g.lines.some((it) => {
+        const name = (it.card_name ?? "").toLowerCase();
+        const cid = (it.card_id ?? "").toLowerCase();
+        const lang = (it.language ?? "").toLowerCase();
+        const rz = (it.rareza ?? "").toString().toLowerCase();
+        return (
+          name.includes(t) ||
+          cid.includes(t) ||
+          lang.includes(t) ||
+          rz.includes(t)
+        );
+      }),
+    );
+  }, [groupedShipRoundRows, busqueda]);
+
+  const sumArrivedGroup = useCallback(
+    (lines: IncomingShipRoundReviewItem[]) =>
+      lines.reduce((s, l) => s + (arrivedByItem[l.batch_item_id] ?? 0), 0),
+    [arrivedByItem],
+  );
+
+  const sumNovedadGroup = useCallback(
+    (lines: IncomingShipRoundReviewItem[]) =>
+      lines.reduce((s, l) => s + (novedadByItem[l.batch_item_id] ?? 0), 0),
+    [novedadByItem],
+  );
+
+  const applyGroupArrived = useCallback(
+    (lines: IncomingShipRoundReviewItem[], total: number) => {
+      const sorted = [...lines].sort(compareIncomingLinesByOldest);
+      const caps = sorted.map((l) => l.remaining_quantity);
+      const parts = distributeFifo(caps, total);
+      setArrivedByItem((prev) => {
+        const next = { ...prev };
+        sorted.forEach((l, i) => {
+          next[l.batch_item_id] = parts[i];
+        });
+        return next;
+      });
+      setNovedadByItem((prev) => {
+        const next = { ...prev };
+        sorted.forEach((l, i) => {
+          const nv = prev[l.batch_item_id] ?? 0;
+          next[l.batch_item_id] = Math.min(nv, parts[i]);
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const applyGroupNovedad = useCallback(
+    (lines: IncomingShipRoundReviewItem[], totalNovedad: number) => {
+      const sorted = [...lines].sort(compareIncomingLinesByOldest);
+      setNovedadByItem((prev) => {
+        const arrivedCaps = sorted.map((l) => arrivedByItem[l.batch_item_id] ?? 0);
+        const parts = distributeFifo(arrivedCaps, totalNovedad);
+        const next = { ...prev };
+        sorted.forEach((l, i) => {
+          next[l.batch_item_id] = parts[i];
+        });
+        return next;
+      });
+    },
+    [arrivedByItem],
+  );
+
+  const applyGroupNotes = useCallback((lines: IncomingShipRoundReviewItem[], note: string) => {
+    setNotesByItem((prev) => {
+      const next = { ...prev };
+      for (const l of lines) {
+        next[l.batch_item_id] = note;
+      }
+      return next;
+    });
+  }, []);
+
+  const buildDecisionsPayload = (): Array<{
+    batch_item_id: string;
+    arrived_quantity: number;
+    novedad_quantity: number;
+    novedad_notes: string;
+  }> => {
     if (!data) return [];
     return data.items.map((it) => ({
       batch_item_id: it.batch_item_id,
@@ -108,6 +269,15 @@ export default function IncomingShipRoundReviewPage() {
       novedad_quantity: novedadByItem[it.batch_item_id] ?? 0,
       novedad_notes: notesByItem[it.batch_item_id] ?? "",
     }));
+  };
+
+  const persistReview = async (): Promise<boolean> => {
+    if (!roundId || !data) return false;
+    await axios.put(`${API_INCOMING}/ship-round/${roundId}/review`, {
+      decisions: buildDecisionsPayload(),
+    });
+    await reloadRound();
+    return true;
   };
 
   const handleSave = async () => {
@@ -120,17 +290,10 @@ export default function IncomingShipRoundReviewPage() {
 
     try {
       setSaving(true);
-      await axios.put(
-        `${API_INCOMING}/ship-round/${roundId}/review`,
-        { decisions: buildDecisionsPayload() },
-      );
+      await persistReview();
       setMensaje("✅ Revisión guardada.");
-    } catch (e: any) {
-      setMensaje(
-        e?.response?.data?.message ||
-          e?.response?.data?.error ||
-          "No se pudo guardar la revisión.",
-      );
+    } catch (e: unknown) {
+      setMensaje(axiosErrorMessage(e, "No se pudo guardar la revisión."));
     } finally {
       setSaving(false);
     }
@@ -139,8 +302,18 @@ export default function IncomingShipRoundReviewPage() {
   const handleFinalize = async () => {
     if (!roundId || !data) return;
     setMensaje("");
+    if (arrivedTotalForPreview <= 0) {
+      setMensaje("Debes marcar al menos 1 carta como arribada.");
+      return;
+    }
+
     try {
       setFinalizando(true);
+      await axios.put(`${API_INCOMING}/ship-round/${roundId}/review`, {
+        decisions: buildDecisionsPayload(),
+      });
+      await reloadRound();
+
       const res = await axios.post(
         `${API_INCOMING}/ship-round/${roundId}/finalize`,
       );
@@ -150,23 +323,177 @@ export default function IncomingShipRoundReviewPage() {
       } else {
         setMensaje("No se pudo finalizar.");
       }
-    } catch (e: any) {
-      setMensaje(
-        e?.response?.data?.message ||
-          e?.response?.data?.error ||
-          "Error al finalizar.",
-      );
+    } catch (e: unknown) {
+      setMensaje(axiosErrorMessage(e, "Error al finalizar."));
     } finally {
       setFinalizando(false);
     }
   };
+
+  const columns: GridColDef<GroupedShipRoundRow>[] = useMemo(
+    () => [
+      {
+        field: "image_url",
+        headerName: "",
+        width: 76,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <img
+            src={p.row.ref.image_url}
+            alt=""
+            className="w-11 h-14 object-contain border rounded bg-gray-50"
+          />
+        ),
+      },
+      {
+        field: "card_name",
+        headerName: "Carta",
+        flex: 1,
+        minWidth: 160,
+        renderCell: (p) => (
+          <div className="py-1 min-w-0">
+            <div className="font-medium text-gray-900 truncate">{p.row.ref.card_name}</div>
+            <div className="text-xs text-gray-500 truncate">{p.row.ref.card_id}</div>
+            {p.row.lines.length > 1 ? (
+              <div className="text-[11px] text-gray-400 mt-0.5">
+                {p.row.lines.length} líneas de lote · pedido total {p.row.quantity_ordered_total}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        field: "language",
+        headerName: "Idioma",
+        width: 96,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <span className="text-sm text-gray-700">
+            {p.row.ref.language?.trim() || "—"}
+          </span>
+        ),
+      },
+      {
+        field: "rareza",
+        headerName: "Rareza",
+        width: 104,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <span className="text-sm text-gray-600">{p.row.ref.rareza?.trim() || "—"}</span>
+        ),
+      },
+      {
+        field: "remaining_total",
+        headerName: "En camino",
+        width: 100,
+        type: "number",
+        align: "right",
+        headerAlign: "right",
+      },
+      {
+        field: "unit_cost_cop_ref",
+        headerName: "Costo COP (prom.)",
+        width: 130,
+        align: "right",
+        headerAlign: "right",
+        valueFormatter: (v) =>
+          typeof v === "number" ? Math.round(v).toLocaleString("es-CO") : "",
+      },
+      {
+        field: "arrived_quantity",
+        headerName: "Arribadas",
+        width: 120,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => {
+          const g = p.row;
+          const max = g.remaining_total;
+          const val = sumArrivedGroup(g.lines);
+          return (
+            <input
+              type="number"
+              min={0}
+              step={1}
+              disabled={roundIsFinalized}
+              value={val}
+              onChange={(e) => {
+                const next = Math.min(max, parseNonNegativeInt(e.target.value));
+                applyGroupArrived(g.lines, next);
+              }}
+              className="w-full max-w-[104px] px-2 py-1 border rounded-md text-sm"
+              title={`Máximo ${max} (todas las líneas de la variante)`}
+            />
+          );
+        },
+      },
+      {
+        field: "novedad_quantity",
+        headerName: "Novedad",
+        width: 110,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => {
+          const g = p.row;
+          const cap = sumArrivedGroup(g.lines);
+          const val = sumNovedadGroup(g.lines);
+          return (
+            <input
+              type="number"
+              min={0}
+              step={1}
+              disabled={roundIsFinalized}
+              value={val}
+              onChange={(e) => {
+                const next = Math.min(cap, parseNonNegativeInt(e.target.value));
+                applyGroupNovedad(g.lines, next);
+              }}
+              className="w-full max-w-[96px] px-2 py-1 border rounded-md text-sm"
+            />
+          );
+        },
+      },
+      {
+        field: "novedad_notes",
+        headerName: "Notas novedad",
+        flex: 1,
+        minWidth: 180,
+        sortable: false,
+        renderCell: (p) => {
+          const g = p.row;
+          return (
+            <textarea
+              rows={2}
+              disabled={roundIsFinalized}
+              value={groupNotesDisplay(g.lines, notesByItem)}
+              onChange={(e) => applyGroupNotes(g.lines, e.target.value)}
+              className="w-full min-w-[160px] px-2 py-1 border rounded-md text-xs resize-y"
+              placeholder="Ej: idioma / condición..."
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+      },
+    ],
+    [
+      sumArrivedGroup,
+      sumNovedadGroup,
+      applyGroupArrived,
+      applyGroupNovedad,
+      applyGroupNotes,
+      notesByItem,
+      roundIsFinalized,
+    ],
+  );
 
   if (loading) return <p className="text-center text-gray-600">Cargando...</p>;
   if (error) return <p className="text-center text-red-600">{error}</p>;
   if (!data) return <p className="text-center text-red-600">Sin datos</p>;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-[1400px] mx-auto px-2">
       <div className="flex items-center justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">
@@ -176,25 +503,29 @@ export default function IncomingShipRoundReviewPage() {
             Envío total COP:{" "}
             {Math.round(data.shipping_total_cop).toLocaleString("es-CO")}
           </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Al finalizar se guardan primero las cantidades en el servidor y luego se
+            crean las líneas de stock.
+          </p>
         </div>
         <button
           type="button"
           onClick={() => navigate("/incoming")}
-          className="text-blue-600 hover:underline font-medium"
+          className="text-blue-600 hover:underline font-medium shrink-0"
         >
           ← Volver
         </button>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-[220px]">
+        <div className="flex flex-wrap items-start gap-6">
+          <div className="min-w-[180px]">
             <p className="text-sm font-semibold text-gray-800">
-              Arribadas (preview)
+              Arribadas (vista previa)
             </p>
             <p className="text-lg font-bold text-gray-900">{arrivedTotalForPreview}</p>
           </div>
-          <div className="min-w-[220px]">
+          <div className="min-w-[180px]">
             <p className="text-sm font-semibold text-gray-800">
               Envío por carta (COP)
             </p>
@@ -207,156 +538,94 @@ export default function IncomingShipRoundReviewPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 text-sm font-semibold text-gray-700">
-          Todas las cartas en camino (tanda global)
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Buscar (nombre, ID carta, idioma, rareza)
+          </label>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md text-sm"
+            placeholder="Filtrar filas de la tabla..."
+          />
+          {busqueda.trim() !== "" && (
+            <p className="text-xs text-gray-600 mt-2">
+              Mostrando {groupedFiltrados.length} de {groupedShipRoundRows.length} variantes (
+              {data.items.length} líneas de lote)
+            </p>
+          )}
         </div>
 
-        <div className="p-4">
+        <div className="p-2">
           {data.items.length === 0 ? (
-            <p className="text-gray-600">No hay cartas en camino para revisar.</p>
+            <p className="text-gray-600 p-4">
+              No hay cartas en camino para revisar.
+            </p>
           ) : (
-            <div className="space-y-3">
-              {data.items.map((it) => {
-                const arrived_quantity = arrivedByItem[it.batch_item_id] ?? 0;
-                const novedad_quantity = novedadByItem[it.batch_item_id] ?? 0;
-                return (
-                  <div key={it.batch_item_id} className="border rounded-lg p-3">
-                    <div className="flex items-start gap-4">
-                      <img
-                        src={it.image_url}
-                        alt={it.card_name}
-                        className="w-14 h-20 object-contain border rounded bg-gray-50"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 truncate">
-                          {it.card_name}
-                        </div>
-                        <div className="text-xs text-gray-500 break-all">
-                          {it.card_id} · Idioma: {it.language}
-                          {it.rareza ? ` · Rareza: ${it.rareza}` : ""}
-                        </div>
-                        <div className="text-xs text-gray-700 mt-1">
-                          COP sin envío (real):{" "}
-                          {Math.round(it.unit_cost_cop).toLocaleString("es-CO")}
-                        </div>
-                      </div>
-
-                      <div className="min-w-[320px] space-y-2">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Arribadas (&lt;= {it.remaining_quantity})
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            disabled={roundIsFinalized}
-                            value={arrived_quantity}
-                            onChange={(e) => {
-                              const next = parseIntOrZero(e.target.value);
-                              setArrivedByItem((prev) => ({
-                                ...prev,
-                                [it.batch_item_id]: next,
-                              }));
-                              setNovedadByItem((prev) => {
-                                const currentNovedad =
-                                  prev[it.batch_item_id] ?? 0;
-                                if (currentNovedad > next) {
-                                  return { ...prev, [it.batch_item_id]: next };
-                                }
-                                return prev;
-                              });
-                            }}
-                            className="w-full px-2 py-1 border rounded-md"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Novedad (&lt;= arribadas)
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            disabled={roundIsFinalized}
-                            value={novedad_quantity}
-                            onChange={(e) => {
-                              const next = parseIntOrZero(e.target.value);
-                              setNovedadByItem((prev) => ({
-                                ...prev,
-                                [it.batch_item_id]: next,
-                              }));
-                            }}
-                            className="w-full px-2 py-1 border rounded-md"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Notas novedad
-                          </label>
-                          <textarea
-                            rows={2}
-                            disabled={roundIsFinalized}
-                            value={notesByItem[it.batch_item_id] ?? ""}
-                            onChange={(e) =>
-                              setNotesByItem((prev) => ({
-                                ...prev,
-                                [it.batch_item_id]: e.target.value,
-                              }))
-                            }
-                            className="w-full px-2 py-1 border rounded-md text-sm"
-                            placeholder="Ej: idioma no coincide / condición diferente..."
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {mensaje && (
-            <p
-              className="text-sm mt-3"
-              style={{
-                color: mensaje.includes("✅") ? "#0f766e" : "#b91c1c",
+            <DataGrid
+              rows={groupedFiltrados}
+              columns={columns}
+              getRowId={(row) => row.id}
+              pageSizeOptions={[20, 30, 50]}
+              initialState={{
+                pagination: {
+                  paginationModel: { pageSize: 20, page: 0 },
+                },
               }}
-            >
-              {mensaje}
-            </p>
-          )}
-
-          <div className="flex items-center justify-end gap-3 mt-4">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || roundIsFinalized}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Guardando..." : "Guardar revisión"}
-            </button>
-            <button
-              type="button"
-              onClick={handleFinalize}
-              disabled={finalizando || roundIsFinalized || arrivedTotalForPreview <= 0}
-              className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {finalizando ? "Finalizando..." : "Finalizar"}
-            </button>
-          </div>
-
-          {roundIsFinalized && (
-            <p className="text-xs text-gray-500 mt-3">
-              Esta tanda ya fue finalizada.
-            </p>
+              pagination
+              disableRowSelectionOnClick
+              autoHeight
+              sx={{
+                border: "none",
+                "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 },
+              }}
+            />
           )}
         </div>
+
+        {mensaje && (
+          <p
+            className="text-sm px-4 pb-4"
+            style={{
+              color: mensaje.includes("✅") || mensaje.includes("🎉") ? "#0f766e" : "#b91c1c",
+            }}
+          >
+            {mensaje}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-3 px-4 pb-4">
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || finalizando || roundIsFinalized}
+            className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Guardando..." : "Guardar revisión"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleFinalize()}
+            disabled={
+              finalizando ||
+              saving ||
+              roundIsFinalized ||
+              arrivedTotalForPreview <= 0
+            }
+            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {finalizando ? "Finalizando..." : "Finalizar tanda"}
+          </button>
+        </div>
+
+        {roundIsFinalized && (
+          <p className="text-xs text-gray-500 px-4 pb-4">
+            Esta tanda ya fue finalizada.
+          </p>
+        )}
       </div>
     </div>
   );
 }
-

@@ -22,7 +22,18 @@ type LoteLine = {
   image_url: string;
   language: string;
   operationalRareza: string;
+  /** Ejemplares idénticos (≥ 1). */
+  quantity: number;
 };
+
+/** Vacío o inválido → defaultVal; máximo razonable para no disparar payloads enormes. */
+function parsePositiveInt(raw: string, defaultVal: number): number {
+  const t = String(raw).trim();
+  if (t === "") return defaultVal;
+  const n = parseInt(t, 10);
+  if (!Number.isFinite(n) || n < 1) return defaultVal;
+  return Math.min(n, 9999);
+}
 
 function allocatePreview(assignableCop: number, n: number): number[] {
   if (n <= 0) return [];
@@ -52,6 +63,7 @@ export default function AperturaSelladoPage() {
   );
   const [pickLang, setPickLang] = useState("");
   const [pickRareza, setPickRareza] = useState("");
+  const [pickQty, setPickQty] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
   const nonStockFraction = nonStockPercent / 100;
@@ -60,10 +72,30 @@ export default function AperturaSelladoPage() {
     return Math.round(pc * (1 - nonStockFraction));
   }, [productCost, nonStockFraction]);
 
-  const previewCosts = useMemo(
-    () => allocatePreview(assignablePreview, lote.length),
-    [assignablePreview, lote.length],
+  const totalCartasFisicas = useMemo(
+    () =>
+      lote.reduce(
+        (sum, line) =>
+          sum + Math.max(1, Math.floor(line.quantity) || 1),
+        0,
+      ),
+    [lote],
   );
+
+  const previewCosts = useMemo(
+    () => allocatePreview(assignablePreview, totalCartasFisicas),
+    [assignablePreview, totalCartasFisicas],
+  );
+
+  const previewCostsPorLinea = useMemo(() => {
+    let offset = 0;
+    return lote.map((line) => {
+      const qty = Math.max(1, Math.floor(line.quantity) || 1);
+      const slice = previewCosts.slice(offset, offset + qty);
+      offset += qty;
+      return slice;
+    });
+  }, [lote, previewCosts]);
 
   const buscarCartaPorNombre = async () => {
     if (!nombreCarta.trim()) return;
@@ -92,11 +124,13 @@ export default function AperturaSelladoPage() {
     setPickCarta(carta);
     setPickLang("");
     setPickRareza("");
+    setPickQty("");
     setModalOpen(true);
   };
 
   const agregarAlLote = () => {
     if (!pickCarta || !pickLang) return;
+    const quantity = parsePositiveInt(pickQty, 1);
     const key = `${pickCarta.id}-${crypto.randomUUID()}`;
     setLote((prev) => [
       ...prev,
@@ -107,6 +141,7 @@ export default function AperturaSelladoPage() {
         image_url: pickCarta.image ?? "",
         language: pickLang,
         operationalRareza: pickRareza,
+        quantity,
       },
     ]);
     setModalOpen(false);
@@ -126,20 +161,24 @@ export default function AperturaSelladoPage() {
         product_cost_cop: pc,
         non_stock_fraction: nonStockFraction,
         source_label: sourceLabel.trim() || undefined,
-        lines: lote.map((line) => {
+        lines: lote.flatMap((line) => {
+          const qty = Math.max(1, Math.floor(line.quantity) || 1);
           const rz = line.operationalRareza.trim();
-          const base: Record<string, unknown> = {
-            card_id: line.card_id,
-            card_name: line.card_name,
-            language: line.language,
-            image_url: line.image_url,
+          const build = (): Record<string, unknown> => {
+            const base: Record<string, unknown> = {
+              card_id: line.card_id,
+              card_name: line.card_name,
+              language: line.language,
+              image_url: line.image_url,
+            };
+            if (rz !== "") {
+              base.rareza = rz;
+              base.holofoil = rz === "holofoil";
+              base.league_card = rz === "league card";
+            }
+            return base;
           };
-          if (rz !== "") {
-            base.rareza = rz;
-            base.holofoil = rz === "holofoil";
-            base.league_card = rz === "league card";
-          }
-          return base;
+          return Array.from({ length: qty }, () => build());
         }),
       };
       try {
@@ -227,7 +266,7 @@ export default function AperturaSelladoPage() {
           <p className="font-medium text-blue-900">
             Total asignable al stock:{" "}
             <strong>{assignablePreview.toLocaleString("es-CO")} COP</strong> ·{" "}
-            {lote.length} cartas · costo por carta (orden):{" "}
+            {totalCartasFisicas} cartas · costo por carta (orden):{" "}
             {previewCosts.join(", ")}{" "}
             COP
           </p>
@@ -280,7 +319,7 @@ export default function AperturaSelladoPage() {
       )}
 
       <h2 className="text-lg font-semibold text-gray-800 mb-3">
-        Lote ({lote.length})
+        Lote ({lote.length} ítems · {totalCartasFisicas} cartas)
       </h2>
       {lote.length === 0 ? (
         <p className="text-gray-500 text-sm mb-4">
@@ -304,7 +343,15 @@ export default function AperturaSelladoPage() {
                 <div className="w-10 h-14 bg-gray-100 rounded shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{line.card_name}</div>
+                <div className="font-medium truncate">
+                  {line.card_name}
+                  {line.quantity > 1 ? (
+                    <span className="text-gray-600 font-normal">
+                      {" "}
+                      ×{line.quantity}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="text-gray-600">
                   {line.language}
                   {line.operationalRareza
@@ -312,9 +359,9 @@ export default function AperturaSelladoPage() {
                     : ""}
                 </div>
               </div>
-              <div className="text-right tabular-nums text-gray-700">
-                {previewCosts[idx] != null
-                  ? `${previewCosts[idx]} COP`
+              <div className="text-right tabular-nums text-gray-700 max-w-[min(100%,14rem)]">
+                {previewCostsPorLinea[idx]?.length
+                  ? previewCostsPorLinea[idx].join(", ") + " COP"
                   : "—"}
               </div>
               <button
@@ -401,7 +448,7 @@ export default function AperturaSelladoPage() {
             <select
               value={pickRareza}
               onChange={(e) => setPickRareza(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg mb-6"
+              className="w-full px-3 py-2 border rounded-lg mb-4"
             >
               <option value="">Sin variante</option>
               {OPERATIONAL_RAREZA_VALUES.map((v) => (
@@ -410,6 +457,22 @@ export default function AperturaSelladoPage() {
                 </option>
               ))}
             </select>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Cantidad
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={pickQty}
+              onChange={(e) => setPickQty(e.target.value)}
+              placeholder="1"
+              className="w-full px-3 py-2 border rounded-lg mb-6"
+            />
+            <p className="text-xs text-gray-500 mb-4 -mt-2">
+              Cantidad de ejemplares iguales (idioma y variante). Vacío = 1.
+            </p>
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
