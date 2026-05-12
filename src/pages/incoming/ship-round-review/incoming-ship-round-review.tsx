@@ -299,6 +299,21 @@ export default function IncomingShipRoundReviewPage() {
     }
   };
 
+  /** Persiste en servidor las cantidades/notas actuales aunque no haya arribadas (p. ej. antes de salir de la pantalla). */
+  const handleSaveCurrentState = async () => {
+    if (!roundId || !data) return;
+    setMensaje("");
+    try {
+      setSaving(true);
+      await persistReview();
+      setMensaje("✅ Estado actual guardado.");
+    } catch (e: unknown) {
+      setMensaje(axiosErrorMessage(e, "No se pudo guardar el estado actual."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleFinalize = async () => {
     if (!roundId || !data) return;
     setMensaje("");
@@ -504,8 +519,9 @@ export default function IncomingShipRoundReviewPage() {
             {Math.round(data.shipping_total_cop).toLocaleString("es-CO")}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Al finalizar se guardan primero las cantidades en el servidor y luego se
-            crean las líneas de stock.
+            Usa &quot;Guardar estado actual&quot; para volcar en el servidor lo que llevas
+            registrado (incluso sin arribadas) antes de salir. Al finalizar se guardan
+            primero las cantidades y luego se crean las líneas de stock.
           </p>
         </div>
         <button
@@ -597,6 +613,14 @@ export default function IncomingShipRoundReviewPage() {
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-3 px-4 pb-4">
+          <button
+            type="button"
+            onClick={() => void handleSaveCurrentState()}
+            disabled={saving || finalizando || roundIsFinalized}
+            className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Guardando..." : "Guardar estado actual"}
+          </button>
           <button
             type="button"
             onClick={() => void handleSave()}
