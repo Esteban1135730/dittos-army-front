@@ -30,11 +30,15 @@ import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
+import { aggregateReservasTotales } from "./clientes-resumen-pedidos";
+import { formatCOP } from "../../utils/convert";
+import { useExchangeRates } from "../../utils/tasa";
 
 export type { ClientItem } from "./cliente-types";
 
 export default function ClientesPage() {
   const navigate = useNavigate();
+  const { convert } = useExchangeRates();
   const [nuevoOpen, setNuevoOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -104,6 +108,11 @@ export default function ClientesPage() {
     });
     return m;
   }, [incomingAll]);
+
+  const resumenPedidos = useMemo(
+    () => aggregateReservasTotales(reservas, stockMap, convert),
+    [reservas, stockMap, convert],
+  );
 
   const statsPorCliente = useMemo(() => {
     const byClient: Record<string, { count: number; oldestMs: number }> = {};
@@ -324,6 +333,46 @@ export default function ClientesPage() {
       <Typography variant="body2" color="text.secondary">
         Pulsa una fila para abrir el <strong>detalle</strong> (pedido, historial, notas, finalizar venta).
       </Typography>
+
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        sx={{
+          px: 2,
+          py: 1.25,
+          borderRadius: 2,
+          border: 1,
+          borderColor: "divider",
+          bgcolor: "grey.50",
+        }}
+      >
+        <Box>
+          <Typography variant="caption" color="text.secondary" display="block">
+            Ventas esperadas
+          </Typography>
+          <Typography variant="body2" fontWeight={600}>
+            {formatCOP(Math.round(resumenPedidos.ventasEsperadasCop))}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.secondary" display="block">
+            Ganancia estimada
+          </Typography>
+          <Typography
+            variant="body2"
+            fontWeight={600}
+            color={
+              resumenPedidos.gananciaEstimadaCop > 0
+                ? "success.main"
+                : resumenPedidos.gananciaEstimadaCop < 0
+                  ? "error.main"
+                  : "text.primary"
+            }
+          >
+            {formatCOP(Math.round(resumenPedidos.gananciaEstimadaCop))}
+          </Typography>
+        </Box>
+      </Stack>
 
       <Stack
         sx={{

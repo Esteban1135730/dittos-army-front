@@ -95,6 +95,9 @@ export default function IncomingShipRoundReviewPage() {
   const [saving, setSaving] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  /** Ediciones locales respecto al último GET /review (arribadas, novedad, notas). */
+  const [formDirty, setFormDirty] = useState(false);
+  const [syncingMissing, setSyncingMissing] = useState(false);
 
   const reloadRound = useCallback(async (): Promise<IncomingShipRoundReviewResponse | null> => {
     if (!roundId) return null;
@@ -113,6 +116,7 @@ export default function IncomingShipRoundReviewPage() {
     setArrivedByItem(nextArrived);
     setNovedadByItem(nextNovedad);
     setNotesByItem(nextNotes);
+    setFormDirty(false);
     return payload;
   }, [roundId]);
 
@@ -208,6 +212,7 @@ export default function IncomingShipRoundReviewPage() {
 
   const applyGroupArrived = useCallback(
     (lines: IncomingShipRoundReviewItem[], total: number) => {
+      setFormDirty(true);
       const sorted = [...lines].sort(compareIncomingLinesByOldest);
       const caps = sorted.map((l) => l.remaining_quantity);
       const parts = distributeFifo(caps, total);
@@ -232,6 +237,7 @@ export default function IncomingShipRoundReviewPage() {
 
   const applyGroupNovedad = useCallback(
     (lines: IncomingShipRoundReviewItem[], totalNovedad: number) => {
+      setFormDirty(true);
       const sorted = [...lines].sort(compareIncomingLinesByOldest);
       setNovedadByItem((prev) => {
         const arrivedCaps = sorted.map((l) => arrivedByItem[l.batch_item_id] ?? 0);
@@ -247,6 +253,7 @@ export default function IncomingShipRoundReviewPage() {
   );
 
   const applyGroupNotes = useCallback((lines: IncomingShipRoundReviewItem[], note: string) => {
+    setFormDirty(true);
     setNotesByItem((prev) => {
       const next = { ...prev };
       for (const l of lines) {
@@ -313,6 +320,34 @@ export default function IncomingShipRoundReviewPage() {
       setSaving(false);
     }
   };
+
+  const handleSyncMissingItems = useCallback(async () => {
+    if (!roundId || !data) return;
+    if (formDirty) {
+      const ok = window.confirm(
+        "Tienes cambios sin guardar en esta pantalla. Si continúas se descartarán al recargar la tanda. ¿Deseas incorporar líneas nuevas en camino de todas formas?",
+      );
+      if (!ok) return;
+    }
+    setMensaje("");
+    try {
+      setSyncingMissing(true);
+      const res = await axios.post(
+        `${API_INCOMING}/ship-round/${roundId}/sync-missing-items`,
+      );
+      const added = Number(res.data?.added ?? 0);
+      await reloadRound();
+      setMensaje(
+        added > 0
+          ? `✅ Se incorporaron ${added} línea(s) nueva(s) en camino.`
+          : "✅ No había líneas nuevas en camino por incorporar.",
+      );
+    } catch (e: unknown) {
+      setMensaje(axiosErrorMessage(e, "No se pudieron incorporar líneas nuevas."));
+    } finally {
+      setSyncingMissing(false);
+    }
+  }, [roundId, data, formDirty, reloadRound]);
 
   const handleFinalize = async () => {
     if (!roundId || !data) return;
@@ -555,23 +590,36 @@ export default function IncomingShipRoundReviewPage() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Buscar (nombre, ID carta, idioma, rareza)
-          </label>
-          <input
-            type="search"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md text-sm"
-            placeholder="Filtrar filas de la tabla..."
-          />
-          {busqueda.trim() !== "" && (
-            <p className="text-xs text-gray-600 mt-2">
-              Mostrando {groupedFiltrados.length} de {groupedShipRoundRows.length} variantes (
-              {data.items.length} líneas de lote)
-            </p>
-          )}
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end justify-between gap-3">
+          <div className="flex-1 min-w-[200px] max-w-xl">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Buscar (nombre, ID carta, idioma, rareza)
+            </label>
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md text-sm"
+              placeholder="Filtrar filas de la tabla..."
+            />
+            {busqueda.trim() !== "" && (
+              <p className="text-xs text-gray-600 mt-2">
+                Mostrando {groupedFiltrados.length} de {groupedShipRoundRows.length} variantes (
+                {data.items.length} líneas de lote)
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleSyncMissingItems()}
+            disabled={
+              roundIsFinalized || saving || finalizando || syncingMissing
+            }
+            className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Añade al listado las líneas de lote en camino creadas después de abrir esta tanda"
+          >
+            {syncingMissing ? "Cargando…" : "Cargar objetos no existentes"}
+          </button>
         </div>
 
         <div className="p-2">
@@ -584,6 +632,12 @@ export default function IncomingShipRoundReviewPage() {
               rows={groupedFiltrados}
               columns={columns}
               getRowId={(row) => row.id}
+              getRowClassName={(params) => {
+                const g = params.row as GroupedShipRoundRow;
+                const arrived = sumArrivedGroup(g.lines);
+                if (arrived !== g.remaining_total) return "ship-round-row-mismatch";
+                return "";
+              }}
               pageSizeOptions={[20, 30, 50]}
               initialState={{
                 pagination: {
@@ -596,6 +650,12 @@ export default function IncomingShipRoundReviewPage() {
               sx={{
                 border: "none",
                 "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 },
+                "& .MuiDataGrid-row.ship-round-row-mismatch": {
+                  backgroundColor: "rgba(251, 146, 60, 0.16)",
+                },
+                "& .MuiDataGrid-row.ship-round-row-mismatch:hover": {
+                  backgroundColor: "rgba(251, 146, 60, 0.24)",
+                },
               }}
             />
           )}

@@ -18,6 +18,7 @@ import {
   Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { useExchangeRates } from "../../utils/tasa";
@@ -37,6 +38,7 @@ import {
   incomingVariantGroupKey,
   weightedAverageUnitCostCop,
 } from "../incoming/incoming-variant-group";
+import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 
 type StockItem = StockListItem;
 
@@ -85,6 +87,7 @@ export default function ReservarCartasPage() {
   const [reservandoId, setReservandoId] = useState<string | null>(null);
   const [quitandoId, setQuitandoId] = useState<string | null>(null);
   const [actualizandoPrecioId, setActualizandoPrecioId] = useState<string | null>(null);
+  const [aplicandoPvpId, setAplicandoPvpId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [editNombre, setEditNombre] = useState("");
@@ -299,6 +302,19 @@ export default function ReservarCartasPage() {
     [stockRaw],
   );
 
+  const stockMap = useMemo(() => {
+    const m: Record<string, StockItem> = {};
+    stockRaw.forEach((s) => {
+      m[s._id] = s;
+    });
+    return m;
+  }, [stockRaw]);
+
+  const resumenReserva = useMemo(
+    () => aggregateReservasTotales(reservasRaw, stockMap, convert),
+    [reservasRaw, stockMap, convert],
+  );
+
   const stockDisponibleFiltrado = useMemo(() => {
     if (!busqueda.trim()) return stockDisponible;
     const q = busqueda.toLowerCase().trim();
@@ -423,6 +439,33 @@ export default function ReservarCartasPage() {
       toast("Error al actualizar el precio.", "error");
     } finally {
       setActualizandoPrecioId(null);
+    }
+  };
+
+  const handleAplicarPvpReserva = async (stockId: string, stock: StockItem) => {
+    const precioCop = Math.round(getPrecioDefault(stock));
+    if (precioCop <= 0) return;
+    setAplicandoPvpId(stockId);
+    try {
+      const res = await axios.put(`${API_RESERVA}/stock/${stockId}`, {
+        precio: precioCop,
+        currency: "COP",
+      });
+      if (res.data && (res.data as { error?: string }).error) {
+        toast((res.data as { error: string }).error, "error");
+        return;
+      }
+      setPreciosReservadas((prev) => {
+        const next = { ...prev };
+        delete next[stockId];
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      toast("Precio aplicado desde PVP.", "success");
+    } catch {
+      toast("Error al aplicar PVP.", "error");
+    } finally {
+      setAplicandoPvpId(null);
     }
   };
 
@@ -761,6 +804,46 @@ export default function ReservarCartasPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Líneas reservadas para este cliente. Ajusta precios aquí o quita líneas.
         </Typography>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{
+            mb: 2,
+            px: 2,
+            py: 1.25,
+            borderRadius: 2,
+            border: 1,
+            borderColor: "divider",
+            bgcolor: "grey.50",
+          }}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Ventas esperadas
+            </Typography>
+            <Typography variant="body2" fontWeight={600}>
+              {formatCOP(Math.round(resumenReserva.ventasEsperadasCop))}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Ganancia estimada
+            </Typography>
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              color={
+                resumenReserva.gananciaEstimadaCop > 0
+                  ? "success.main"
+                  : resumenReserva.gananciaEstimadaCop < 0
+                    ? "error.main"
+                    : "text.primary"
+              }
+            >
+              {formatCOP(Math.round(resumenReserva.gananciaEstimadaCop))}
+            </Typography>
+          </Box>
+        </Stack>
         {loadingReservas ? (
           <Stack direction="row" alignItems="center" gap={1}>
             <CircularProgress size={20} />
@@ -768,12 +851,33 @@ export default function ReservarCartasPage() {
           </Stack>
         ) : reservasConStock.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            Aún no hay cartas en el pedido. Usa la tabla inferior para añadirlas.
+            Aún no hay cartas en el pedido. Usa el catálogo de cartas en stock para añadirlas.
           </Typography>
         ) : (
           <Stack divider={<Divider flexItem />} spacing={0}>
             {reservasConStock.map((r) => {
               const fechaTxt = formatReservaFecha(r.created_at);
+              const stockLine = stockRaw.find((s) => s._id === r.stock_id);
+              const pvpCopAplicable = stockLine ? Math.round(getPrecioDefault(stockLine)) : 0;
+              const puedeAplicarPvp = pvpCopAplicable > 0;
+              const mutandoLinea =
+                quitandoId === r.stock_id ||
+                actualizandoPrecioId === r.stock_id ||
+                aplicandoPvpId === r.stock_id;
+              const precioLinea = (() => {
+                const raw = preciosReservadas[r.stock_id];
+                if (raw !== undefined && raw !== "") {
+                  const n = parseFloat(raw.replace(",", "."));
+                  if (!Number.isNaN(n)) return n;
+                }
+                return r.precio;
+              })();
+              const gananciaLinea = gananciaEstimadaReservaCop(
+                precioLinea,
+                r.currency ?? "COP",
+                stockLine,
+                convert,
+              );
               return (
                 <Stack
                   key={r._id}
@@ -789,9 +893,19 @@ export default function ReservarCartasPage() {
                     sx={{ width: 52, height: 72, objectFit: "contain", borderRadius: 1, bgcolor: "background.paper" }}
                   />
                   <Box flex={1} minWidth={0}>
-                    <Typography fontWeight={600} noWrap title={r.card_name}>
-                      {r.card_name}
-                    </Typography>
+                    <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
+                      <Typography fontWeight={600} noWrap title={r.card_name}>
+                        {r.card_name}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color={
+                          gananciaLinea > 0 ? "success" : gananciaLinea < 0 ? "error" : "default"
+                        }
+                        label={`Ganancia: ${formatCOP(Math.round(gananciaLinea))}`}
+                      />
+                    </Stack>
                     <Typography variant="caption" color="text.secondary" display="block">
                       {r.card_id}
                     </Typography>
@@ -822,12 +936,33 @@ export default function ReservarCartasPage() {
                     {actualizandoPrecioId === r.stock_id ? (
                       <CircularProgress size={18} />
                     ) : null}
+                    {r.precio === 0 && stockLine ? (
+                      puedeAplicarPvp ? (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleAplicarPvpReserva(r.stock_id, stockLine)}
+                          disabled={mutandoLinea}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {aplicandoPvpId === r.stock_id ? "…" : "Aplicar PVP"}
+                        </Button>
+                      ) : (
+                        <Tooltip title="Sin PVP definido">
+                          <span>
+                            <Button variant="outlined" size="small" disabled sx={{ textTransform: "none" }}>
+                              Aplicar PVP
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )
+                    ) : null}
                     <Button
                       color="error"
                       variant="outlined"
                       size="small"
                       onClick={() => handleQuitarReserva(r.stock_id)}
-                      disabled={quitandoId === r.stock_id}
+                      disabled={quitandoId === r.stock_id || aplicandoPvpId === r.stock_id}
                       sx={{ textTransform: "none" }}
                     >
                       {quitandoId === r.stock_id ? "…" : "Quitar"}
@@ -837,6 +972,54 @@ export default function ReservarCartasPage() {
               );
             })}
           </Stack>
+        )}
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+          Cartas en stock
+        </Typography>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Buscar por nombre o ID de carta…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          sx={{ maxWidth: 420, mb: 2 }}
+        />
+        {loadingStock ? (
+          <Stack direction="row" alignItems="center" gap={1}>
+            <CircularProgress size={20} />
+            <Typography variant="body2">Cargando stock…</Typography>
+          </Stack>
+        ) : stockDisponibleFiltrado.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {busqueda.trim()
+              ? "Ninguna carta coincide con la búsqueda."
+              : "No hay cartas disponibles para reservar."}
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 1,
+              overflow: "hidden",
+              "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
+            }}
+          >
+            <DataGrid
+              rows={stockDisponibleFiltrado}
+              columns={columns}
+              getRowId={(row) => row._id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
+              disableRowSelectionOnClick
+              autoHeight
+              rowHeight={68}
+              sx={{ border: 0 }}
+            />
+          </Box>
         )}
       </Paper>
 
@@ -931,54 +1114,6 @@ export default function ReservarCartasPage() {
               getRowId={(row) => row.id}
               pageSizeOptions={[10, 25, 50]}
               initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-              disableRowSelectionOnClick
-              autoHeight
-              rowHeight={68}
-              sx={{ border: 0 }}
-            />
-          </Box>
-        )}
-      </Paper>
-
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-          Catálogo disponible
-        </Typography>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Buscar por nombre o ID de carta…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          sx={{ maxWidth: 420, mb: 2 }}
-        />
-        {loadingStock ? (
-          <Stack direction="row" alignItems="center" gap={1}>
-            <CircularProgress size={20} />
-            <Typography variant="body2">Cargando stock…</Typography>
-          </Stack>
-        ) : stockDisponibleFiltrado.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {busqueda.trim()
-              ? "Ninguna carta coincide con la búsqueda."
-              : "No hay cartas disponibles para reservar."}
-          </Typography>
-        ) : (
-          <Box
-            sx={{
-              border: 1,
-              borderColor: "divider",
-              borderRadius: 1,
-              overflow: "hidden",
-              "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
-            }}
-          >
-            <DataGrid
-              rows={stockDisponibleFiltrado}
-              columns={columns}
-              getRowId={(row) => row._id}
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
               disableRowSelectionOnClick
               autoHeight
               rowHeight={68}

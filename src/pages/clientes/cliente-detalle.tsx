@@ -11,6 +11,7 @@ import {
   Paper,
   Snackbar,
   Stack,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import type { StockListItem } from "../../types/stock";
@@ -32,6 +33,13 @@ import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
+import { useEtiquetasReservaPrint } from "./etiquetas-reserva-print";
+import { downloadVentaClientePdf } from "./venta-cliente-pdf";
+import {
+  aggregateReservasTotales,
+  gananciaEstimadaReservaCop,
+} from "./clientes-resumen-pedidos";
+import { useExchangeRates } from "../../utils/tasa";
 
 function formatFechaReserva(iso?: string): string {
   if (!iso) return "—";
@@ -47,9 +55,13 @@ export default function ClienteDetallePage() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { convert } = useExchangeRates();
   const [formOpen, setFormOpen] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [waBusy, setWaBusy] = useState(false);
+  const [copiandoTexto, setCopiandoTexto] = useState(false);
+  const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
+  const [generandoPdfVenta, setGenerandoPdfVenta] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -76,6 +88,12 @@ export default function ClienteDetallePage() {
     },
     enabled: !!clientId,
   });
+
+  const { imprimir: ejecutarImpresionEtiquetasReserva, printArea: etiquetasReservaPrintArea } =
+    useEtiquetasReservaPrint({
+      clientName: client?.nombre ?? "",
+      labelCount: reservas.length,
+    });
 
   const { data: incomingCliente = [] } = useQuery<ReservaIncomingItem[]>({
     queryKey: ["reservas-incoming", clientId],
@@ -122,6 +140,11 @@ export default function ClienteDetallePage() {
     [reservas, stockMap],
   );
 
+  const resumenReserva = useMemo(
+    () => aggregateReservasTotales(reservas, stockMap, convert),
+    [reservas, stockMap, convert],
+  );
+
   const alertaPedido = useMemo(() => {
     if (reservas.length === 0) return null;
     const times = reservas
@@ -135,35 +158,80 @@ export default function ClienteDetallePage() {
     return null;
   }, [reservas]);
 
+  const construirTextoPedido = async (): Promise<string | null> => {
+    if (!client) return null;
+    if (reservas.length === 0 && incomingCliente.length === 0) return null;
+    const lines = reservas.map((r) => {
+      const st = stockMap[r.stock_id];
+      return {
+        card_id: st?.card_id ?? "",
+        card_name: st?.card_name ?? "Carta",
+        precio: r.precio,
+        rareza: st?.rareza,
+      };
+    });
+    const incomingLines = incomingCliente.map((x) => ({
+      card_id: x.card_id ?? "",
+      card_name: x.card_name ?? "Carta",
+      quantity: x.quantity,
+      rareza: x.rareza,
+    }));
+    return buildWhatsAppPedidoText({
+      clientName: client.nombre,
+      tiendaEntrega: client.tienda_entrega,
+      lines,
+      incomingLines: incomingLines.length ? incomingLines : undefined,
+    });
+  };
+
   const enviarWhatsApp = async () => {
     if (!client) return;
-    if (reservas.length === 0 && incomingCliente.length === 0) return;
     setWaBusy(true);
     try {
-      const lines = reservas.map((r) => {
-        const st = stockMap[r.stock_id];
-        return {
-          card_id: st?.card_id ?? "",
-          card_name: st?.card_name ?? "Carta",
-          precio: r.precio,
-          rareza: st?.rareza,
-        };
-      });
-      const incomingLines = incomingCliente.map((x) => ({
-        card_id: x.card_id ?? "",
-        card_name: x.card_name ?? "Carta",
-        quantity: x.quantity,
-        rareza: x.rareza,
-      }));
-      const texto = await buildWhatsAppPedidoText({
-        clientName: client.nombre,
-        tiendaEntrega: client.tienda_entrega,
-        lines,
-        incomingLines: incomingLines.length ? incomingLines : undefined,
-      });
+      const texto = await construirTextoPedido();
+      if (texto == null) return;
       abrirWhatsAppConTexto(client.celular, texto);
     } finally {
       setWaBusy(false);
+    }
+  };
+
+  const copiarPedidoAlPortapapeles = async () => {
+    setCopiandoTexto(true);
+    try {
+      const texto = await construirTextoPedido();
+      if (texto == null) return;
+      let copiado = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(texto);
+          copiado = true;
+        }
+      } catch {
+        copiado = false;
+      }
+      if (!copiado) {
+        const ta = document.createElement("textarea");
+        ta.value = texto;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          copiado = document.execCommand("copy");
+        } catch {
+          copiado = false;
+        }
+        document.body.removeChild(ta);
+      }
+      if (copiado) {
+        show("Texto del pedido copiado al portapapeles.", "success");
+      } else {
+        show("No se pudo copiar al portapapeles.", "error");
+      }
+    } finally {
+      setCopiandoTexto(false);
     }
   };
 
@@ -172,6 +240,61 @@ export default function ClienteDetallePage() {
     const u = client.facebook_usuario?.trim().replace(/^@+/, "") ?? "";
     if (!u) return;
     window.open(`https://m.me/${encodeURIComponent(u)}`, "_blank", "noopener,noreferrer");
+  };
+
+  const imprimirEtiquetasReserva = async () => {
+    if (reservas.length === 0) return;
+    setImprimiendoEtiquetas(true);
+    try {
+      await ejecutarImpresionEtiquetasReserva();
+    } catch {
+      show("No se pudo cargar la imagen de la etiqueta.", "error");
+    } finally {
+      setImprimiendoEtiquetas(false);
+    }
+  };
+
+  const generarPdfVenta = async () => {
+    if (!client || reservas.length === 0) return;
+    setGenerandoPdfVenta(true);
+    try {
+      const stockById: Record<
+        string,
+        {
+          card_id: string;
+          card_name: string;
+          image_url?: string;
+          rareza?: string | null;
+        }
+      > = {};
+      reservas.forEach((r) => {
+        const st = stockMap[r.stock_id];
+        stockById[r.stock_id] = {
+          card_id: st?.card_id ?? "",
+          card_name: st?.card_name ?? "Carta",
+          image_url: st?.image_url,
+          rareza: st?.rareza,
+        };
+      });
+      const { imageFailures } = await downloadVentaClientePdf({
+        clientName: client.nombre,
+        tiendaEntrega: client.tienda_entrega,
+        reservas: reservas.map((r) => ({
+          stock_id: r.stock_id,
+          precio: r.precio,
+          currency: r.currency,
+        })),
+        stockById,
+        convert,
+      });
+      if (imageFailures > 0) {
+        show("PDF descargado. Algunas imágenes no se pudieron incluir.", "error");
+      }
+    } catch {
+      show("No se pudo generar el PDF de venta.", "error");
+    } finally {
+      setGenerandoPdfVenta(false);
+    }
   };
 
   const finalizarVenta = async () => {
@@ -273,6 +396,13 @@ export default function ClienteDetallePage() {
           >
             {waBusy ? "…" : "WhatsApp (resumen pedido)"}
           </Button>
+          <Button
+            variant="outlined"
+            disabled={(reservas.length === 0 && incomingCliente.length === 0) || copiandoTexto}
+            onClick={copiarPedidoAlPortapapeles}
+          >
+            {copiandoTexto ? "…" : "Copiar texto"}
+          </Button>
           {client.metodo_contacto === "facebook" && (
             <Button
               variant="contained"
@@ -317,6 +447,30 @@ export default function ClienteDetallePage() {
             >
               Cartas en camino
             </Button>
+            <Tooltip title={reservas.length === 0 ? "Sin reservas en stock" : ""}>
+              <span>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={reservas.length === 0 || imprimiendoEtiquetas}
+                  onClick={imprimirEtiquetasReserva}
+                >
+                  {imprimiendoEtiquetas ? "…" : "Imprimir etiquetas de reserva"}
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title={reservas.length === 0 ? "Sin reservas en stock" : ""}>
+              <span>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={reservas.length === 0 || generandoPdfVenta}
+                  onClick={generarPdfVenta}
+                >
+                  {generandoPdfVenta ? "…" : "Generar PDF de venta"}
+                </Button>
+              </span>
+            </Tooltip>
             <Button
               variant="contained"
               color="success"
@@ -328,13 +482,60 @@ export default function ClienteDetallePage() {
             </Button>
           </Stack>
         </Stack>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{
+            mb: 2,
+            px: 2,
+            py: 1.25,
+            borderRadius: 2,
+            border: 1,
+            borderColor: "divider",
+            bgcolor: "grey.50",
+          }}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Ventas esperadas
+            </Typography>
+            <Typography variant="body2" fontWeight={600}>
+              {formatCOP(Math.round(resumenReserva.ventasEsperadasCop))}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Ganancia estimada
+            </Typography>
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              color={
+                resumenReserva.gananciaEstimadaCop > 0
+                  ? "success.main"
+                  : resumenReserva.gananciaEstimadaCop < 0
+                    ? "error.main"
+                    : "text.primary"
+              }
+            >
+              {formatCOP(Math.round(resumenReserva.gananciaEstimadaCop))}
+            </Typography>
+          </Box>
+        </Stack>
         {reservasConStock.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
             No hay líneas en el pedido. Usa «Editar reserva» para agregar cartas.
           </Typography>
         ) : (
           <Stack spacing={2}>
-            {reservasConStock.map(({ reserva: r, stock: st }) => (
+            {reservasConStock.map(({ reserva: r, stock: st }) => {
+              const gananciaLinea = gananciaEstimadaReservaCop(
+                r.precio,
+                r.currency ?? "COP",
+                st,
+                convert,
+              );
+              return (
               <Box
                 key={r._id}
                 sx={{
@@ -359,7 +560,17 @@ export default function ClienteDetallePage() {
                   <Box sx={{ width: 48, height: 64, bgcolor: "grey.100", borderRadius: 1 }} />
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography fontWeight={600}>{st?.card_name ?? "Carta"}</Typography>
+                  <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
+                    <Typography fontWeight={600}>{st?.card_name ?? "Carta"}</Typography>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={
+                        gananciaLinea > 0 ? "success" : gananciaLinea < 0 ? "error" : "default"
+                      }
+                      label={`Ganancia: ${formatCOP(Math.round(gananciaLinea))}`}
+                    />
+                  </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {st?.card_id}
                     {st?.rareza ? ` · ${st.rareza}` : ""}
@@ -373,7 +584,8 @@ export default function ClienteDetallePage() {
                   </Typography>
                 </Box>
               </Box>
-            ))}
+              );
+            })}
           </Stack>
         )}
       </Paper>
@@ -406,6 +618,8 @@ export default function ClienteDetallePage() {
         client={client}
         onClose={() => setFormOpen(false)}
       />
+
+      {etiquetasReservaPrintArea}
 
       <Snackbar
         open={snackbar.open}

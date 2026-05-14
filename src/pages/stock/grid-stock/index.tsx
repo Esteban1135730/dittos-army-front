@@ -1,9 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Snackbar,
+} from "@mui/material";
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
@@ -14,6 +24,7 @@ import {
   STOCK_TAG_VALUES,
   type StockTagId,
 } from "../../../constants/stock-tags";
+import { PvpInlineCell } from "./pvp-inline-cell";
 
 export type StockItem = StockListItem;
 
@@ -54,6 +65,57 @@ function listRowToUpdateBody(
   return body;
 }
 
+type ExchangeConvert = ReturnType<typeof useExchangeRates>["convert"];
+
+function pvpCopFromRow(
+  item: StockListItem,
+  convert: ExchangeConvert
+): number | null {
+  if (stockHasBulkTag(item)) return null;
+  if (!item.pvp || item.pvp <= 0) return null;
+
+  if (item.pvp_currency === "COP") return item.pvp;
+  if (item.pvp_currency === "EUR") return convert.toCopFromEur(item.pvp) ?? 0;
+  if (item.pvp_currency === "USD") return convert.toCopFromUsd(item.pvp) ?? 0;
+  return 0;
+}
+
+function gananciaCopFromRow(
+  item: StockListItem,
+  convert: ExchangeConvert
+): number | null {
+  if (stockHasBulkTag(item)) return null;
+  const pvpCOP = pvpCopFromRow(item, convert);
+  if (pvpCOP == null) return null;
+
+  let costoCOP = 0;
+  if (item.currency === "COP") {
+    costoCOP = item.card_cost;
+  } else if (item.currency === "EUR") {
+    costoCOP = convert.toCopFromEur(item.card_cost) ?? 0;
+  } else if (item.currency === "USD") {
+    costoCOP = convert.toCopFromUsd(item.card_cost) ?? 0;
+  }
+
+  return pvpCOP - costoCOP;
+}
+
+function gananciaSortValue(
+  item: StockListItem,
+  convert: ExchangeConvert
+): number {
+  return gananciaCopFromRow(item, convert) ?? Number.NEGATIVE_INFINITY;
+}
+
+function stockHasBulkTag(item: StockListItem): boolean {
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  return tags.includes("bulk");
+}
+
+function stockIncluidoEnCalculos(item: StockListItem): boolean {
+  return !stockHasBulkTag(item);
+}
+
 export default function StockGrid() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -74,6 +136,18 @@ export default function StockGrid() {
   const [errorVenta, setErrorVenta] = useState("");
   /** Fila en la que se está guardando un cambio de tags (evita doble envío). */
   const [tagSavingRowId, setTagSavingRowId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StockItem | null>(null);
+  const [deleteDeleting, setDeleteDeleting] = useState(false);
+  const [deleteDialogError, setDeleteDialogError] = useState("");
+  const [pvpSavingRowId, setPvpSavingRowId] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error";
+  }>({ open: false, message: "", severity: "success" });
+
+  const toast = (message: string, severity: "success" | "error") =>
+    setSnackbar({ open: true, message, severity });
 
   const {
     data: stock = [],
@@ -95,11 +169,16 @@ export default function StockGrid() {
 
   const { convert } = useExchangeRates();
 
+  const stockParaCalculos = useMemo(
+    () => stock.filter(stockIncluidoEnCalculos),
+    [stock]
+  );
+
   // Calcular precio del inventario en COP/EUR/USD
   const precioInventario = useMemo(() => {
     let totalCOP = 0;
 
-    stock.forEach((item) => {
+    stockParaCalculos.forEach((item) => {
       if (item.currency === "COP") {
         totalCOP += item.card_cost;
       } else if (item.currency === "EUR") {
@@ -114,37 +193,30 @@ export default function StockGrid() {
       eur: convert.toEurFromCop(totalCOP) ?? 0,
       usd: convert.toUsdFromCop(totalCOP) ?? 0,
     };
-  }, [stock, convert]);
+  }, [stockParaCalculos, convert]);
+
+  const ventasEsperadas = useMemo(() => {
+    let totalCOP = 0;
+
+    stockParaCalculos.forEach((item) => {
+      const pvpCOP = pvpCopFromRow(item, convert);
+      if (pvpCOP != null) totalCOP += pvpCOP;
+    });
+
+    return {
+      cop: totalCOP,
+      eur: convert.toEurFromCop(totalCOP) ?? 0,
+      usd: convert.toUsdFromCop(totalCOP) ?? 0,
+    };
+  }, [stockParaCalculos, convert]);
 
   // Calcular ganancia esperada en COP/EUR/USD
   const gananciaEsperada = useMemo(() => {
     let totalGananciaCOP = 0;
 
-    stock.forEach((item) => {
-      if (item.pvp && item.pvp > 0) {
-        // Convertir PVP a COP
-        let pvpCOP = 0;
-        if (item.pvp_currency === "COP") {
-          pvpCOP = item.pvp;
-        } else if (item.pvp_currency === "EUR") {
-          pvpCOP = convert.toCopFromEur(item.pvp) ?? 0;
-        } else if (item.pvp_currency === "USD") {
-          pvpCOP = convert.toCopFromUsd(item.pvp) ?? 0;
-        }
-
-        // Convertir costo a COP
-        let costoCOP = 0;
-        if (item.currency === "COP") {
-          costoCOP = item.card_cost;
-        } else if (item.currency === "EUR") {
-          costoCOP = convert.toCopFromEur(item.card_cost) ?? 0;
-        } else if (item.currency === "USD") {
-          costoCOP = convert.toCopFromUsd(item.card_cost) ?? 0;
-        }
-
-        // Calcular ganancia
-        totalGananciaCOP += pvpCOP - costoCOP;
-      }
+    stockParaCalculos.forEach((item) => {
+      const ganancia = gananciaCopFromRow(item, convert);
+      if (ganancia != null) totalGananciaCOP += ganancia;
     });
 
     return {
@@ -152,7 +224,7 @@ export default function StockGrid() {
       eur: convert.toEurFromCop(totalGananciaCOP) ?? 0,
       usd: convert.toUsdFromCop(totalGananciaCOP) ?? 0,
     };
-  }, [stock, convert]);
+  }, [stockParaCalculos, convert]);
 
   // Ordenar stock: primero los sin PVP, luego los con PVP
   const stockOrdenado = useMemo(() => {
@@ -208,21 +280,17 @@ export default function StockGrid() {
   // Contar cartas únicas sin PVP (agrupadas por card_id)
   const cartasSinPvp = useMemo(() => {
     const cartasUnicas = new Map<string, boolean>();
-    stock.forEach((item) => {
+    stockParaCalculos.forEach((item) => {
       if (!cartasUnicas.has(item.card_id)) {
         const tienePvp = !!(item.pvp && item.pvp > 0);
         cartasUnicas.set(item.card_id, tienePvp);
       }
     });
     return Array.from(cartasUnicas.values()).filter((tienePvp) => !tienePvp).length;
-  }, [stock]);
+  }, [stockParaCalculos]);
 
   const handleModificar = (id: string) => {
     navigate(`/stock/update/${id}`);
-  };
-
-  const handleAsignarPVP = (id: string) => {
-    navigate(`/add-pvp/${id}`);
   };
 
   const handleMarcarPropiedad = async (stockId: string, cardId: string) => {
@@ -298,6 +366,43 @@ export default function StockGrid() {
       window.alert("No se pudo actualizar el tag. Revisa la consola o intenta de nuevo.");
     } finally {
       setTagSavingRowId(null);
+    }
+  };
+
+  const handleOpenDeleteDialog = (row: StockItem) => {
+    setDeleteDialogError("");
+    setDeleteTarget(row);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    if (deleteDeleting) return;
+    setDeleteTarget(null);
+    setDeleteDialogError("");
+  };
+
+  const handleConfirmDeleteStock = async () => {
+    if (!deleteTarget) return;
+    setDeleteDeleting(true);
+    setDeleteDialogError("");
+    try {
+      await axios.delete(
+        `http://localhost:3000/stock/${encodeURIComponent(deleteTarget._id)}`
+      );
+      await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      setDeleteTarget(null);
+    } catch (e: unknown) {
+      const ax = e as {
+        response?: { data?: { message?: string | string[] } };
+      };
+      const msg = ax.response?.data?.message;
+      const text = Array.isArray(msg) ? msg[0] : msg;
+      setDeleteDialogError(
+        typeof text === "string"
+          ? text
+          : "No se pudo eliminar la línea. Intenta más tarde."
+      );
+    } finally {
+      setDeleteDeleting(false);
     }
   };
 
@@ -431,74 +536,44 @@ export default function StockGrid() {
     {
       field: "pvp",
       headerName: "PVP",
+      sortable: false,
+      filterable: false,
       renderCell: (params) => {
-        if (params.row.pvp && params.row.pvp > 0) {
-          // Convertir PVP a todas las monedas
-          let pvpCOP = 0;
-          let pvpEUR = 0;
-          let pvpUSD = 0;
-
-          if (params.row.pvp_currency === "COP") {
-            pvpCOP = params.row.pvp;
-            pvpEUR = convert.toEurFromCop(pvpCOP) ?? 0;
-            pvpUSD = convert.toUsdFromCop(pvpCOP) ?? 0;
-          } else if (params.row.pvp_currency === "EUR") {
-            pvpEUR = params.row.pvp;
-            pvpCOP = convert.toCopFromEur(pvpEUR) ?? 0;
-            pvpUSD = convert.toUsdFromCop(pvpCOP) ?? 0;
-          }
-
-          // Moneda de compra (currency del stock)
-          const monedaCompra = params.row.currency;
-
-          return (
-            <div className="flex flex-col gap-1 text-sm">
-              <div className="flex gap-2 flex-wrap">
-                <span className={monedaCompra === "COP" ? "font-bold text-blue-600" : ""}>
-                  COP {formatCOP(pvpCOP.toFixed(0))}
-                </span>
-                <span>/</span>
-                <span className={monedaCompra === "EUR" ? "font-bold text-blue-600" : ""}>
-                  EUR {pvpEUR.toFixed(2)}
-                </span>
-                <span>/</span>
-                <span className={monedaCompra === "USD" ? "font-bold text-blue-600" : ""}>
-                  USD {pvpUSD.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          );
-        }
-        return <span className="text-red-600 font-semibold">Sin asignar</span>;
+        const row = params.row as StockItem;
+        return (
+          <PvpInlineCell
+            row={row}
+            busy={pvpSavingRowId === row._id}
+            onBusyChange={(saving) =>
+              setPvpSavingRowId(saving ? row._id : null)
+            }
+            onOutcome={toast}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ["stock"] })}
+          />
+        );
       },
-      width: 220,
+      width: 160,
     },
     {
       field: "ganancia",
       headerName: "Ganancia",
+      type: "number",
+      valueGetter: (_value, row) =>
+        gananciaSortValue(row as StockItem, convert),
       renderCell: (params) => {
-        if (!params.row.pvp || params.row.pvp <= 0) {
+        const ganancia = gananciaCopFromRow(params.row as StockItem, convert);
+        if (ganancia == null) {
           return <span className="text-gray-400">—</span>;
         }
 
-        // Convertir PVP a COP
-        let pvpCOP = 0;
-        if (params.row.pvp_currency === "COP") {
-          pvpCOP = params.row.pvp;
-        } else if (params.row.pvp_currency === "EUR") {
-          pvpCOP = convert.toCopFromEur(params.row.pvp) ?? 0;
-        }
-
-        // Convertir costo a COP
-        let costoCOP = 0;
-        if (params.row.currency === "COP") {
-          costoCOP = params.row.card_cost;
-        } else if (params.row.currency === "EUR") {
-          costoCOP = convert.toCopFromEur(params.row.card_cost) ?? 0;
-        }
-
-        // Calcular ganancia y porcentaje
-        const ganancia = pvpCOP - costoCOP;
+        const costoCOP =
+          params.row.currency === "COP"
+            ? params.row.card_cost
+            : params.row.currency === "EUR"
+              ? convert.toCopFromEur(params.row.card_cost) ?? 0
+              : params.row.currency === "USD"
+                ? convert.toCopFromUsd(params.row.card_cost) ?? 0
+                : 0;
         const porcentaje = costoCOP > 0 ? (ganancia / costoCOP) * 100 : 0;
 
         const esGanancia = ganancia > 0;
@@ -577,12 +652,12 @@ export default function StockGrid() {
       renderCell: (params) => {
         const tienePvp = params.row.pvp && params.row.pvp > 0;
         return (
-          <button
-            onClick={() => handleAsignarPVP(params.row.card_id)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+          <Link
+            to={`/add-pvp/${params.row.card_id}`}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded inline-block no-underline"
           >
             {tienePvp ? "Modificar PVP" : "Asignar PVP"}
-          </button>
+          </Link>
         );
       },
     },
@@ -637,6 +712,25 @@ export default function StockGrid() {
             }`}
         >
           Vendido
+        </button>
+      ),
+    },
+    {
+      field: "eliminar",
+      headerName: "Eliminar",
+      sortable: false,
+      filterable: false,
+      width: 110,
+      renderCell: (params) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenDeleteDialog(params.row as StockItem);
+          }}
+          className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-sm"
+        >
+          Eliminar
         </button>
       ),
     },
@@ -899,7 +993,7 @@ export default function StockGrid() {
               <h3 className="text-lg font-semibold mb-3 text-gray-700">
                 Estadísticas del Inventario
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">Precio del Inventario</p>
                   <div className="flex flex-col gap-1">
@@ -908,6 +1002,17 @@ export default function StockGrid() {
                     </span>
                     <span className="text-sm text-gray-500">
                       EUR {precioInventario.eur.toFixed(2)} / USD {precioInventario.usd.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Ventas Esperadas</p>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-indigo-600 text-lg">
+                      COP {formatCOP(ventasEsperadas.cop.toFixed(0))}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      EUR {ventasEsperadas.eur.toFixed(2)} / USD {ventasEsperadas.usd.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -949,6 +1054,48 @@ export default function StockGrid() {
             </p>
           )}
         </div>
+
+        <Dialog
+          open={deleteTarget !== null}
+          onClose={handleCloseDeleteDialog}
+          aria-labelledby="delete-stock-title"
+        >
+          <DialogTitle id="delete-stock-title">Eliminar línea de stock</DialogTitle>
+          <DialogContent>
+            <DialogContentText component="div">
+              {deleteTarget && (
+                <>
+                  <p className="mb-2">
+                    Vas a eliminar de forma permanente esta carta del inventario:
+                  </p>
+                  <p className="font-medium text-gray-900">
+                    {deleteTarget.card_name ?? deleteTarget.card_id}
+                  </p>
+                  <p className="mt-3 text-sm text-gray-600">
+                    No podrás deshacer esta acción. Si la línea tiene reserva o venta
+                    registrada, el sistema rechazará el borrado.
+                  </p>
+                </>
+              )}
+              {deleteDialogError ? (
+                <p className="mt-3 text-sm text-red-600">{deleteDialogError}</p>
+              ) : null}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDeleteDialog} disabled={deleteDeleting}>
+              Cancelar
+            </Button>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={() => void handleConfirmDeleteStock()}
+              disabled={deleteDeleting || !deleteTarget}
+            >
+              {deleteDeleting ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Modal de Venta */}
         {mostrarModalVenta && (
@@ -1058,6 +1205,21 @@ export default function StockGrid() {
             },
           }}
         />
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={4500}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            severity={snackbar.severity}
+            variant="filled"
+            onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+            sx={{ width: "100%" }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
     </div>
   );
 }

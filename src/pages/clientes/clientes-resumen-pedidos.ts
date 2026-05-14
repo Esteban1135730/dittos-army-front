@@ -1,0 +1,56 @@
+import type { StockListItem } from "../../types/stock";
+import type { ReservaItem } from "./cliente-types";
+
+export type CurrencyConverter = {
+  toCopFromEur: (value: number) => number | null | undefined;
+  toCopFromUsd: (value: number) => number | null | undefined;
+};
+
+export type ReservasTotales = {
+  ventasEsperadasCop: number;
+  gananciaEstimadaCop: number;
+};
+
+export function amountToCop(
+  amount: number,
+  currency: string,
+  convert: CurrencyConverter,
+): number {
+  if (currency === "COP") return amount;
+  if (currency === "EUR") return convert.toCopFromEur(amount) ?? 0;
+  if (currency === "USD") return convert.toCopFromUsd(amount) ?? 0;
+  return amount;
+}
+
+export function gananciaEstimadaReservaCop(
+  precio: number,
+  currency: string,
+  stock: Pick<StockListItem, "currency" | "card_cost"> | undefined,
+  convert: CurrencyConverter,
+): number {
+  const precioCop = amountToCop(precio, currency ?? "COP", convert);
+  const costoCop = stock ? amountToCop(stock.card_cost, stock.currency, convert) : 0;
+  return precioCop - costoCop;
+}
+
+export function aggregateReservasTotales(
+  reservas: Pick<ReservaItem, "stock_id" | "precio" | "currency">[],
+  stockById: Record<string, Pick<StockListItem, "currency" | "card_cost"> | undefined>,
+  convert: CurrencyConverter,
+): ReservasTotales {
+  let ventasEsperadasCop = 0;
+  let gananciaEstimadaCop = 0;
+
+  for (const reserva of reservas) {
+    const precioCop = amountToCop(reserva.precio, reserva.currency ?? "COP", convert);
+    ventasEsperadasCop += precioCop;
+    gananciaEstimadaCop += gananciaEstimadaReservaCop(
+      reserva.precio,
+      reserva.currency ?? "COP",
+      stockById[reserva.stock_id],
+      convert,
+    );
+  }
+
+  return { ventasEsperadasCop, gananciaEstimadaCop };
+}

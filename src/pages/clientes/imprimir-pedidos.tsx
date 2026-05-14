@@ -3,6 +3,13 @@ import axios from "axios";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
+import {
+  buildEtiquetasReservaItemsFromPedidos,
+  EtiquetasReservaPrintArea,
+  preloadEtiquetaReservaImage,
+  useClearEtiquetasReservaPrintMode,
+} from "./etiquetas-reserva-print";
+import { paginatePedidoLineItems } from "./pedido-print-sheets";
 
 type ClientItem = {
   _id: string;
@@ -38,6 +45,18 @@ const CARD_HEIGHT_MM = 88;
 export default function ImprimirPedidosPage() {
   const printRef = useRef<HTMLDivElement>(null);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
+  const [errorEtiquetas, setErrorEtiquetas] = useState<string | null>(null);
+
+  useClearEtiquetasReservaPrintMode();
+
+  useEffect(() => {
+    const clear = () => {
+      document.body.classList.remove("print-pedidos-mode");
+    };
+    window.addEventListener("afterprint", clear);
+    return () => window.removeEventListener("afterprint", clear);
+  }, []);
 
   const { data: clientes = [] } = useQuery<ClientItem[]>({
     queryKey: ["clientes"],
@@ -133,8 +152,41 @@ export default function ImprimirPedidosPage() {
     [pedidos, seleccionados]
   );
 
+  const tarjetasPedidoAImprimir = useMemo(
+    () =>
+      pedidosAImprimir.flatMap((pedido) =>
+        paginatePedidoLineItems(pedido.items).map((sheet) => ({
+          key: `${pedido.client._id}-${sheet.sheetIndex}`,
+          pedido,
+          sheet,
+        })),
+      ),
+    [pedidosAImprimir],
+  );
+
+  const etiquetasAImprimir = useMemo(
+    () => buildEtiquetasReservaItemsFromPedidos(pedidosAImprimir),
+    [pedidosAImprimir],
+  );
+
   const handleImprimir = () => {
+    document.body.classList.add("print-pedidos-mode");
     window.print();
+  };
+
+  const handleImprimirEtiquetas = async () => {
+    if (etiquetasAImprimir.length === 0) return;
+    setErrorEtiquetas(null);
+    setImprimiendoEtiquetas(true);
+    try {
+      await preloadEtiquetaReservaImage();
+      document.body.classList.add("print-etiquetas-mode");
+      window.print();
+    } catch {
+      setErrorEtiquetas("No se pudo cargar la imagen de la etiqueta.");
+    } finally {
+      setImprimiendoEtiquetas(false);
+    }
   };
 
   /** Genera el número para wa.me: solo dígitos; si es 10 dígitos empezando en 3 (Colombia), agregar 57 */
@@ -236,33 +288,51 @@ export default function ImprimirPedidosPage() {
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            onClick={handleImprimir}
-            disabled={pedidosAImprimir.length === 0}
-            className="no-print bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
-          >
-            {pedidosAImprimir.length === 0
-              ? "Selecciona al menos un pedido"
-              : `Imprimir ${pedidosAImprimir.length} tarjeta${pedidosAImprimir.length !== 1 ? "s" : ""}`}
-          </button>
+          <div className="no-print flex flex-wrap gap-2 mb-6">
+            <button
+              type="button"
+              onClick={handleImprimir}
+              disabled={tarjetasPedidoAImprimir.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
+            >
+              {tarjetasPedidoAImprimir.length === 0
+                ? "Selecciona al menos un pedido"
+                : `Imprimir ${tarjetasPedidoAImprimir.length} tarjeta${tarjetasPedidoAImprimir.length !== 1 ? "s" : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={handleImprimirEtiquetas}
+              disabled={etiquetasAImprimir.length === 0 || imprimiendoEtiquetas}
+              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
+            >
+              {imprimiendoEtiquetas
+                ? "Preparando etiquetas…"
+                : etiquetasAImprimir.length === 0
+                  ? "Selecciona al menos un pedido"
+                  : `Imprimir ${etiquetasAImprimir.length} etiqueta${etiquetasAImprimir.length !== 1 ? "s" : ""} de reserva`}
+            </button>
+          </div>
+          {errorEtiquetas ? (
+            <p className="no-print text-red-600 text-sm mb-4">{errorEtiquetas}</p>
+          ) : null}
         </>
       )}
 
       {/* Zona de impresión: solo visible al imprimir */}
       <div
         ref={printRef}
-        className="print-only hidden print:block"
+        className="print-only-pedidos"
         style={{ padding: 0 }}
       >
-        {pedidosAImprimir.map((pedido) => (
+        {tarjetasPedidoAImprimir.map(({ key, pedido, sheet }) => (
           <div
-            key={pedido.client._id}
+            key={key}
             className="pedido-card"
             style={{
               width: `${CARD_WIDTH_MM}mm`,
               height: `${CARD_HEIGHT_MM}mm`,
               minHeight: `${CARD_HEIGHT_MM}mm`,
+              maxHeight: `${CARD_HEIGHT_MM}mm`,
               boxSizing: "border-box",
               padding: "4mm",
               border: "1px solid #ccc",
@@ -273,6 +343,7 @@ export default function ImprimirPedidosPage() {
               display: "inline-block",
               verticalAlign: "top",
               margin: "2mm",
+              overflow: "hidden",
             }}
           >
             <div className="font-bold text-[10px] mb-1" style={{ borderBottom: "1px solid #333", paddingBottom: "1mm" }}>
@@ -282,6 +353,11 @@ export default function ImprimirPedidosPage() {
               <div className="mb-1">Cel: {pedido.client.celular}</div>
             ) : null}
             <div className="mb-2">Tienda: {pedido.client.tienda_entrega}</div>
+            {sheet.sheetCount > 1 ? (
+              <div className="mb-1 font-semibold" style={{ fontSize: "7px" }}>
+                Tarjeta {sheet.sheetIndex} de {sheet.sheetCount}
+              </div>
+            ) : null}
             <table style={{ width: "100%", fontSize: "7px", borderCollapse: "collapse", display: "table" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #999" }}>
@@ -290,7 +366,7 @@ export default function ImprimirPedidosPage() {
                 </tr>
               </thead>
               <tbody>
-                {pedido.items.map((row, i) => (
+                {sheet.items.map((row, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid #ddd" }}>
                     <td style={{ padding: "0.5mm 1mm 0.5mm 0", wordBreak: "break-word", maxWidth: "35mm" }}>
                       {row.nombre.length > 22 ? `${row.nombre.slice(0, 21)}…` : row.nombre}
@@ -302,21 +378,26 @@ export default function ImprimirPedidosPage() {
                 ))}
               </tbody>
             </table>
-            <div
-              className="font-bold mt-1"
-              style={{ borderTop: "1px solid #333", paddingTop: "1mm", marginTop: "1mm", fontSize: "9px" }}
-            >
-              Total: {formatCOP(pedido.total)}
-            </div>
+            {sheet.showTotal ? (
+              <div
+                className="font-bold mt-1"
+                style={{ borderTop: "1px solid #333", paddingTop: "1mm", marginTop: "1mm", fontSize: "9px" }}
+              >
+                Total: {formatCOP(pedido.total)}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
 
+      <EtiquetasReservaPrintArea labels={etiquetasAImprimir} />
+
       <style>{`
         @media print {
           body * { visibility: hidden; }
-          .print-only, .print-only * { visibility: visible; }
-          .print-only {
+          body.print-pedidos-mode .print-only-pedidos,
+          body.print-pedidos-mode .print-only-pedidos * { visibility: visible; }
+          body.print-pedidos-mode .print-only-pedidos {
             position: absolute;
             left: 0;
             top: 0;
@@ -326,16 +407,18 @@ export default function ImprimirPedidosPage() {
             display: block !important;
             background: white;
           }
+          body:not(.print-pedidos-mode) .print-only-pedidos {
+            display: none !important;
+          }
           .no-print { display: none !important; }
           .pedido-card {
             break-inside: avoid;
             page-break-inside: avoid;
           }
-          /* 6 tarjetas por hoja A4 aprox: 2 columnas x 3 filas */
           @page { size: A4; margin: 10mm; }
         }
         @media screen {
-          .print-only { display: none !important; }
+          .print-only-pedidos { display: none !important; }
         }
       `}</style>
     </div>
