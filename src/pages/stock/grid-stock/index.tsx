@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
@@ -34,7 +34,7 @@ export default function StockGrid() {
   } = useQuery<StockItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/stock");
+      const res = await apiClient.get("/stock");
       return Array.isArray(res.data)
         ? res.data.filter(
           (stockItem) =>
@@ -158,7 +158,7 @@ export default function StockGrid() {
     try {
       setMarcandoPropiedad(stockId);
       setErrorPropiedad("");
-      await axios.post("http://localhost:3000/sales/keep", {
+      await apiClient.post("/sales/keep", {
         stock_id: stockId,
         card_id: cardId,
       });
@@ -215,7 +215,7 @@ export default function StockGrid() {
     try {
       setVendiendo(true);
       setErrorVenta("");
-      await axios.post("http://localhost:3000/sales/sell", {
+      await apiClient.post("/sales/sell", {
         stock_id: ventaStockId,
         card_id: ventaCardId,
         amount_cop: Number(precioVenta),
@@ -520,7 +520,7 @@ export default function StockGrid() {
 
     try {
       setLimpiandoPvp(true);
-      const res = await axios.delete("http://localhost:3000/pvp");
+      const res = await apiClient.delete("/pvp");
       const deleted = res.data?.deletedCount ?? 0;
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       if (deleted > 0) {
@@ -556,8 +556,8 @@ export default function StockGrid() {
     try {
       setActualizandoTienda(true);
       const [invRes, upRes] = await Promise.all([
-        axios.post("http://localhost:3000/stock/export-store-inventory"),
-        axios.post("http://localhost:3000/stock/export-store-upcoming"),
+        apiClient.post("/stock/export-store-inventory"),
+        apiClient.post("/stock/export-store-upcoming"),
       ]);
       const inv = invRes.data;
       const up = upRes.data;
@@ -594,8 +594,28 @@ export default function StockGrid() {
     );
 
   return (
-
     <div style={{ height: "90%", width: "100%", margin: "2rem auto" }}>
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          Inventario y precio de venta (paso 2)
+        </h1>
+        <p className="text-gray-600 text-sm max-w-3xl mb-3">
+          Aquí ves todas las cartas disponibles. Para poder cobrarlas en el{" "}
+          <strong>mostrador</strong>, cada carta necesita un{" "}
+          <strong>PVP</strong> (precio al público). Entra en una fila y usa la
+          acción de PVP / venta según tu flujo habitual.
+        </p>
+        <p className="text-gray-500 text-xs">
+          ¿Aún no cargaste la carta? Ve primero a{" "}
+          <Link
+            to="/add-stock"
+            className="text-blue-600 font-semibold underline hover:text-blue-800"
+          >
+            Agregar cartas al inventario (paso 1)
+          </Link>
+          .
+        </p>
+      </div>
       {cartasSinPvp > 0 && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
           <div className="flex items-center">

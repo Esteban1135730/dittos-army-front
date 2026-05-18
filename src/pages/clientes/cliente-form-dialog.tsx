@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { apiClient, isAxiosError } from "../../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -67,18 +67,18 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
         notas: form.notas.trim() || undefined,
       };
       if (mode === "edit" && client) {
-        await axios.put(`${API_CLIENT}/${client._id}`, body);
+        await apiClient.put(`${API_CLIENT}/${client._id}`, body);
         await queryClient.invalidateQueries({ queryKey: ["clientes"] });
         await queryClient.invalidateQueries({ queryKey: ["client", client._id] });
       } else {
-        await axios.post(API_CLIENT, body);
+        await apiClient.post(API_CLIENT, body);
         await queryClient.invalidateQueries({ queryKey: ["clientes"] });
       }
       onSaved?.();
       onClose();
     } catch (err) {
       const msg =
-        axios.isAxiosError(err) && typeof err.response?.data?.message === "string"
+        isAxiosError(err) && typeof err.response?.data?.message === "string"
           ? err.response.data.message
           : "No se pudo guardar.";
       setErrorMsg(msg);

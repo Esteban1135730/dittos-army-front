@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useState, useEffect, useRef } from "react";
 import type { UpdateStockRequestBody } from "../../../types/stock";
 import {
@@ -15,7 +15,7 @@ export default function ModificarStock() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["stock", id],
     queryFn: async () => {
-      const res = await axios.get(`http://localhost:3000/stock/${id}`);
+      const res = await apiClient.get(`/stock/${id}`);
       return res.data;
     },
     enabled: !!id,
@@ -48,7 +48,7 @@ export default function ModificarStock() {
 
   const mutation = useMutation({
     mutationFn: async (nuevo: UpdateStockRequestBody) => {
-      const res = await axios.post(`http://localhost:3000/stock/update`, nuevo);
+      const res = await apiClient.post(`/stock/update`, nuevo);
       return res.data;
     },
     onSuccess: () => {

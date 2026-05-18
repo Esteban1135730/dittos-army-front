@@ -2,7 +2,9 @@ import React from "react";
 import { BrowserRouter } from "react-router-dom";
 import AppRouter from "./app.route";
 import { createRoot } from "react-dom/client";
+import { CssBaseline, ThemeProvider } from "@mui/material";
 import "./index.css";
+import { appTheme } from "./theme/appTheme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -27,10 +29,13 @@ persistQueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppRouter />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider theme={appTheme}>
+      <CssBaseline />
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AppRouter />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

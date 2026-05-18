@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient, isAxiosError } from "../../../api/client";
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -78,7 +78,7 @@ export default function AsignarPVP() {
     useQuery<StockGroupResponse>({
       queryKey: ["group", id],
       queryFn: async () => {
-        const res = await axios.get(`http://localhost:3000/stock/group/${id}`);
+        const res = await apiClient.get(`/stock/group/${id}`);
         return res.data;
       },
       enabled: !!id,
@@ -87,16 +87,16 @@ export default function AsignarPVP() {
   const { data: cardData, isLoading: loadingCard, isError: cardError, error: cardQueryError } = useQuery<CardDetail>({
     queryKey: ["cardDetail", id],
     queryFn: async () => {
-      const url = `http://localhost:3000/card/${id}`;
+      const url = `/card/${id}`;
       try {
-        const res = await axios.get<CardDetail | null>(url);
+        const res = await apiClient.get<CardDetail | null>(url);
         if (res.data === null || res.data === undefined) {
           console.error("[add-pvp] Carta no encontrada (respuesta null/undefined)", { cardId: id, url });
           throw new Error("Carta no encontrada");
         }
         return res.data as CardDetail;
       } catch (err) {
-        if (axios.isAxiosError(err)) {
+        if (isAxiosError(err)) {
           console.error("[add-pvp] Error al cargar carta (axios)", {
             cardId: id,
             url,
@@ -116,7 +116,7 @@ export default function AsignarPVP() {
   const { data: pvpRows } = useQuery<PvpCardRow[]>({
     queryKey: ["pvp-rows", id],
     queryFn: async () => {
-      const res = await axios.get<PvpCardRow[]>(`http://localhost:3000/pvp/${id}`);
+      const res = await apiClient.get<PvpCardRow[]>(`/pvp/${id}`);
       return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!id,
@@ -263,7 +263,7 @@ export default function AsignarPVP() {
           : selectedOpRareza === undefined
             ? rowsWithStock[0]?.rareza ?? null
             : selectedOpRareza;
-      await axios.post("http://localhost:3000/pvp", {
+      await apiClient.post("/pvp", {
         card_id: id,
         pvp: Number(pvp),
         currency,

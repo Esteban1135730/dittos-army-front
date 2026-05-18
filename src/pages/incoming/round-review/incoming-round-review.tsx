@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -26,7 +26,7 @@ type IncomingRoundReviewResponse = {
   items: IncomingRoundReviewItem[];
 };
 
-const API_INCOMING = "http://localhost:3000/incoming";
+const API_INCOMING = "/incoming";
 
 function parseIntOrZero(v: string): number {
   const n = parseInt(v, 10);
@@ -56,7 +56,7 @@ export default function IncomingRoundReviewPage() {
       setLoading(true);
       setError("");
       try {
-        const res = await axios.get(
+        const res = await apiClient.get(
           `${API_INCOMING}/batch/${batchId}/round/${roundId}`,
         );
         const payload = res.data as IncomingRoundReviewResponse;
@@ -143,7 +143,7 @@ export default function IncomingRoundReviewPage() {
     try {
       setSaving(true);
       const decisions = buildDecisionsPayload();
-      await axios.put(
+      await apiClient.put(
         `${API_INCOMING}/batch/${batchId}/round/${roundId}/review`,
         { decisions },
       );
@@ -170,11 +170,11 @@ export default function IncomingRoundReviewPage() {
       // Aseguramos consistencia: al finalizaR la tanda, el backend debe usar
       // las decisiones actuales del estado del UI (no las que quedaron guardadas).
       const decisions = buildDecisionsPayload();
-      await axios.put(`${API_INCOMING}/batch/${batchId}/round/${roundId}/review`, {
+      await apiClient.put(`${API_INCOMING}/batch/${batchId}/round/${roundId}/review`, {
         decisions,
       });
 
-      const res = await axios.post(
+      const res = await apiClient.post(
         `${API_INCOMING}/batch/${batchId}/round/${roundId}/finalize`,
       );
       if (res.data?.success) {

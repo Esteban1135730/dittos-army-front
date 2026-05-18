@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -25,7 +25,7 @@ type IncomingShipRoundRow = {
   created_at: string;
 };
 
-const API_INCOMING = "http://localhost:3000/incoming";
+const API_INCOMING = "/incoming";
 
 export default function IncomingListPage() {
   const navigate = useNavigate();
@@ -41,7 +41,7 @@ export default function IncomingListPage() {
   const { data, isLoading, error } = useQuery<IncomingBatchItemRow[]>({
     queryKey: ["incoming-batch-open"],
     queryFn: async () => {
-      const res = await axios.get(`${API_INCOMING}/batch/open`);
+      const res = await apiClient.get(`${API_INCOMING}/batch/open`);
       return Array.isArray(res.data) ? (res.data as IncomingBatchItemRow[]) : [];
     },
   });
@@ -55,7 +55,7 @@ export default function IncomingListPage() {
   } = useQuery<IncomingShipRoundRow[]>({
     queryKey: ["incoming-ship-round-open"],
     queryFn: async () => {
-      const res = await axios.get(`${API_INCOMING}/ship-round/open`);
+      const res = await apiClient.get(`${API_INCOMING}/ship-round/open`);
       return Array.isArray(res.data) ? (res.data as IncomingShipRoundRow[]) : [];
     },
   });
@@ -70,7 +70,7 @@ export default function IncomingListPage() {
 
     try {
       setCreatingShipRound(true);
-      const res = await axios.post(`${API_INCOMING}/ship-round`, {
+      const res = await apiClient.post(`${API_INCOMING}/ship-round`, {
         shipping_total_cop: val,
       });
       const roundId = res.data?.round_id as string;
@@ -95,7 +95,7 @@ export default function IncomingListPage() {
     try {
       setDeletingRoundId(roundId);
       setMensaje("");
-      const res = await axios.delete(`${API_INCOMING}/ship-round/${roundId}`);
+      const res = await apiClient.delete(`${API_INCOMING}/ship-round/${roundId}`);
       if (!res.data?.success) {
         setMensaje(res.data?.message || "No se pudo eliminar la tanda.");
         return;
@@ -122,7 +122,7 @@ export default function IncomingListPage() {
     try {
       setDeletingBatchId(batchId);
       setMensaje("");
-      const res = await axios.delete(`${API_INCOMING}/batch/${batchId}`);
+      const res = await apiClient.delete(`${API_INCOMING}/batch/${batchId}`);
       if (!res.data?.success) {
         setMensaje(res.data?.message || "No se pudo eliminar el batch.");
         return;
@@ -151,8 +151,8 @@ export default function IncomingListPage() {
       const sections = await Promise.all(
         batches.map(async (b) => {
           const [metaRes, itemsRes] = await Promise.all([
-            axios.get(`${API_INCOMING}/batch/${b.batch_id}`),
-            axios.get(`${API_INCOMING}/batch/${b.batch_id}/items`),
+            apiClient.get(`${API_INCOMING}/batch/${b.batch_id}`),
+            apiClient.get(`${API_INCOMING}/batch/${b.batch_id}/items`),
           ]);
           return {
             meta: metaRes.data as BatchMetaPdf,

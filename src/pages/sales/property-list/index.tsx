@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useEffect, useMemo, useState } from "react";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -26,7 +26,7 @@ export default function PropertyList() {
   const { data: keepCards = [], isLoading } = useQuery<KeepSale[]>({
     queryKey: ["property-cards"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/keep");
+      const res = await apiClient.get("/sales/keep");
       return res.data;
     },
   });
@@ -41,7 +41,7 @@ export default function PropertyList() {
 
       try {
         const requests = pendingIds.map((id) =>
-          axios.get(`http://localhost:3000/stock/${id}`)
+          apiClient.get(`/stock/${id}`)
         );
         const responses = await Promise.allSettled(requests);
         const updated: Record<string, StockItem> = {};

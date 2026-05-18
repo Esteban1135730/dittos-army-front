@@ -56,10 +56,11 @@ export const formFromClient = (c: ClientItem): ClienteFormState => ({
   notas: c.notas ?? "",
 });
 
-export const API_CLIENT = "http://localhost:3000/client";
-export const API_RESERVA = "http://localhost:3000/reserva";
-export const API_STOCK = "http://localhost:3000/stock";
-export const API_SALES = "http://localhost:3000/sales";
+/** Rutas relativas al `baseURL` del `apiClient` (`src/api/client.ts`). */
+export const API_CLIENT = "/client";
+export const API_RESERVA = "/reserva";
+export const API_STOCK = "/stock";
+export const API_SALES = "/sales";
 
 export const ALERTA_HORAS_AMARILLO = 48;
 export const ALERTA_HORAS_ROJO = 168;

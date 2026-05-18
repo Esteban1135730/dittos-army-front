@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
 import {
   OPERATIONAL_RAREZA_VALUES,
   operationalRarezaLabel,
 } from "../../../constants/item-rareza";
-
-const API = "http://localhost:3000";
+import { apiClient, isAxiosError } from "../../../api/client";
 
 export type CartaBusquedaDirecta = {
   id: string;
@@ -70,8 +68,8 @@ export default function AperturaSelladoPage() {
     setBuscando(true);
     setErrorBusqueda("");
     try {
-      const res = await axios.get<CartaBusquedaDirecta[]>(
-        `${API}/tcg-dex/card/search/${encodeURIComponent(nombreCarta)}`,
+      const res = await apiClient.get<CartaBusquedaDirecta[]>(
+        `/tcg-dex/card/search/${encodeURIComponent(nombreCarta)}`,
       );
       const data = res.data;
       if (Array.isArray(data) && data.length > 0) {
@@ -143,14 +141,14 @@ export default function AperturaSelladoPage() {
         }),
       };
       try {
-        const res = await axios.post(`${API}/stock/from-opened-sealed`, body);
+        const res = await apiClient.post(`/stock/from-opened-sealed`, body);
         return res.data as {
           created_count: number;
           allocatable_total_cop: number;
           lines: { card_id: string; unity_cost_cop: number }[];
         };
       } catch (err: unknown) {
-        if (axios.isAxiosError(err) && err.response?.data) {
+        if (isAxiosError(err) && err.response?.data) {
           const d = err.response.data as { message?: string | string[] };
           const m = Array.isArray(d.message) ? d.message.join(", ") : d.message;
           throw new Error(m || err.message);

@@ -1,5 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../api/client";
+import {
+  API_CLIENT,
+  API_RESERVA,
+  API_STOCK,
+} from "./cliente-types";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -45,10 +50,6 @@ type ReservaItem = {
   created_at?: string;
 };
 
-const API_STOCK = "http://localhost:3000/stock";
-const API_CLIENT = "http://localhost:3000/client";
-const API_RESERVA = "http://localhost:3000/reserva";
-
 function formatReservaFecha(iso?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -87,7 +88,7 @@ export default function ReservarCartasPage() {
   const { data: client, isLoading: loadingClient } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_CLIENT}/${clientId}`);
+      const res = await apiClient.get(`${API_CLIENT}/${clientId}`);
       return res.data;
     },
     enabled: !!clientId,
@@ -120,7 +121,7 @@ export default function ReservarCartasPage() {
     }
     setGuardandoCliente(true);
     try {
-      await axios.put(`${API_CLIENT}/${clientId}`, {
+      await apiClient.put(`${API_CLIENT}/${clientId}`, {
         nombre: editNombre.trim(),
         tienda_entrega: editTienda.trim(),
         celular: editCelular.trim() || undefined,
@@ -143,7 +144,7 @@ export default function ReservarCartasPage() {
   const { data: stockRaw = [], isLoading: loadingStock } = useQuery<StockItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get(API_STOCK);
+      const res = await apiClient.get(API_STOCK);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -151,7 +152,7 @@ export default function ReservarCartasPage() {
   const { data: reservasRaw = [], isLoading: loadingReservas } = useQuery<ReservaItem[]>({
     queryKey: ["reservas", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_RESERVA}/client/${clientId}`);
+      const res = await apiClient.get(`${API_RESERVA}/client/${clientId}`);
       return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!clientId,
@@ -224,7 +225,7 @@ export default function ReservarCartasPage() {
     }
     setReservandoId(item._id);
     try {
-      const res = await axios.post(API_RESERVA, {
+      const res = await apiClient.post(API_RESERVA, {
         client_id: clientId,
         stock_id: item._id,
         precio: Math.round(precio),
@@ -250,7 +251,7 @@ export default function ReservarCartasPage() {
   const handleQuitarReserva = async (stockId: string) => {
     setQuitandoId(stockId);
     try {
-      const res = await axios.delete(`${API_RESERVA}/stock/${stockId}`);
+      const res = await apiClient.delete(`${API_RESERVA}/stock/${stockId}`);
       if ((res.data as { success?: boolean }).success !== true) {
         toast((res.data as { error?: string }).error ?? "Error al quitar reserva.", "error");
         return;
@@ -273,7 +274,7 @@ export default function ReservarCartasPage() {
     if (Number.isNaN(n) || n < 0) return;
     setActualizandoPrecioId(stockId);
     try {
-      const res = await axios.put(`${API_RESERVA}/stock/${stockId}`, {
+      const res = await apiClient.put(`${API_RESERVA}/stock/${stockId}`, {
         precio: Math.round(n),
         currency: "COP",
       });

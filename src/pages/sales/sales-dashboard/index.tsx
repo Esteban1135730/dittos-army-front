@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -47,7 +48,7 @@ export default function SalesDashboard() {
   } = useQuery<SaleWithStock[]>({
     queryKey: ["sales-dashboard"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/dashboard");
+      const res = await apiClient.get("/sales/dashboard");
       return res.data;
     },
   });
@@ -58,7 +59,7 @@ export default function SalesDashboard() {
   } = useQuery<StockListItem[]>({
     queryKey: ["stock-for-dashboard"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/stock");
+      const res = await apiClient.get("/stock");
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -170,7 +171,7 @@ export default function SalesDashboard() {
     try {
       setEditando(true);
       setErrorEditar("");
-      await axios.put(`http://localhost:3000/sales/${ventaEditando._id}`, {
+      await apiClient.put(`/sales/${ventaEditando._id}`, {
         amount_cop: Number(precioVentaEditado),
         notes: notasEditadas,
       });
@@ -194,11 +195,11 @@ export default function SalesDashboard() {
 
     try {
       setFinalizandoCicloId(ventaId);
-      const res = await axios.post<{
+      const res = await apiClient.post<{
         success: boolean;
         closed?: boolean;
         message?: string;
-      }>(`http://localhost:3000/sales/finalize-cycle/${ventaId}`);
+      }>(`/sales/finalize-cycle/${ventaId}`);
 
       if (!res.data.success) {
         alert(res.data.message ?? "No se pudo finalizar el ciclo de esta venta.");
@@ -230,7 +231,7 @@ export default function SalesDashboard() {
 
     try {
       setDeshaciendo(ventaId);
-      await axios.delete(`http://localhost:3000/sales/${ventaId}`);
+      await apiClient.delete(`/sales/${ventaId}`);
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
@@ -248,8 +249,8 @@ export default function SalesDashboard() {
     try {
       setCerrandoCiclo(true);
       setMensajeCierreCiclo(null);
-      const res = await axios.post<{ success: boolean; closedCount?: number; message?: string }>(
-        "http://localhost:3000/sales/close-cycle"
+      const res = await apiClient.post<{ success: boolean; closedCount?: number; message?: string }>(
+        "/sales/close-cycle"
       );
       if (res.data.success) {
         const count = res.data.closedCount ?? 0;
@@ -536,8 +537,21 @@ export default function SalesDashboard() {
 
   return (
     <div className="w-full p-6">
+      <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-950">
+        <strong className="block text-base mb-1">Paso 3 — Mostrador (cobrar ventas)</strong>
+        Aquí registras cuando un cliente paga. Antes debiste dar de alta la carta en{" "}
+        <Link to="/add-stock" className="font-semibold underline hover:text-emerald-900">
+          Agregar inventario
+        </Link>{" "}
+        y poner su{" "}
+        <Link to="/stock" className="font-semibold underline hover:text-emerald-900">
+          precio (PVP) en Inventario
+        </Link>
+        .
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Dashboard de Ventas</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Mostrador — ventas del ciclo</h1>
         <button
           type="button"
           onClick={() => {

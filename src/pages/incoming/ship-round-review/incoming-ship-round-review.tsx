@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -25,7 +25,7 @@ type IncomingShipRoundReviewResponse = {
   items: IncomingShipRoundReviewItem[];
 };
 
-const API_INCOMING = "http://localhost:3000/incoming";
+const API_INCOMING = "/incoming";
 
 function parseIntOrZero(v: string): number {
   const n = parseInt(v, 10);
@@ -54,7 +54,7 @@ export default function IncomingShipRoundReviewPage() {
       setLoading(true);
       setError("");
       try {
-        const res = await axios.get(
+        const res = await apiClient.get(
           `${API_INCOMING}/ship-round/${roundId}`,
         );
         const payload = res.data as IncomingShipRoundReviewResponse;
@@ -120,7 +120,7 @@ export default function IncomingShipRoundReviewPage() {
 
     try {
       setSaving(true);
-      await axios.put(
+      await apiClient.put(
         `${API_INCOMING}/ship-round/${roundId}/review`,
         { decisions: buildDecisionsPayload() },
       );
@@ -141,7 +141,7 @@ export default function IncomingShipRoundReviewPage() {
     setMensaje("");
     try {
       setFinalizando(true);
-      const res = await axios.post(
+      const res = await apiClient.post(
         `${API_INCOMING}/ship-round/${roundId}/finalize`,
       );
       if (res.data?.success) {

@@ -1,4 +1,4 @@
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -85,7 +85,7 @@ async function fetchTcgDexCard(
   cardId: string,
 ): Promise<{ id: string; name: string; image: string } | null> {
   try {
-    const res = await axios.get(`${API_TCG_FIND}/${encodeURIComponent(cardId)}`);
+    const res = await apiClient.get(`${API_TCG_FIND}/${encodeURIComponent(cardId)}`);
     const d = res.data as Record<string, unknown> | null | undefined;
     if (!d || typeof d !== "object") return null;
     const id = d.id as string | undefined;
@@ -102,9 +102,9 @@ async function fetchTcgDexCard(
   }
 }
 
-const API_TCG_SEARCH = "http://localhost:3000/tcg-dex/card/search";
-const API_TCG_FIND = "http://localhost:3000/tcg-dex/card/find";
-const API_INCOMING = "http://localhost:3000/incoming";
+const API_TCG_SEARCH = "/tcg-dex/card/search";
+const API_TCG_FIND = "/tcg-dex/card/find";
+const API_INCOMING = "/incoming";
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "es", label: "Español" },
@@ -302,7 +302,7 @@ export default function IncomingCreatePage() {
     setErrorBusqueda("");
     setResultados([]);
     try {
-      const res = await axios.get(`${API_TCG_SEARCH}/${encodeURIComponent(q)}`);
+      const res = await apiClient.get(`${API_TCG_SEARCH}/${encodeURIComponent(q)}`);
       const data = res.data as any;
       if (Array.isArray(data) && data.length > 0) {
         setResultados(data as CartaBusquedaDirecta[]);
@@ -392,7 +392,7 @@ export default function IncomingCreatePage() {
         purchase_date,
       };
 
-      const res = await axios.post(`${API_INCOMING}/batch`, body);
+      const res = await apiClient.post(`${API_INCOMING}/batch`, body);
       const batchId = res.data?.batch_id as string;
       navigate(`/incoming/batch/${batchId}`);
     } catch (e: any) {

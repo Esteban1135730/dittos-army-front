@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import CardDetail from "./components/card.detail";
 import type { CreateStockRequestBody } from "../../../types/stock";
 
@@ -53,7 +53,7 @@ export default function Stock() {
   const { data: expansiones = [], isLoading: cargandoExpansiones } = useQuery({
     queryKey: ["expansiones"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/tcg-dex/set");
+      const res = await apiClient.get("/tcg-dex/set");
       return Array.isArray(res.data) ? res.data : [];
     },
     staleTime: Infinity,
@@ -68,8 +68,8 @@ export default function Stock() {
     queryKey: ["cartas", expansionSeleccionada],
     queryFn: async () => {
       if (!expansionSeleccionada) return [];
-      const res = await axios.get(
-        `http://localhost:3000/tcg-dex/set/${expansionSeleccionada}/cards`
+      const res = await apiClient.get(
+        `/tcg-dex/set/${expansionSeleccionada}/cards`
       );
       if (Array.isArray(res.data)) return res.data;
       if (Array.isArray(res.data.cards)) return res.data.cards;
@@ -121,8 +121,8 @@ export default function Stock() {
     setBuscandoCartaDirecta(true);
     setErrorBusqueda("");
     try {
-      const res = await axios.get<CartaBusquedaDirecta[]>(
-        `http://localhost:3000/tcg-dex/card/search/${encodeURIComponent(
+      const res = await apiClient.get<CartaBusquedaDirecta[]>(
+        `/tcg-dex/card/search/${encodeURIComponent(
           nombreCarta
         )}`
       );
@@ -185,7 +185,7 @@ export default function Stock() {
 
       // Ejecutar múltiples peticiones
       const peticiones = Array.from({ length: copias }).map(() =>
-        axios.post("http://localhost:3000/stock", body)
+        apiClient.post("/stock", body)
       );
 
       await Promise.all(peticiones);
@@ -208,9 +208,21 @@ export default function Stock() {
   // ------------------ RENDER ------------------
   return (
     <div className="max-w-3xl mx-auto mt-10 bg-white shadow-lg rounded-xl p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">
-        Formulario de Cartas
+      <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-950">
+        <strong className="block text-base mb-1">
+          Paso 1 — Agregar cartas para poder venderlas
+        </strong>
+        Busca la carta en el catálogo, indica coste y datos de envío, y guarda.
+        Después podrás asignar el <strong>precio de venta (PVP)</strong> desde{" "}
+        <strong>Inventario</strong> y cobrar en <strong>Mostrador</strong>.
+      </div>
+      <h1 className="text-2xl font-bold text-gray-800 mb-2">
+        Agregar cartas al inventario
       </h1>
+      <p className="text-gray-600 mb-6 text-sm">
+        Esta es la pantalla correcta para dar de alta cartas nuevas. Sin este paso
+        no aparecerán en ventas.
+      </p>
 
       {/* Selector de modo de búsqueda */}
       <div className="mb-6">

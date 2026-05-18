@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../api/client";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -66,7 +66,7 @@ export default function ClienteDetallePage() {
   const { data: client, isLoading, isError } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_CLIENT}/${clientId}`);
+      const res = await apiClient.get(`${API_CLIENT}/${clientId}`);
       return res.data;
     },
     enabled: !!clientId,
@@ -75,7 +75,7 @@ export default function ClienteDetallePage() {
   const { data: reservas = [] } = useQuery<ReservaItem[]>({
     queryKey: ["reservas", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_RESERVA}/client/${clientId}`);
+      const res = await apiClient.get(`${API_RESERVA}/client/${clientId}`);
       return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!clientId,
@@ -84,7 +84,7 @@ export default function ClienteDetallePage() {
   const { data: stockRaw = [] } = useQuery<StockListItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get(API_STOCK);
+      const res = await apiClient.get(API_STOCK);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -100,7 +100,7 @@ export default function ClienteDetallePage() {
   const { data: historialVentas = [], isLoading: historialLoading } = useQuery<VentaClienteRow[]>({
     queryKey: ["ventas-cliente", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_SALES}/by-client/${clientId}`, { params: { limit: 100 } });
+      const res = await apiClient.get(`${API_SALES}/by-client/${clientId}`, { params: { limit: 100 } });
       const d = res.data;
       if (Array.isArray(d)) return d;
       throw new Error("Historial no disponible");
@@ -165,7 +165,7 @@ export default function ClienteDetallePage() {
     if (!clientId) return;
     setFinalizando(true);
     try {
-      const res = await axios.post<{ success: boolean; vendidas?: number; error?: string }>(
+      const res = await apiClient.post<{ success: boolean; vendidas?: number; error?: string }>(
         `${API_RESERVA}/client/${clientId}/finalizar-venta`,
       );
       const data = res.data;

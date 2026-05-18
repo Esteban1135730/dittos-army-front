@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient, isAxiosError } from "../../../api/client";
 import { formatCOP } from "../../../utils/convert";
 import { useState } from "react";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -52,7 +52,7 @@ export default function SalesConsistency() {
   const { data, isLoading, error } = useQuery<ConsistencyResponse>({
     queryKey: ["sales-consistency"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/consistency");
+      const res = await apiClient.get("/sales/consistency");
       return res.data;
     },
   });
@@ -61,8 +61,8 @@ export default function SalesConsistency() {
     setRegisterError(null);
     setRegisteringStockId(row.stock_id);
     try {
-      const res = await axios.post<{ success: boolean; message?: string }>(
-        "http://localhost:3000/sales/register-from-stock-with-pvp",
+      const res = await apiClient.post<{ success: boolean; message?: string }>(
+        "/sales/register-from-stock-with-pvp",
         { stock_id: row.stock_id }
       );
       if (res.data.success) {
@@ -77,10 +77,16 @@ export default function SalesConsistency() {
         setRegisterError(res.data.message ?? "Error al registrar la venta.");
       }
     } catch (err: unknown) {
+      const data = isAxiosError(err)
+        ? (err.response?.data as { message?: string | string[] } | undefined)
+        : undefined;
+      const rawMsg = data?.message;
       const msg =
-        axios.isAxiosError(err) && err.response?.data?.message
-          ? err.response.data.message
-          : "Error al registrar la venta al PVP.";
+        typeof rawMsg === "string"
+          ? rawMsg
+          : Array.isArray(rawMsg)
+            ? rawMsg.join(", ")
+            : "Error al registrar la venta al PVP.";
       if (msg.includes("PVP") && msg.toLowerCase().includes("no hay")) {
         setModalPrecioManual(row);
         setPrecioManual("");
@@ -117,7 +123,7 @@ export default function SalesConsistency() {
     setErrorPrecioManual(null);
     setGuardandoManual(true);
     try {
-      await axios.post("http://localhost:3000/sales/sell", {
+      await apiClient.post("/sales/sell", {
         stock_id: modalPrecioManual.stock_id,
         card_id: modalPrecioManual.card_id,
         amount_cop: Math.round(amountCop),
@@ -127,10 +133,16 @@ export default function SalesConsistency() {
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       handleCerrarModalPrecioManual();
     } catch (err: unknown) {
+      const data = isAxiosError(err)
+        ? (err.response?.data as { message?: string | string[] } | undefined)
+        : undefined;
+      const rawMsg = data?.message;
       const msg =
-        axios.isAxiosError(err) && err.response?.data?.message
-          ? err.response.data.message
-          : "Error al registrar la venta.";
+        typeof rawMsg === "string"
+          ? rawMsg
+          : Array.isArray(rawMsg)
+            ? rawMsg.join(", ")
+            : "Error al registrar la venta.";
       setErrorPrecioManual(msg);
     } finally {
       setGuardandoManual(false);

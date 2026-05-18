@@ -1,7 +1,7 @@
-import axios from "axios";
+import { apiClient } from "../../api/client";
 import { formatCOP } from "../../utils/convert";
 
-const API_TCG = "http://localhost:3000/tcg-dex/card/find";
+const API_TCG = "/tcg-dex/card/find";
 
 type TcgCardLite = { set?: string; name?: string };
 
@@ -14,7 +14,7 @@ function expansionFromCardDto(card: TcgCardLite | null | undefined): string | un
 
 export async function fetchExpansionForCard(cardId: string): Promise<string | undefined> {
   try {
-    const res = await axios.get<TcgCardLite>(`${API_TCG}/${encodeURIComponent(cardId)}`);
+    const res = await apiClient.get<TcgCardLite>(`${API_TCG}/${encodeURIComponent(cardId)}`);
     return expansionFromCardDto(res.data);
   } catch {
     return undefined;

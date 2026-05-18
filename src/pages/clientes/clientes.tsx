@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../api/client";
 import { DataGrid, type GridColDef, type GridRowParams } from "@mui/x-data-grid";
 import { useState, useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -51,7 +51,7 @@ export default function ClientesPage() {
   const { data: clientes = [], isLoading } = useQuery<ClientItem[]>({
     queryKey: ["clientes"],
     queryFn: async () => {
-      const res = await axios.get(API_CLIENT);
+      const res = await apiClient.get(API_CLIENT);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -59,7 +59,7 @@ export default function ClientesPage() {
   const { data: reservas = [] } = useQuery<ReservaItem[]>({
     queryKey: ["reservas"],
     queryFn: async () => {
-      const res = await axios.get(API_RESERVA);
+      const res = await apiClient.get(API_RESERVA);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -67,7 +67,7 @@ export default function ClientesPage() {
   const { data: stockRaw = [] } = useQuery<StockListItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get(API_STOCK);
+      const res = await apiClient.get(API_STOCK);
       return Array.isArray(res.data) ? res.data : [];
     },
   });

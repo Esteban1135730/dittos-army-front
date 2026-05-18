@@ -1,8 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../api/client";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
+import {
+  API_CLIENT,
+  API_RESERVA,
+  API_STOCK,
+} from "./cliente-types";
 
 type ClientItem = {
   _id: string;
@@ -28,10 +33,6 @@ type PedidoCard = {
   total: number;
 };
 
-const API_CLIENT = "http://localhost:3000/client";
-const API_RESERVA = "http://localhost:3000/reserva";
-const API_STOCK = "http://localhost:3000/stock";
-
 const CARD_WIDTH_MM = 63;
 const CARD_HEIGHT_MM = 88;
 
@@ -42,7 +43,7 @@ export default function ImprimirPedidosPage() {
   const { data: clientes = [] } = useQuery<ClientItem[]>({
     queryKey: ["clientes"],
     queryFn: async () => {
-      const res = await axios.get(API_CLIENT);
+      const res = await apiClient.get(API_CLIENT);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -50,7 +51,7 @@ export default function ImprimirPedidosPage() {
   const { data: reservas = [] } = useQuery<ReservaItem[]>({
     queryKey: ["reservas"],
     queryFn: async () => {
-      const res = await axios.get(API_RESERVA);
+      const res = await apiClient.get(API_RESERVA);
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -58,7 +59,7 @@ export default function ImprimirPedidosPage() {
   const { data: stockRaw = [] } = useQuery<StockItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get(API_STOCK);
+      const res = await apiClient.get(API_STOCK);
       return Array.isArray(res.data) ? res.data : [];
     },
   });

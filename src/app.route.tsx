@@ -19,10 +19,27 @@ import IncomingCreatePage from "./pages/incoming/create/incoming-create";
 import IncomingBatchRoundsPage from "./pages/incoming/batch-rounds/incoming-batch-rounds";
 import IncomingRoundReviewPage from "./pages/incoming/round-review/incoming-round-review";
 import IncomingShipRoundReviewPage from "./pages/incoming/ship-round-review/incoming-ship-round-review";
+import FacturacionElectronicaPage from "./pages/facturacion/facturacion-electronica";
+import CotizarPlaceholderPage from "./pages/cotizar/cotizar-placeholder";
+import CartasHubPage from "./pages/cartas/cartas-hub";
 
 export default function AppRouter() {
   return (
     <Routes>
+      <Route path="/cartas/agregar" element={<Navigate to="/add-stock" replace />} />
+      <Route path="/cartas/inventario" element={<Navigate to="/stock" replace />} />
+      <Route
+        path="/cartas/apertura-sellado"
+        element={<Navigate to="/stock/apertura-sellado" replace />}
+      />
+      <Route
+        path="/cartas"
+        element={
+          <SideLayout>
+            <CartasHubPage />
+          </SideLayout>
+        }
+      />
       <Route
         path="/"
         element={
@@ -115,7 +132,7 @@ export default function AppRouter() {
         path="/cotizar"
         element={
           <SideLayout>
-            <div>2</div>
+            <CotizarPlaceholderPage />
           </SideLayout>
         }
       />
@@ -148,6 +165,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <PropertyList />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/facturacion-electronica"
+        element={
+          <SideLayout>
+            <FacturacionElectronicaPage />
           </SideLayout>
         }
       />

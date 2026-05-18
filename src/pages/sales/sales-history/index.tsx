@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { apiClient } from "../../../api/client";
 import { useState } from "react";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
@@ -33,7 +33,7 @@ export default function SalesHistory() {
   const handleVolverAVentasActuales = async (saleId: string) => {
     try {
       setVolviendoId(saleId);
-      await axios.post(`http://localhost:3000/sales/reopen/${saleId}`);
+      await apiClient.post(`/sales/reopen/${saleId}`);
       await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
     } catch (err: unknown) {
@@ -52,7 +52,7 @@ export default function SalesHistory() {
   } = useQuery<SaleHistoryItem[]>({
     queryKey: ["sales-history"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/history");
+      const res = await apiClient.get("/sales/history");
       return res.data;
     },
   });
