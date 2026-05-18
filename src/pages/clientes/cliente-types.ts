@@ -62,6 +62,39 @@ export const API_STOCK = "http://localhost:3000/stock";
 export const API_SALES = "http://localhost:3000/sales";
 export const API_INCOMING = "http://localhost:3000/incoming";
 
+export type ImportWhatsAppLineResult = {
+  index: number;
+  raw: string;
+  parsed?: {
+    card_id: string;
+    language: string;
+    rareza: string | null;
+    quantity: number;
+  };
+  requested: number;
+  matched: number;
+  stock_ids: string[];
+  precio_cop_por_unidad: number[];
+  issues: string[];
+};
+
+export type ImportWhatsAppPreviewResponse = {
+  client_id: string;
+  client_name_from_message: string | null;
+  lines: ImportWhatsAppLineResult[];
+  summary: {
+    lines_ok: number;
+    lines_partial: number;
+    lines_failed: number;
+    units_reserved: number;
+  };
+};
+
+export type ImportWhatsAppImportResponse = ImportWhatsAppPreviewResponse & {
+  created: { stock_id: string; reserva_id: string; precio: number; currency: string }[];
+  skipped: { line_index: number; reason: string; requested: number; matched: number }[];
+};
+
 /** Línea de reserva pendiente (en camino), respuesta de GET /reserva/incoming */
 export type ReservaIncomingItem = {
   _id: string;

@@ -39,6 +39,7 @@ import {
   weightedAverageUnitCostCop,
 } from "../incoming/incoming-variant-group";
 import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
+import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
 
 type StockItem = StockListItem;
 
@@ -97,6 +98,7 @@ export default function ReservarCartasPage() {
   const [editFacebookUsuario, setEditFacebookUsuario] = useState("");
   const [editNotas, setEditNotas] = useState("");
   const [guardandoCliente, setGuardandoCliente] = useState(false);
+  const [importWaOpen, setImportWaOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -788,11 +790,29 @@ export default function ReservarCartasPage() {
               </Alert>
             ) : null}
           </Stack>
-          <Button variant="outlined" size="small" onClick={abrirModalEditar} sx={{ alignSelf: "flex-start" }}>
-            Datos del cliente
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ alignSelf: "flex-start" }}>
+            <Button variant="outlined" size="small" onClick={() => setImportWaOpen(true)}>
+              Importar desde WhatsApp
+            </Button>
+            <Button variant="outlined" size="small" onClick={abrirModalEditar}>
+              Datos del cliente
+            </Button>
+          </Stack>
         </Stack>
       </Paper>
+
+      <ImportWhatsAppPedidoDialog
+        open={importWaOpen}
+        onClose={() => setImportWaOpen(false)}
+        client={client}
+        onImported={async (summary) => {
+          await queryClient.invalidateQueries({ queryKey: ["stock"] });
+          if (clientId) {
+            await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+          }
+          toast(summary, "success");
+        }}
+      />
 
       <Paper
         variant="outlined"
