@@ -594,7 +594,7 @@ export default function StockGrid() {
     );
 
   return (
-    <div style={{ height: "90%", width: "100%", margin: "2rem auto" }}>
+    <div className="w-full max-w-[1400px] mx-auto">
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           Inventario y precio de venta (paso 2)
@@ -641,8 +641,8 @@ export default function StockGrid() {
         </div>
       )}
       <div className="mb-4">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4 mb-4">
+          <div className="flex-1 min-w-0">
             <div className="relative">
               <input
                 type="text"
@@ -686,11 +686,11 @@ export default function StockGrid() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <div className="relative">
               <button
                 onClick={handleExportar}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                className="bg-blue-600 text-white px-3 py-2 text-sm sm:px-4 sm:text-base rounded hover:bg-blue-700 whitespace-nowrap"
               >
                 Exportar PDF
               </button>
@@ -704,7 +704,7 @@ export default function StockGrid() {
             <div className="relative">
               <button
                 onClick={handleImprimirCatalogo}
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                className="bg-green-600 text-white px-3 py-2 text-sm sm:px-4 sm:text-base rounded hover:bg-green-700 whitespace-nowrap"
               >
                 Imprimir Catálogo
               </button>
@@ -718,7 +718,7 @@ export default function StockGrid() {
             <button
               onClick={handleLimpiarTodosPvp}
               disabled={limpiandoPvp}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-red-600 text-white px-3 py-2 text-sm sm:px-4 sm:text-base rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
             </button>
@@ -727,7 +727,7 @@ export default function StockGrid() {
               title="Genera inventory.json (catálogo) y upcoming.json (compras en camino) en dittos-army-store/public"
               onClick={handleActualizarInformacionTienda}
               disabled={actualizandoTienda}
-              className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-amber-600 text-white px-3 py-2 text-sm sm:px-4 sm:text-base rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed max-w-full sm:max-w-none"
             >
               {actualizandoTienda ? "Actualizando..." : "Actualizar tienda (catálogo + Próximamente)"}
             </button>
@@ -861,6 +861,7 @@ export default function StockGrid() {
           </div>
         )}
 
+        <div className="w-full overflow-x-auto -mx-1 px-1">
         <DataGrid
           rows={stockFiltrado}
           columns={columns}
@@ -882,10 +883,12 @@ export default function StockGrid() {
             return !tienePvp ? "sin-pvp-row" : "";
           }}
           sx={{
+            minWidth: 720,
+            border: 0,
             "& .sin-pvp-row": {
-              backgroundColor: "#fee2e2 !important", // rojo claro
+              backgroundColor: "#fee2e2 !important",
               "&:hover": {
-                backgroundColor: "#fecaca !important", // rojo más oscuro al hover
+                backgroundColor: "#fecaca !important",
               },
             },
             "& .propiedad-row": {
@@ -896,6 +899,7 @@ export default function StockGrid() {
             },
           }}
         />
+        </div>
       </div>
     </div>
   );

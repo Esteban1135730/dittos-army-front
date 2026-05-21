@@ -536,7 +536,7 @@ export default function SalesDashboard() {
     );
 
   return (
-    <div className="w-full p-6">
+    <div className="w-full max-w-[1400px] mx-auto">
       <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-950">
         <strong className="block text-base mb-1">Paso 3 — Mostrador (cobrar ventas)</strong>
         Aquí registras cuando un cliente paga. Antes debiste dar de alta la carta en{" "}
@@ -551,7 +551,7 @@ export default function SalesDashboard() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Mostrador — ventas del ciclo</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Mostrador — ventas del ciclo</h1>
         <button
           type="button"
           onClick={() => {
@@ -732,7 +732,7 @@ export default function SalesDashboard() {
 
       {/* Estado de Recuperación */}
       <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <p className="text-sm text-gray-600 mb-1">Estado de Recuperación</p>
             <p className="text-lg font-semibold">
@@ -757,13 +757,14 @@ export default function SalesDashboard() {
       </div>
 
       {/* Tabla de Ventas */}
-      <div style={{ height: "70vh", width: "100%" }}>
+      <div className="w-full min-h-[50vh]">
         <h2 className="text-xl font-bold mb-4 text-gray-800">Detalle de Ventas</h2>
         {sales.length === 0 ? (
           <p className="text-center text-gray-500 mt-8">
             No hay ventas registradas aún.
           </p>
         ) : (
+          <div className="w-full overflow-x-auto">
           <DataGrid
             rows={sales.filter((sale) => sale && sale._id && sale.stock_info)}
             columns={columns}
@@ -776,7 +777,9 @@ export default function SalesDashboard() {
             }}
             pagination
             disableRowSelectionOnClick
+            sx={{ minWidth: 720, border: 0 }}
           />
+          </div>
         )}
       </div>
 

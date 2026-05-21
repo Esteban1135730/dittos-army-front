@@ -1,5 +1,4 @@
 import {
-  Box,
   Button,
   Card,
   CardContent,
@@ -7,13 +6,14 @@ import {
   Typography,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
+import { PageContainer } from "../../components/layout/page-container";
 
 /**
  * La ruta /cotizar estaba vacía; orientamos al usuario hacia flujos reales de inventario y precios.
  */
 export default function CotizarPlaceholderPage() {
   return (
-    <Box sx={{ maxWidth: 640 }}>
+    <PageContainer maxWidth={640}>
       <Typography variant="h5" gutterBottom>
         ¿Dónde agregar cartas para vender?
       </Typography>
@@ -50,6 +50,6 @@ export default function CotizarPlaceholderPage() {
           </CardContent>
         </Card>
       </Stack>
-    </Box>
+    </PageContainer>
   );
 }

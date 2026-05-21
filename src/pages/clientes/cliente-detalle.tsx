@@ -211,7 +211,7 @@ export default function ClienteDetallePage() {
   }
 
   return (
-    <Stack spacing={3} sx={{ maxWidth: 900, mx: "auto", p: { xs: 2, sm: 3 } }}>
+    <Stack spacing={3} sx={{ maxWidth: 900, mx: "auto", width: "100%" }}>
       <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
         <Button component={Link} to="/clientes" color="inherit" size="small">
           ← Clientes

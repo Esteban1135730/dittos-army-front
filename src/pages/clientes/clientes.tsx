@@ -29,6 +29,11 @@ import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
+import { PageContainer } from "../../components/layout/page-container";
+import {
+  ResponsiveDataGridShell,
+  dataGridTableSx,
+} from "../../components/layout/responsive-data-grid";
 
 export type { ClientItem } from "./cliente-types";
 
@@ -250,7 +255,8 @@ export default function ClientesPage() {
   }
 
   return (
-    <Stack spacing={2.5} sx={{ maxWidth: 960, mx: "auto", p: { xs: 2, sm: 3 } }}>
+    <PageContainer maxWidth={960}>
+    <Stack spacing={2.5}>
       <Stack
         direction={{ xs: "column", sm: "row" }}
         alignItems={{ xs: "stretch", sm: "center" }}
@@ -285,15 +291,7 @@ export default function ClientesPage() {
         Pulsa una fila para abrir el <strong>detalle</strong> (pedido, historial, notas, finalizar venta).
       </Typography>
 
-      <Stack
-        sx={{
-          bgcolor: "background.paper",
-          borderRadius: 2,
-          border: 1,
-          borderColor: "divider",
-          overflow: "hidden",
-        }}
-      >
+      <ResponsiveDataGridShell minWidth={{ xs: 560, sm: 720 }}>
         <DataGrid
           rows={sortedClientes}
           columns={columns}
@@ -308,14 +306,13 @@ export default function ClientesPage() {
           autoHeight
           rowHeight={72}
           sx={{
-            border: 0,
+            ...dataGridTableSx,
             cursor: "pointer",
-            "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
             "& .row-pedido-alerta": { backgroundColor: "rgba(251, 191, 36, 0.16)" },
             "& .row-pedido-critico": { backgroundColor: "rgba(248, 113, 113, 0.2)" },
           }}
         />
-      </Stack>
+      </ResponsiveDataGridShell>
 
       <ClienteFormDialog
         open={nuevoOpen}
@@ -339,5 +336,6 @@ export default function ClientesPage() {
         </Alert>
       </Snackbar>
     </Stack>
+    </PageContainer>
   );
 }

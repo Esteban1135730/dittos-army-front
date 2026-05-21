@@ -11,6 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
+import { PageContainer } from "../../components/layout/page-container";
 
 type HubCard = {
   title: string;
@@ -204,8 +205,13 @@ function SectionCards({
 
 export default function Home() {
   return (
-    <Box>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 0.5 }}>
+    <PageContainer>
+      <Typography
+        variant="h4"
+        component="h1"
+        gutterBottom
+        sx={{ mb: 0.5, fontSize: { xs: "1.5rem", sm: "1.75rem" } }}
+      >
         Inicio
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3, maxWidth: 820 }}>
@@ -219,7 +225,7 @@ export default function Home() {
         si prefieres los mismos accesos en una sola vista.
       </Typography>
 
-      <Alert severity="info" sx={{ mb: 4, maxWidth: 900 }}>
+      <Alert severity="info" sx={{ mb: 4 }}>
         <Typography variant="subtitle2" gutterBottom>
           Resumen rápido
         </Typography>
@@ -305,6 +311,6 @@ export default function Home() {
           <SectionCards key={section.label} label={section.label} items={section.items} />
         ))}
       </Stack>
-    </Box>
+    </PageContainer>
   );
 }

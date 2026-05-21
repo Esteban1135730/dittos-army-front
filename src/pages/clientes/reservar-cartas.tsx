@@ -408,7 +408,7 @@ export default function ReservarCartasPage() {
   }
 
   return (
-    <Stack spacing={3} sx={{ maxWidth: 1100, mx: "auto", p: { xs: 2, sm: 3 } }}>
+    <Stack spacing={3} sx={{ maxWidth: 1100, mx: "auto", width: "100%" }}>
       <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
         <Button
           color="inherit"

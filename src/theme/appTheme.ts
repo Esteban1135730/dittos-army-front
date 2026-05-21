@@ -24,7 +24,7 @@ export const appTheme = createTheme({
   typography: {
     fontFamily:
       '"DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif',
-    h4: { fontWeight: 700 },
+    h4: { fontWeight: 700, fontSize: "1.75rem" },
     h5: { fontWeight: 600 },
     h6: { fontWeight: 600 },
     subtitle1: { fontWeight: 500 },
@@ -33,10 +33,37 @@ export const appTheme = createTheme({
   shape: {
     borderRadius: 10,
   },
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 900,
+      lg: 1200,
+      xl: 1536,
+    },
+  },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: {
+          scrollBehavior: "smooth",
+        },
+        body: {
+          overflowX: "hidden",
+        },
+        "#root": {
+          minHeight: "100vh",
+        },
+      },
+    },
     MuiButton: {
       defaultProps: {
         disableElevation: true,
+      },
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+        },
       },
     },
     MuiCard: {
@@ -50,9 +77,26 @@ export const appTheme = createTheme({
     },
     MuiPaper: {
       styleOverrides: {
+        root: {
+          backgroundImage: "none",
+        },
         rounded: {
           borderRadius: 12,
         },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          margin: 16,
+          width: "calc(100% - 32px)",
+          maxWidth: "calc(100% - 32px)",
+        },
+      },
+    },
+    MuiAppBar: {
+      defaultProps: {
+        elevation: 0,
       },
     },
   },

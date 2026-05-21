@@ -266,20 +266,21 @@ export default function SalesHistory() {
     );
 
   return (
-    <div className="w-full p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Histórico de Ventas</h1>
+    <div className="w-full max-w-[1400px] mx-auto">
+      <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-gray-800">Histórico de Ventas</h1>
       <p className="text-gray-600 mb-6">
         Ventas de ciclos cerrados. Solo consulta; no se incluyen en el cálculo de ganancias del
         dashboard actual.
       </p>
 
-      <div style={{ height: "70vh", width: "100%" }}>
+      <div className="w-full min-h-[50vh]">
         {sales.length === 0 ? (
           <p className="text-center text-gray-500 mt-8">
             No hay ventas en el histórico aún. Al cerrar un ciclo desde el dashboard, las ventas
             aparecerán aquí.
           </p>
         ) : (
+          <div className="w-full overflow-x-auto">
           <DataGrid
             rows={sales.filter((sale) => sale && sale._id && sale.stock_info)}
             columns={columns}
@@ -292,7 +293,9 @@ export default function SalesHistory() {
             }}
             pagination
             disableRowSelectionOnClick
+            sx={{ minWidth: 720, border: 0 }}
           />
+          </div>
         )}
       </div>
     </div>

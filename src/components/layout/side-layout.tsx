@@ -1,16 +1,20 @@
 import type { ReactNode } from "react";
-import { Fragment } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
+  AppBar,
   Box,
   Divider,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemText,
   ListSubheader,
   Toolbar,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import EuroToCOPConverter from "../../utils/tasa";
 
@@ -19,9 +23,7 @@ const DRAWER_WIDTH = 288;
 type NavEntry = {
   to: string;
   label: string;
-  /** Texto pequeño que explica qué hace esta pantalla */
   secondary?: string;
-  /** Solo coincide ruta exacta */
   end?: boolean;
 };
 
@@ -157,7 +159,15 @@ const SECTIONS: NavSection[] = [
   },
 ];
 
-function SidebarNav() {
+function MenuIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
+    </svg>
+  );
+}
+
+function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <List dense disablePadding sx={{ px: 1, pb: 2 }}>
       {SECTIONS.map((section) => (
@@ -178,11 +188,12 @@ function SidebarNav() {
           </ListSubheader>
           {section.items.map((item) => (
             <ListItemButton
-              key={item.to}
+              key={`${section.title}-${item.to}-${item.label}`}
               component={NavLink}
               to={item.to}
               end={item.end ?? false}
               alignItems="flex-start"
+              onClick={onNavigate}
               sx={{
                 borderRadius: 1,
                 mb: 0.5,
@@ -206,16 +217,18 @@ function SidebarNav() {
               <ListItemText
                 primary={item.label}
                 secondary={item.secondary}
-                primaryTypographyProps={{
-                  variant: "body2",
-                  sx: { fontWeight: 600, lineHeight: 1.35 },
-                }}
-                secondaryTypographyProps={{
-                  variant: "caption",
-                  sx: {
-                    mt: 0.35,
-                    lineHeight: 1.35,
-                    opacity: 0.92,
+                slotProps={{
+                  primary: {
+                    variant: "body2",
+                    sx: { fontWeight: 600, lineHeight: 1.35 },
+                  },
+                  secondary: {
+                    variant: "caption",
+                    sx: {
+                      mt: 0.35,
+                      lineHeight: 1.35,
+                      opacity: 0.92,
+                    },
                   },
                 }}
               />
@@ -227,56 +240,120 @@ function SidebarNav() {
   );
 }
 
-export default function SideLayout({ children }: { children: ReactNode }) {
+function DrawerPanel({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      <Drawer
-        variant="permanent"
+    <>
+      <Toolbar
         sx={{
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: {
-            width: DRAWER_WIDTH,
-            boxSizing: "border-box",
-            bgcolor: "primary.dark",
-            color: "grey.100",
-            borderRight: "none",
-          },
+          flexDirection: "column",
+          alignItems: "flex-start",
+          py: 2,
+          gap: 0.5,
+          minHeight: { xs: 64, md: 72 },
         }}
       >
-        <Toolbar
+        <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
+          Ditto Army
+        </Typography>
+        <Typography variant="caption" sx={{ color: "grey.400", lineHeight: 1.45 }}>
+          <strong>Agregar</strong> = alta nueva · <strong>Gestionar</strong> = inventario
+          y PVP · <strong>1→2→3</strong> = atajo al flujo de venta completo.
+        </Typography>
+      </Toolbar>
+      <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+      <Box sx={{ overflow: "auto", flex: 1 }}>
+        <SidebarNav onNavigate={onNavigate} />
+      </Box>
+      <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+      <Box sx={{ p: 2, pb: 3 }}>
+        <EuroToCOPConverter compact />
+      </Box>
+    </>
+  );
+}
+
+const drawerPaperSx = {
+  width: DRAWER_WIDTH,
+  boxSizing: "border-box" as const,
+  bgcolor: "primary.dark",
+  color: "grey.100",
+  borderRight: "none",
+};
+
+export default function SideLayout({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
+
+  return (
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      {!isDesktop && (
+        <AppBar
+          position="fixed"
+          elevation={0}
           sx={{
-            flexDirection: "column",
-            alignItems: "flex-start",
-            py: 2,
-            gap: 0.5,
+            zIndex: (t) => t.zIndex.drawer + 1,
+            bgcolor: "primary.dark",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
           }}
         >
-          <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
-            Ditto Army
-          </Typography>
-          <Typography variant="caption" sx={{ color: "grey.400", lineHeight: 1.45 }}>
-            <strong>Agregar</strong> = alta nueva · <strong>Gestionar</strong> = inventario
-            y PVP · <strong>1→2→3</strong> = atajo al flujo de venta completo.
-          </Typography>
-        </Toolbar>
-        <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
-        <Box sx={{ overflow: "auto", flex: 1 }}>
-          <SidebarNav />
-        </Box>
-        <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
-        <Box sx={{ p: 2, pb: 3 }}>
-          <EuroToCOPConverter />
-        </Box>
-      </Drawer>
+          <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }}>
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Abrir menú de navegación"
+              sx={{ mr: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700, flex: 1 }}>
+              Ditto Army
+            </Typography>
+          </Toolbar>
+        </AppBar>
+      )}
+
+      <Box
+        component="nav"
+        sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
+        aria-label="Navegación principal"
+      >
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={closeMobile}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: "block", md: "none" },
+            "& .MuiDrawer-paper": drawerPaperSx,
+          }}
+        >
+          <DrawerPanel onNavigate={closeMobile} />
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: "none", md: "block" },
+            "& .MuiDrawer-paper": drawerPaperSx,
+          }}
+          open
+        >
+          <DrawerPanel />
+        </Drawer>
+      </Box>
 
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          bgcolor: "background.default",
+          width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          minWidth: 0,
           minHeight: "100vh",
-          p: { xs: 2, sm: 3 },
+          p: { xs: 2, sm: 2.5, md: 3 },
+          pt: { xs: 10, sm: 11, md: 3 },
         }}
       >
         {children}

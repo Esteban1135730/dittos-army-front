@@ -1,5 +1,4 @@
 import {
-  Box,
   Button,
   Card,
   CardContent,
@@ -8,13 +7,14 @@ import {
   Typography,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
+import { PageContainer } from "../../components/layout/page-container";
 
 /**
  * Hub opcional: mismo mapa mental que Inicio y el drawer, en una sola pantalla para formación.
  */
 export default function CartasHubPage() {
   return (
-    <Box sx={{ maxWidth: 720 }}>
+    <PageContainer maxWidth={720}>
       <Typography variant="h4" component="h1" gutterBottom>
         Centro de cartas
       </Typography>
@@ -106,6 +106,6 @@ export default function CartasHubPage() {
           Volver al inicio
         </RouterLink>
       </Typography>
-    </Box>
+    </PageContainer>
   );
 }
