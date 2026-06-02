@@ -7,6 +7,7 @@ import {
   type BatchItemPdf,
   type BatchMetaPdf,
 } from "../export-incoming-batch-pdf";
+import { API_INCOMING } from "../../clientes/cliente-types";
 
 type IncomingBatchItemRow = {
   batch_id: string;
@@ -24,8 +25,6 @@ type IncomingShipRoundRow = {
   status: string;
   created_at: string;
 };
-
-const API_INCOMING = "http://localhost:3000/incoming";
 
 export default function IncomingListPage() {
   const navigate = useNavigate();

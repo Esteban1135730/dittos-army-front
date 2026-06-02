@@ -3,6 +3,7 @@ import axios from "axios";
 import { TextField } from "@mui/material";
 import { useExchangeRates } from "../../../utils/tasa";
 import type { StockListItem } from "../../../types/stock";
+import { apiUrl } from "../../../config/api";
 
 function rarezaFromListRow(item: StockListItem): string | null {
   let rz =
@@ -76,7 +77,7 @@ export function PvpInlineCell({
 
       onBusyChange(true);
       try {
-        await axios.post("http://localhost:3000/pvp", {
+        await axios.post(apiUrl("/pvp"), {
           card_id: row.card_id,
           pvp: nextCop,
           currency: "COP",

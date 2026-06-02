@@ -1,7 +1,9 @@
 import axios from "axios";
 import { formatCOP } from "../../utils/convert";
 
-const API_TCG = "http://localhost:3000/tcg-dex/card/find";
+import { apiUrl } from "../../config/api";
+
+const API_TCG = apiUrl("/tcg-dex/card/find");
 
 type TcgCardLite = { set?: string; name?: string };
 

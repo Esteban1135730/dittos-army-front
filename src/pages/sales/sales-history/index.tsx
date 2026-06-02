@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
+import { API_BASE, apiUrl } from "../../../config/api";
 
 type SaleHistoryItem = {
   _id: string;
@@ -33,7 +34,7 @@ export default function SalesHistory() {
   const handleVolverAVentasActuales = async (saleId: string) => {
     try {
       setVolviendoId(saleId);
-      await axios.post(`http://localhost:3000/sales/reopen/${saleId}`);
+      await axios.post(`${API_BASE}/sales/reopen/${saleId}`);
       await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
     } catch (err: unknown) {
@@ -52,7 +53,7 @@ export default function SalesHistory() {
   } = useQuery<SaleHistoryItem[]>({
     queryKey: ["sales-history"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/history");
+      const res = await axios.get(apiUrl("/sales/history"));
       return res.data;
     },
   });

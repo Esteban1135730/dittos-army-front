@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
 import type { StockListItem } from "../../../types/stock";
+import { API_BASE, apiUrl } from "../../../config/api";
 
 type KeepSale = {
   _id: string;
@@ -26,7 +27,7 @@ export default function PropertyList() {
   const { data: keepCards = [], isLoading } = useQuery<KeepSale[]>({
     queryKey: ["property-cards"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/keep");
+      const res = await axios.get(apiUrl("/sales/keep"));
       return res.data;
     },
   });
@@ -41,7 +42,7 @@ export default function PropertyList() {
 
       try {
         const requests = pendingIds.map((id) =>
-          axios.get(`http://localhost:3000/stock/${id}`)
+          axios.get(`${API_BASE}/stock/${id}`)
         );
         const responses = await Promise.allSettled(requests);
         const updated: Record<string, StockItem> = {};

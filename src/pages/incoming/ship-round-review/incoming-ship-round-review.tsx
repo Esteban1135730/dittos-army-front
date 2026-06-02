@@ -8,6 +8,7 @@ import {
   incomingVariantGroupKey,
   weightedAverageUnitCostCop,
 } from "../../incoming/incoming-variant-group";
+import { API_INCOMING } from "../../clientes/cliente-types";
 
 type IncomingShipRoundReviewItem = {
   batch_item_id: string;
@@ -55,8 +56,6 @@ function groupNotesDisplay(
   }
   return "";
 }
-
-const API_INCOMING = "http://localhost:3000/incoming";
 
 /** Enteros >= 0 (permite 0 explícito). */
 function parseNonNegativeInt(v: string): number {

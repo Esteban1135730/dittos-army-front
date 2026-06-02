@@ -6,7 +6,7 @@ import {
   operationalRarezaLabel,
 } from "../../../constants/item-rareza";
 
-const API = "http://localhost:3000";
+import { API_BASE as API } from "../../../config/api";
 
 export type CartaBusquedaDirecta = {
   id: string;

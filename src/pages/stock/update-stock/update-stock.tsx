@@ -12,6 +12,7 @@ import {
   STOCK_TAG_VALUES,
   type StockTagId,
 } from "../../../constants/stock-tags";
+import { API_BASE } from "../../../config/api";
 
 export default function ModificarStock() {
   const { id } = useParams();
@@ -20,7 +21,7 @@ export default function ModificarStock() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["stock", id],
     queryFn: async () => {
-      const res = await axios.get(`http://localhost:3000/stock/${id}`);
+      const res = await axios.get(`${API_BASE}/stock/${id}`);
       return res.data;
     },
     enabled: !!id,
@@ -54,7 +55,7 @@ export default function ModificarStock() {
 
   const mutation = useMutation({
     mutationFn: async (nuevo: UpdateStockRequestBody) => {
-      const res = await axios.post(`http://localhost:3000/stock/update`, nuevo);
+      const res = await axios.post(`${API_BASE}/stock/update`, nuevo);
       return res.data;
     },
     onSuccess: () => {

@@ -1,3 +1,5 @@
+import { apiUrl } from "../../config/api";
+
 /** Tipos compartidos del módulo Clientes (panel). */
 
 export type ClientItem = {
@@ -56,11 +58,11 @@ export const formFromClient = (c: ClientItem): ClienteFormState => ({
   notas: c.notas ?? "",
 });
 
-export const API_CLIENT = "http://localhost:3000/client";
-export const API_RESERVA = "http://localhost:3000/reserva";
-export const API_STOCK = "http://localhost:3000/stock";
-export const API_SALES = "http://localhost:3000/sales";
-export const API_INCOMING = "http://localhost:3000/incoming";
+export const API_CLIENT = apiUrl("/client");
+export const API_RESERVA = apiUrl("/reserva");
+export const API_STOCK = apiUrl("/stock");
+export const API_SALES = apiUrl("/sales");
+export const API_INCOMING = apiUrl("/incoming");
 
 export type ImportWhatsAppLineResult = {
   index: number;

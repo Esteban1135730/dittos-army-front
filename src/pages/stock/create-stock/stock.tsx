@@ -8,10 +8,12 @@ import {
   STOCK_TAG_VALUES,
   type StockTagId,
 } from "../../../constants/stock-tags";
+import { API_BASE } from "../../../config/api";
 
 export type Expansion = {
   id: string;
   name: string;
+  englishName?: string;
   series: string;
   printedTotal: number;
   total: number;
@@ -25,6 +27,13 @@ export type CartaBusquedaDirecta = {
   name: string;
   image: string;
 };
+
+const CATALOG_LOCALES = [
+  { value: 'en', label: 'EN (Inglés)' },
+  { value: 'ja', label: 'JP (Japonés)' },
+  { value: 'ko', label: 'KR (Coreano)' },
+  { value: 'zh-cn', label: 'ZH (Chino simplificado)' },
+] as const;
 
 export default function Stock() {
   // Estado para seleccionar modo de búsqueda
@@ -40,7 +49,8 @@ export default function Stock() {
   const [cartasEnvio, setCartasEnvio] = useState<number>(1);
   const [copias, setCopias] = useState<number>(1);
   const [cardState, setCardState] = useState<string>("near_mint");
-  const [language, setLanguage] = useState<string>("");
+  const [catalogLocale, setCatalogLocale] = useState<string>("en");
+  const [language, setLanguage] = useState<string>("en");
   /** "" = sin variante (mismo catálogo que incoming / PVP) */
   const [operationalRareza, setOperationalRareza] = useState<string>("");
   const [stockTags, setStockTags] = useState<StockTagId[]>([]);
@@ -57,9 +67,11 @@ export default function Stock() {
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const { data: expansiones = [], isLoading: cargandoExpansiones } = useQuery({
-    queryKey: ["expansiones"],
+    queryKey: ["expansiones", catalogLocale],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/tcg-dex/set");
+      const res = await axios.get(`${API_BASE}/tcg-dex/set`, {
+        params: { locale: catalogLocale },
+      });
       return Array.isArray(res.data) ? res.data : [];
     },
     staleTime: Infinity,
@@ -71,11 +83,14 @@ export default function Stock() {
     isLoading: cargandoCartas,
     isFetching: buscandoCartas,
   } = useQuery({
-    queryKey: ["cartas", expansionSeleccionada],
+    queryKey: ["cartas", expansionSeleccionada, catalogLocale],
     queryFn: async () => {
       if (!expansionSeleccionada) return [];
       const res = await axios.get(
-        `http://localhost:3000/tcg-dex/set/${expansionSeleccionada}/cards`
+        `${API_BASE}/tcg-dex/set/${expansionSeleccionada}/cards`,
+        {
+          params: { locale: catalogLocale },
+        }
       );
       if (Array.isArray(res.data)) return res.data;
       if (Array.isArray(res.data.cards)) return res.data.cards;
@@ -116,9 +131,16 @@ export default function Stock() {
 
   const expansionesFiltradas = expansiones.filter(
     (exp) =>
+      (exp.englishName ?? exp.name)
+        .toLowerCase()
+        .includes(filtroExpansion.toLowerCase()) ||
       exp.name.toLowerCase().includes(filtroExpansion.toLowerCase()) ||
       exp.ptcgoCode?.toLowerCase().includes(filtroExpansion.toLowerCase())
   );
+  const expansionDisplayName = (exp: Expansion): string => {
+    return exp.englishName?.trim() || exp.name;
+  };
+
 
   // ------------------ MODO DIRECTO ------------------
   const [nombreCarta, setNombreCarta] = useState("");
@@ -135,9 +157,12 @@ export default function Stock() {
     setErrorBusqueda("");
     try {
       const res = await axios.get<CartaBusquedaDirecta[]>(
-        `http://localhost:3000/tcg-dex/card/search/${encodeURIComponent(
+        `${API_BASE}/tcg-dex/card/search/${encodeURIComponent(
           nombreCarta
-        )}`
+        )}`,
+        {
+          params: { locale: catalogLocale },
+        }
       );
 
       const data = res.data;
@@ -147,7 +172,7 @@ export default function Stock() {
         setResultadosCarta([]);
         setErrorBusqueda("No se encontraron cartas.");
       }
-    } catch (err) {
+    } catch {
       setErrorBusqueda("Error al buscar la carta.");
       setResultadosCarta([]);
     } finally {
@@ -178,7 +203,7 @@ export default function Stock() {
       shipment: costoEnvio,
       unity_cost: costoCarta,
       cards_in_shipmet: cartasEnvio,
-      image_url: (cartaSeleccionada as any)?.image || "",
+      image_url: cartaSeleccionada.image || "",
       currency: currency,
       card_state: cardState,
     };
@@ -199,7 +224,7 @@ export default function Stock() {
 
       // Ejecutar múltiples peticiones
       const peticiones = Array.from({ length: copias }).map(() =>
-        axios.post("http://localhost:3000/stock", body)
+        axios.post(`${API_BASE}/stock`, body)
       );
 
       await Promise.all(peticiones);
@@ -212,7 +237,7 @@ export default function Stock() {
         setCartaSeleccionada(null);
         setMensaje("");
       }, 1500);
-    } catch (err) {
+    } catch {
       setMensaje("❌ Error al guardar una o más copias.");
     } finally {
       setGuardando(false);
@@ -244,6 +269,32 @@ export default function Stock() {
           <option value="directa">Buscar por nombre de carta</option>
         </select>
       </div>
+      <div className="mb-6">
+        <label className="block mb-2 font-medium text-gray-700">
+          Idioma del catálogo TCGdex:
+        </label>
+        <select
+          value={catalogLocale}
+          onChange={(e) => {
+            const next = e.target.value;
+            setCatalogLocale(next);
+            setLanguage(next);
+            setExpansionSeleccionada("");
+            setExpansion(null);
+            setFiltroExpansion("");
+            setBusqueda("");
+            setResultadosCarta([]);
+            setCartaSeleccionada(null);
+          }}
+          className="px-4 py-2 border border-gray-300 rounded-lg"
+        >
+          {CATALOG_LOCALES.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* ------------------ MODO EXPANSIÓN ------------------ */}
       {modoBusqueda === "expansion" && (
@@ -273,13 +324,17 @@ export default function Stock() {
                       onClick={() => {
                         setExpansionSeleccionada(exp.id);
                         setExpansion(exp);
-                        setFiltroExpansion(exp.ptcgoCode ? `${exp.name} (${exp.ptcgoCode})` : exp.name);
+                        const label = expansionDisplayName(exp);
+                        setFiltroExpansion(
+                          exp.ptcgoCode ? `${label} (${exp.ptcgoCode})` : label
+                        );
                         setMostrarLista(false);
                         setCartaSeleccionada(null);
                       }}
                       className="px-4 py-2 cursor-pointer hover:bg-blue-100"
                     >
-                      {exp.name}{exp.ptcgoCode ? ` (${exp.ptcgoCode})` : ''}
+                      {expansionDisplayName(exp)}
+                      {exp.ptcgoCode ? ` (${exp.ptcgoCode})` : ""}
                     </li>
                   ))
                 ) : (

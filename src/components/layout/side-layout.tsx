@@ -43,6 +43,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             Cotizar carta
           </Link>
           <Link
+            to="/cotizar/pedido-cliente"
+            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
+          >
+            Pedido CardTrader
+          </Link>
+          <Link
             to="/ventas"
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >
@@ -77,6 +83,12 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             className="block py-2 px-3 rounded hover:bg-gray-700"
           >
             Imprimir pedidos
+          </Link>
+          <Link
+            to="/escanear-codigo"
+            className="block py-2 px-3 rounded hover:bg-gray-700"
+          >
+            Escanear código de barras
           </Link>
           <EuroToCOPConverter />
         </nav>

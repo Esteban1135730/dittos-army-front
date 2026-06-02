@@ -5,6 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
 import { operationalRarezaLabel } from "../../../constants/item-rareza";
+import { API_BASE, apiUrl } from "../../../config/api";
 
 /** Respuesta estándar de carta desde TCGdex (mapeada en backend) */
 type CardDetail = {
@@ -78,7 +79,7 @@ export default function AsignarPVP() {
     useQuery<StockGroupResponse>({
       queryKey: ["group", id],
       queryFn: async () => {
-        const res = await axios.get(`http://localhost:3000/stock/group/${id}`);
+        const res = await axios.get(`${API_BASE}/stock/group/${id}`);
         return res.data;
       },
       enabled: !!id,
@@ -87,7 +88,7 @@ export default function AsignarPVP() {
   const { data: cardData, isLoading: loadingCard, isError: cardError, error: cardQueryError } = useQuery<CardDetail>({
     queryKey: ["cardDetail", id],
     queryFn: async () => {
-      const url = `http://localhost:3000/card/${id}`;
+      const url = `${API_BASE}/card/${id}`;
       try {
         const res = await axios.get<CardDetail | null>(url);
         if (res.data === null || res.data === undefined) {
@@ -116,7 +117,7 @@ export default function AsignarPVP() {
   const { data: pvpRows } = useQuery<PvpCardRow[]>({
     queryKey: ["pvp-rows", id],
     queryFn: async () => {
-      const res = await axios.get<PvpCardRow[]>(`http://localhost:3000/pvp/${id}`);
+      const res = await axios.get<PvpCardRow[]>(`${API_BASE}/pvp/${id}`);
       return Array.isArray(res.data) ? res.data : [];
     },
     enabled: !!id,
@@ -263,7 +264,7 @@ export default function AsignarPVP() {
           : selectedOpRareza === undefined
             ? rowsWithStock[0]?.rareza ?? null
             : selectedOpRareza;
-      await axios.post("http://localhost:3000/pvp", {
+      await axios.post(apiUrl("/pvp"), {
         card_id: id,
         pvp: Number(pvp),
         currency,

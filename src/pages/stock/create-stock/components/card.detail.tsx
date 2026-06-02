@@ -180,7 +180,7 @@ export default function CardDetail({
             <option value="pt">Portugués</option>
             <option value="ja">Japonés</option>
             <option value="ko">Coreano</option>
-            <option value="zh">Chino</option>
+            <option value="zh-cn">Chino (simplificado)</option>
             <option value="otro">Otro</option>
           </select>
         </div>

@@ -3,6 +3,7 @@ import axios from "axios";
 import { formatCOP } from "../../../utils/convert";
 import { useState } from "react";
 import { useExchangeRates } from "../../../utils/tasa";
+import { apiUrl } from "../../../config/api";
 
 type OnlyInStockRow = {
   _id: string;
@@ -52,7 +53,7 @@ export default function SalesConsistency() {
   const { data, isLoading, error } = useQuery<ConsistencyResponse>({
     queryKey: ["sales-consistency"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/consistency");
+      const res = await axios.get(apiUrl("/sales/consistency"));
       return res.data;
     },
   });
@@ -62,7 +63,7 @@ export default function SalesConsistency() {
     setRegisteringStockId(row.stock_id);
     try {
       const res = await axios.post<{ success: boolean; message?: string }>(
-        "http://localhost:3000/sales/register-from-stock-with-pvp",
+        apiUrl("/sales/register-from-stock-with-pvp"),
         { stock_id: row.stock_id }
       );
       if (res.data.success) {
@@ -117,7 +118,7 @@ export default function SalesConsistency() {
     setErrorPrecioManual(null);
     setGuardandoManual(true);
     try {
-      await axios.post("http://localhost:3000/sales/sell", {
+      await axios.post(apiUrl("/sales/sell"), {
         stock_id: modalPrecioManual.stock_id,
         card_id: modalPrecioManual.card_id,
         amount_cop: Math.round(amountCop),

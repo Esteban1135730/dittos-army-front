@@ -25,6 +25,11 @@ import {
   type StockTagId,
 } from "../../../constants/stock-tags";
 import { PvpInlineCell } from "./pvp-inline-cell";
+import { API_BASE, apiUrl } from "../../../config/api";
+import {
+  openStockBarcodeLabelsPrintWindow,
+  type StockBarcodeExportRow,
+} from "../../../modules/stock-barcode";
 
 export type StockItem = StockListItem;
 
@@ -156,7 +161,7 @@ export default function StockGrid() {
   } = useQuery<StockItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/stock");
+      const res = await axios.get(apiUrl("/stock"));
       return Array.isArray(res.data)
         ? res.data.filter(
           (stockItem) =>
@@ -302,7 +307,7 @@ export default function StockGrid() {
     try {
       setMarcandoPropiedad(stockId);
       setErrorPropiedad("");
-      await axios.post("http://localhost:3000/sales/keep", {
+      await axios.post(apiUrl("/sales/keep"), {
         stock_id: stockId,
         card_id: cardId,
       });
@@ -358,7 +363,7 @@ export default function StockGrid() {
     setTagSavingRowId(row._id);
     try {
       await axios.post(
-        "http://localhost:3000/stock/update",
+        apiUrl("/stock/update"),
         listRowToUpdateBody(row, nextTags)
       );
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
@@ -386,7 +391,7 @@ export default function StockGrid() {
     setDeleteDialogError("");
     try {
       await axios.delete(
-        `http://localhost:3000/stock/${encodeURIComponent(deleteTarget._id)}`
+        `${API_BASE}/stock/${encodeURIComponent(deleteTarget._id)}`
       );
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       setDeleteTarget(null);
@@ -420,7 +425,7 @@ export default function StockGrid() {
     try {
       setVendiendo(true);
       setErrorVenta("");
-      await axios.post("http://localhost:3000/sales/sell", {
+      await axios.post(apiUrl("/sales/sell"), {
         stock_id: ventaStockId,
         card_id: ventaCardId,
         amount_cop: Number(precioVenta),
@@ -737,6 +742,7 @@ export default function StockGrid() {
   ];
 
   const [exportando, setExportando] = useState(false);
+  const [exportandoBarcode, setExportandoBarcode] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
   const [limpiandoPvp, setLimpiandoPvp] = useState(false);
   const [actualizandoTienda, setActualizandoTienda] = useState(false);
@@ -749,7 +755,7 @@ export default function StockGrid() {
 
     try {
       setLimpiandoPvp(true);
-      const res = await axios.delete("http://localhost:3000/pvp");
+      const res = await axios.delete(apiUrl("/pvp"));
       const deleted = res.data?.deletedCount ?? 0;
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       if (deleted > 0) {
@@ -771,6 +777,25 @@ export default function StockGrid() {
     );
   };
 
+  const handleExportarBarcode = async () => {
+    try {
+      setExportandoBarcode(true);
+      const res = await axios.get<StockBarcodeExportRow[]>(
+        apiUrl("/stock/barcode-export"),
+      );
+      const rows = Array.isArray(res.data) ? res.data : [];
+      openStockBarcodeLabelsPrintWindow(rows);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "No se pudieron generar las etiquetas de barras.";
+      window.alert(msg);
+    } finally {
+      setExportandoBarcode(false);
+    }
+  };
+
   const handleImprimirCatalogo = () => {
     setImprimiendo(true);
     exportCatalogToPDF(
@@ -785,8 +810,8 @@ export default function StockGrid() {
     try {
       setActualizandoTienda(true);
       const [invRes, upRes] = await Promise.all([
-        axios.post("http://localhost:3000/stock/export-store-inventory"),
-        axios.post("http://localhost:3000/stock/export-store-upcoming"),
+        axios.post(apiUrl("/stock/export-store-inventory")),
+        axios.post(apiUrl("/stock/export-store-upcoming")),
       ]);
       const inv = invRes.data;
       const up = upRes.data;
@@ -910,6 +935,16 @@ export default function StockGrid() {
                   Generando PDF...
                 </div>
               )}
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => void handleExportarBarcode()}
+                disabled={exportandoBarcode}
+                className="bg-violet-600 text-white px-4 py-2 rounded hover:bg-violet-700 disabled:opacity-60"
+              >
+                {exportandoBarcode ? "Generando…" : "Exportar códigos de barras"}
+              </button>
             </div>
             <div className="relative">
               <button

@@ -1,6 +1,11 @@
 import axios from "axios";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../../../config/api";
+import { API_INCOMING } from "../../clientes/cliente-types";
+
+const API_TCG_SEARCH = apiUrl("/tcg-dex/card/search");
+const API_TCG_FIND = apiUrl("/tcg-dex/card/find");
 
 type CartaBusquedaDirecta = {
   id: string;
@@ -101,10 +106,6 @@ async function fetchTcgDexCard(
     return null;
   }
 }
-
-const API_TCG_SEARCH = "http://localhost:3000/tcg-dex/card/search";
-const API_TCG_FIND = "http://localhost:3000/tcg-dex/card/find";
-const API_INCOMING = "http://localhost:3000/incoming";
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "es", label: "Español" },

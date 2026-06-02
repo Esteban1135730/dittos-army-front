@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { exportIncomingBatchToPdf } from "../export-incoming-batch-pdf";
 import SimulateRealCardPriceDialog from "../simulate-real-card-price-dialog";
+import { API_INCOMING } from "../../clientes/cliente-types";
 
 type IncomingBatchItemRow = {
   batch_item_id: string;
@@ -31,8 +32,6 @@ type IncomingBatchMeta = {
   real_euro_rate_cop_per_eur: number;
   created_at: string;
 };
-
-const API_INCOMING = "http://localhost:3000/incoming";
 
 export default function IncomingBatchRoundsPage() {
   const { batchId } = useParams<{ batchId: string }>();

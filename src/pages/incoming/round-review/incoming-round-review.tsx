@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { API_INCOMING } from "../../clientes/cliente-types";
 
 type IncomingRoundReviewItem = {
   batch_item_id: string;
@@ -25,8 +26,6 @@ type IncomingRoundReviewResponse = {
   arrived_total_quantity: number;
   items: IncomingRoundReviewItem[];
 };
-
-const API_INCOMING = "http://localhost:3000/incoming";
 
 function parseIntOrZero(v: string): number {
   const n = parseInt(v, 10);

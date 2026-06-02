@@ -19,6 +19,9 @@ import IncomingCreatePage from "./pages/incoming/create/incoming-create";
 import IncomingBatchRoundsPage from "./pages/incoming/batch-rounds/incoming-batch-rounds";
 import IncomingRoundReviewPage from "./pages/incoming/round-review/incoming-round-review";
 import IncomingShipRoundReviewPage from "./pages/incoming/ship-round-review/incoming-ship-round-review";
+import CotizarCardtraderPage from "./pages/cotizar/cotizar-cardtrader-page";
+import CotizarPedidoClientePage from "./pages/cotizar/cotizar-pedido-cliente-page";
+import EscanearCodigoPage from "./pages/herramientas/escanear-codigo-page";
 
 export default function AppRouter() {
   return (
@@ -115,7 +118,15 @@ export default function AppRouter() {
         path="/cotizar"
         element={
           <SideLayout>
-            <div>2</div>
+            <CotizarCardtraderPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/cotizar/pedido-cliente"
+        element={
+          <SideLayout>
+            <CotizarPedidoClientePage />
           </SideLayout>
         }
       />
@@ -183,6 +194,7 @@ export default function AppRouter() {
           </SideLayout>
         }
       />
+      <Route path="/escanear-codigo" element={<EscanearCodigoPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

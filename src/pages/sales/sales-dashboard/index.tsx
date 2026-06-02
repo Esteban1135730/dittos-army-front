@@ -5,6 +5,7 @@ import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
 import type { StockListItem } from "../../../types/stock";
+import { API_BASE, apiUrl } from "../../../config/api";
 
 type SaleWithStock = {
   _id: string;
@@ -47,7 +48,7 @@ export default function SalesDashboard() {
   } = useQuery<SaleWithStock[]>({
     queryKey: ["sales-dashboard"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/sales/dashboard");
+      const res = await axios.get(apiUrl("/sales/dashboard"));
       return res.data;
     },
   });
@@ -58,7 +59,7 @@ export default function SalesDashboard() {
   } = useQuery<StockListItem[]>({
     queryKey: ["stock-for-dashboard"],
     queryFn: async () => {
-      const res = await axios.get("http://localhost:3000/stock");
+      const res = await axios.get(apiUrl("/stock"));
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -170,7 +171,7 @@ export default function SalesDashboard() {
     try {
       setEditando(true);
       setErrorEditar("");
-      await axios.put(`http://localhost:3000/sales/${ventaEditando._id}`, {
+      await axios.put(`${API_BASE}/sales/${ventaEditando._id}`, {
         amount_cop: Number(precioVentaEditado),
         notes: notasEditadas,
       });
@@ -198,7 +199,7 @@ export default function SalesDashboard() {
         success: boolean;
         closed?: boolean;
         message?: string;
-      }>(`http://localhost:3000/sales/finalize-cycle/${ventaId}`);
+      }>(`${API_BASE}/sales/finalize-cycle/${ventaId}`);
 
       if (!res.data.success) {
         alert(res.data.message ?? "No se pudo finalizar el ciclo de esta venta.");
@@ -230,7 +231,7 @@ export default function SalesDashboard() {
 
     try {
       setDeshaciendo(ventaId);
-      await axios.delete(`http://localhost:3000/sales/${ventaId}`);
+      await axios.delete(`${API_BASE}/sales/${ventaId}`);
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
@@ -249,7 +250,7 @@ export default function SalesDashboard() {
       setCerrandoCiclo(true);
       setMensajeCierreCiclo(null);
       const res = await axios.post<{ success: boolean; closedCount?: number; message?: string }>(
-        "http://localhost:3000/sales/close-cycle"
+        apiUrl("/sales/close-cycle")
       );
       if (res.data.success) {
         const count = res.data.closedCount ?? 0;

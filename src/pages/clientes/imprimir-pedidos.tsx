@@ -10,6 +10,7 @@ import {
   useClearEtiquetasReservaPrintMode,
 } from "./etiquetas-reserva-print";
 import { paginatePedidoLineItems } from "./pedido-print-sheets";
+import { API_CLIENT, API_RESERVA, API_STOCK } from "./cliente-types";
 
 type ClientItem = {
   _id: string;
@@ -34,10 +35,6 @@ type PedidoCard = {
   items: { nombre: string; precio: number }[];
   total: number;
 };
-
-const API_CLIENT = "http://localhost:3000/client";
-const API_RESERVA = "http://localhost:3000/reserva";
-const API_STOCK = "http://localhost:3000/stock";
 
 const CARD_WIDTH_MM = 63;
 const CARD_HEIGHT_MM = 88;
