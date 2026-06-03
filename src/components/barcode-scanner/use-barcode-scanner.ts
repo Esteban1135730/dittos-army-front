@@ -2,22 +2,12 @@ import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatMediaError, isZxingNotFoundError } from "../../utils/format-media-error";
-import { logBarcodeScan } from "../../utils/barcode-scan-debug";
 
-/** Formatos 1D habituales en pistolas y etiquetas Code 128. */
-function createLinearBarcodeReader(): BrowserMultiFormatReader {
+/** Formatos QR para pistola y cámara. */
+function createQrReader(): BrowserMultiFormatReader {
   const hints = new Map();
   hints.set(DecodeHintType.TRY_HARDER, true);
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.CODE_128,
-    BarcodeFormat.CODE_39,
-    BarcodeFormat.EAN_13,
-    BarcodeFormat.EAN_8,
-    BarcodeFormat.UPC_A,
-    BarcodeFormat.UPC_E,
-    BarcodeFormat.ITF,
-    BarcodeFormat.QR_CODE,
-  ]);
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
   return new BrowserMultiFormatReader(hints);
 }
 
@@ -88,7 +78,6 @@ export function useBarcodeScanner({ enabled, onScan }: UseBarcodeScannerOptions)
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      logBarcodeScan("camera", "no_getUserMedia");
       setErrorMessage(
         "Este navegador no permite acceder a la cámara. Prueba Chrome o Safari actualizado.",
       );
@@ -99,37 +88,30 @@ export function useBarcodeScanner({ enabled, onScan }: UseBarcodeScannerOptions)
     cleanup();
     setErrorMessage(null);
     setStatus("starting");
-    logBarcodeScan("camera", "starting");
 
-    const reader = createLinearBarcodeReader();
+    const reader = createQrReader();
     readerRef.current = reader;
 
     const onDecode = (result: { getText(): string; getBarcodeFormat(): unknown } | undefined, err: unknown) => {
       if (!aliveRef.current) return;
-          if (result) {
-            try {
-              const text = result.getText();
-              const format = String(result.getBarcodeFormat());
-              logBarcodeScan("camera", "decoded", { format, text });
-              cleanup();
-              setStatus("paused");
-              onScanRef.current(text, format);
-            } catch (e) {
-              if (isZxingNotFoundError(e)) return;
-              logBarcodeScan("camera", "decode_handler_error", e);
-              const msg = formatMediaError(e);
-              if (!msg) return;
-              setErrorMessage(msg);
-              setStatus("error");
-            }
-            return;
-          }
-          if (err && !isZxingNotFoundError(err)) {
-            logBarcodeScan("camera", "frame_error", {
-              name: (err as { name?: string }).name,
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }
+      if (result) {
+        try {
+          const text = result.getText();
+          cleanup();
+          setStatus("paused");
+          onScanRef.current(text, String(result.getBarcodeFormat()));
+        } catch (e) {
+          if (isZxingNotFoundError(e)) return;
+          const msg = formatMediaError(e);
+          if (!msg) return;
+          setErrorMessage(msg);
+          setStatus("error");
+        }
+        return;
+      }
+      if (err && !isZxingNotFoundError(err)) {
+        /* frame sin código; ignorar */
+      }
     };
 
     try {
@@ -146,11 +128,7 @@ export function useBarcodeScanner({ enabled, onScan }: UseBarcodeScannerOptions)
             onDecode,
           );
         } catch {
-          controls = await reader.decodeFromConstraints(
-            { video: true },
-            video,
-            onDecode,
-          );
+          controls = await reader.decodeFromConstraints({ video: true }, video, onDecode);
         }
       }
 
@@ -161,14 +139,9 @@ export function useBarcodeScanner({ enabled, onScan }: UseBarcodeScannerOptions)
 
       controlsRef.current = controls;
       setStatus("scanning");
-      logBarcodeScan("camera", "scanning");
     } catch (e) {
       if (!aliveRef.current) return;
-      if (isZxingNotFoundError(e)) {
-        logBarcodeScan("camera", "start_not_found_ignored", e);
-        return;
-      }
-      logBarcodeScan("camera", "start_failed", e);
+      if (isZxingNotFoundError(e)) return;
       const msg = formatMediaError(e);
       if (msg) {
         setErrorMessage(msg);
@@ -190,7 +163,6 @@ export function useBarcodeScanner({ enabled, onScan }: UseBarcodeScannerOptions)
       };
     }
 
-    // Esperar a que el <video> exista en el DOM (StrictMode monta dos veces).
     const timer = window.setTimeout(() => {
       void start();
     }, 300);

@@ -1,101 +1,121 @@
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import EuroToCOPConverter from "../../utils/tasa";
+import { useState, type ReactNode } from "react";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Drawer from "@mui/material/Drawer";
+import IconButton from "@mui/material/IconButton";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+import PanelNav from "./panel-nav";
+
+const DRAWER_WIDTH = 256;
+
+function MenuIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
+    </svg>
+  );
+}
 
 export default function SideLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-800 text-white flex flex-col p-4">
-        <h2 className="text-xl font-bold mb-6">Mi App</h2>
-        <nav className="flex-1 space-y-2">
-          <Link to="/" className="block py-2 px-3 rounded hover:bg-gray-700">
-            Inicio
-          </Link>
-          <Link
-            to="/add-stock"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Agregar Stock
-          </Link>
-          <Link
-            to="/stock"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Stock
-          </Link>
-          <Link
-            to="/stock/apertura-sellado"
-            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
-          >
-            Apertura sellado
-          </Link>
-          <Link
-            to="/incoming"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Compras en camino
-          </Link>
-          <Link
-            to="/cotizar"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Cotizar carta
-          </Link>
-          <Link
-            to="/cotizar/pedido-cliente"
-            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
-          >
-            Pedido CardTrader
-          </Link>
-          <Link
-            to="/ventas"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Ventas
-          </Link>
-          <Link
-            to="/ventas/consistencia"
-            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
-          >
-            Consistencia stock vs ventas
-          </Link>
-          <Link
-            to="/ventas/historico"
-            className="block py-2 px-3 rounded hover:bg-gray-700 text-sm pl-6"
-          >
-            Histórico de ventas
-          </Link>
-          <Link
-            to="/propiedad"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Cartas en Propiedad
-          </Link>
-          <Link
-            to="/clientes"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Clientes
-          </Link>
-          <Link
-            to="/clientes/imprimir-pedidos"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Imprimir pedidos
-          </Link>
-          <Link
-            to="/escanear-codigo"
-            className="block py-2 px-3 rounded hover:bg-gray-700"
-          >
-            Escanear código de barras
-          </Link>
-          <EuroToCOPConverter />
-        </nav>
-      </aside>
+  const isDesktop = useMediaQuery("(min-width:900px)");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-      {/* Contenido */}
-      <main className="flex-1 bg-gray-100 p-6 overflow-auto">{children}</main>
-    </div>
+  const closeMobile = () => setMobileOpen(false);
+
+  const sidebarContent = (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        p: 2,
+        color: "common.white",
+      }}
+    >
+      <PanelNav onNavigate={closeMobile} collapseRates={!isDesktop} />
+    </Box>
+  );
+
+  return (
+    <Box sx={{ display: "flex", height: "100vh", minHeight: 0, bgcolor: "grey.100" }}>
+      <Box
+        component="aside"
+        aria-label="Navegación principal"
+        sx={{
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          flexShrink: 0,
+          width: DRAWER_WIDTH,
+          bgcolor: "grey.800",
+        }}
+      >
+        {sidebarContent}
+      </Box>
+
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={closeMobile}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: "block", md: "none" },
+          "& .MuiDrawer-paper": {
+            width: DRAWER_WIDTH,
+            bgcolor: "grey.800",
+            boxSizing: "border-box",
+          },
+        }}
+      >
+        {sidebarContent}
+      </Drawer>
+
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+          minHeight: 0,
+        }}
+      >
+        <AppBar
+          position="sticky"
+          elevation={1}
+          sx={{
+            display: { xs: "block", md: "none" },
+            bgcolor: "grey.800",
+          }}
+        >
+          <Toolbar sx={{ minHeight: { xs: 56 }, gap: 1 }}>
+            <IconButton
+              color="inherit"
+              edge="start"
+              aria-label="Abrir menú de navegación"
+              onClick={() => setMobileOpen(true)}
+              sx={{ width: 44, height: 44 }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="h6" component="div" fontWeight={700} noWrap>
+              Dittos Army
+            </Typography>
+          </Toolbar>
+        </AppBar>
+
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            overflow: "auto",
+            minHeight: 0,
+            p: { xs: 1.5, sm: 2, md: 3 },
+          }}
+        >
+          {children}
+        </Box>
+      </Box>
+    </Box>
   );
 }

@@ -353,7 +353,7 @@ export default function ClienteDetallePage() {
         <Button component={Link} to="/clientes" color="inherit" size="small">
           ← Clientes
         </Button>
-        <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1 }}>
+        <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>
           {client.nombre}
         </Typography>
         <Button variant="outlined" size="small" onClick={() => setFormOpen(true)}>

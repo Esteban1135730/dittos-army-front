@@ -27,8 +27,8 @@ import {
 import { PvpInlineCell } from "./pvp-inline-cell";
 import { API_BASE, apiUrl } from "../../../config/api";
 import {
-  openStockBarcodeLabelsPrintWindow,
-  type StockBarcodeExportRow,
+  openStockQrLabelsPrintWindow,
+  type StockQrExportRow,
 } from "../../../modules/stock-barcode";
 
 export type StockItem = StockListItem;
@@ -777,19 +777,25 @@ export default function StockGrid() {
     );
   };
 
-  const handleExportarBarcode = async () => {
+  const handleExportarQr = async () => {
     try {
       setExportandoBarcode(true);
-      const res = await axios.get<StockBarcodeExportRow[]>(
-        apiUrl("/stock/barcode-export"),
+      const res = await axios.get<StockQrExportRow[]>(
+        apiUrl("/stock/qr-export"),
       );
       const rows = Array.isArray(res.data) ? res.data : [];
-      openStockBarcodeLabelsPrintWindow(rows);
+      if (rows.length === 0) {
+        window.alert(
+          "No hay líneas con PVP en stock vendible para exportar QR.",
+        );
+        return;
+      }
+      await openStockQrLabelsPrintWindow(rows);
     } catch (err: unknown) {
       const msg =
         err instanceof Error
           ? err.message
-          : "No se pudieron generar las etiquetas de barras.";
+          : "No se pudieron generar las etiquetas QR.";
       window.alert(msg);
     } finally {
       setExportandoBarcode(false);
@@ -849,7 +855,7 @@ export default function StockGrid() {
 
   return (
 
-    <div style={{ height: "90%", width: "100%", margin: "2rem auto" }}>
+    <div className="w-full min-w-0">
       {cartasSinPvp > 0 && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
           <div className="flex items-center">
@@ -939,11 +945,11 @@ export default function StockGrid() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => void handleExportarBarcode()}
+                onClick={() => void handleExportarQr()}
                 disabled={exportandoBarcode}
                 className="bg-violet-600 text-white px-4 py-2 rounded hover:bg-violet-700 disabled:opacity-60"
               >
-                {exportandoBarcode ? "Generando…" : "Exportar códigos de barras"}
+                {exportandoBarcode ? "Generando…" : "Exportar QR"}
               </button>
             </div>
             <div className="relative">
@@ -1205,41 +1211,45 @@ export default function StockGrid() {
           </div>
         )}
 
-        <DataGrid
-          rows={stockFiltrado}
-          columns={columns}
-          getRowId={(row) => row._id}
-          pageSizeOptions={[20, 30, 40]}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 20, page: 0 },
-            },
-          }}
-          pagination
-          disableRowSelectionOnClick
-          autosizeOptions={{ includeHeaders: true }}
-          getRowClassName={(params) => {
-            const tienePvp = params.row.pvp && params.row.pvp > 0;
-            if (params.row.card_state === "propiedad") {
-              return "propiedad-row";
-            }
-            return !tienePvp ? "sin-pvp-row" : "";
-          }}
-          sx={{
-            "& .sin-pvp-row": {
-              backgroundColor: "#fee2e2 !important", // rojo claro
-              "&:hover": {
-                backgroundColor: "#fecaca !important", // rojo más oscuro al hover
-              },
-            },
-            "& .propiedad-row": {
-              backgroundColor: "#ffe4e6 !important",
-              "&:hover": {
-                backgroundColor: "#fecdd3 !important",
-              },
-            },
-          }}
-        />
+        <div className="w-full overflow-x-auto -mx-1 px-1">
+          <div className="min-w-[640px]">
+            <DataGrid
+              rows={stockFiltrado}
+              columns={columns}
+              getRowId={(row) => row._id}
+              pageSizeOptions={[20, 30, 40]}
+              initialState={{
+                pagination: {
+                  paginationModel: { pageSize: 20, page: 0 },
+                },
+              }}
+              pagination
+              disableRowSelectionOnClick
+              autosizeOptions={{ includeHeaders: true }}
+              getRowClassName={(params) => {
+                const tienePvp = params.row.pvp && params.row.pvp > 0;
+                if (params.row.card_state === "propiedad") {
+                  return "propiedad-row";
+                }
+                return !tienePvp ? "sin-pvp-row" : "";
+              }}
+              sx={{
+                "& .sin-pvp-row": {
+                  backgroundColor: "#fee2e2 !important", // rojo claro
+                  "&:hover": {
+                    backgroundColor: "#fecaca !important", // rojo más oscuro al hover
+                  },
+                },
+                "& .propiedad-row": {
+                  backgroundColor: "#ffe4e6 !important",
+                  "&:hover": {
+                    backgroundColor: "#fecdd3 !important",
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
         <Snackbar
           open={snackbar.open}
           autoHideDuration={4500}

@@ -381,29 +381,35 @@ export default function ClientesPage() {
           border: 1,
           borderColor: "divider",
           overflow: "hidden",
+          width: "100%",
+          maxWidth: "100%",
         }}
       >
-        <DataGrid
-          rows={sortedClientes}
-          columns={columns}
-          getRowId={(row) => row._id}
-          getRowClassName={getRowClassName}
-          onRowClick={onRowClick}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25, page: 0 } },
-          }}
-          disableRowSelectionOnClick
-          autoHeight
-          rowHeight={72}
-          sx={{
-            border: 0,
-            cursor: "pointer",
-            "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
-            "& .row-pedido-alerta": { backgroundColor: "rgba(251, 191, 36, 0.16)" },
-            "& .row-pedido-critico": { backgroundColor: "rgba(248, 113, 113, 0.2)" },
-          }}
-        />
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Box sx={{ minWidth: 520 }}>
+            <DataGrid
+              rows={sortedClientes}
+              columns={columns}
+              getRowId={(row) => row._id}
+              getRowClassName={getRowClassName}
+              onRowClick={onRowClick}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 25, page: 0 } },
+              }}
+              disableRowSelectionOnClick
+              autoHeight
+              rowHeight={72}
+              sx={{
+                border: 0,
+                cursor: "pointer",
+                "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
+                "& .row-pedido-alerta": { backgroundColor: "rgba(251, 191, 36, 0.16)" },
+                "& .row-pedido-critico": { backgroundColor: "rgba(248, 113, 113, 0.2)" },
+              }}
+            />
+          </Box>
+        </Box>
       </Stack>
 
       <ClienteFormDialog

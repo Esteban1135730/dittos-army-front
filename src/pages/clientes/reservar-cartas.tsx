@@ -1025,20 +1025,26 @@ export default function ReservarCartasPage() {
               borderColor: "divider",
               borderRadius: 1,
               overflow: "hidden",
+              width: "100%",
+              maxWidth: "100%",
               "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
             }}
           >
-            <DataGrid
-              rows={stockDisponibleFiltrado}
-              columns={columns}
-              getRowId={(row) => row._id}
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
-              disableRowSelectionOnClick
-              autoHeight
-              rowHeight={68}
-              sx={{ border: 0 }}
-            />
+            <Box sx={{ width: "100%", overflowX: "auto" }}>
+              <Box sx={{ minWidth: 560 }}>
+                <DataGrid
+                  rows={stockDisponibleFiltrado}
+                  columns={columns}
+                  getRowId={(row) => row._id}
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
+                  disableRowSelectionOnClick
+                  autoHeight
+                  rowHeight={68}
+                  sx={{ border: 0 }}
+                />
+              </Box>
+            </Box>
           </Box>
         )}
       </Paper>
@@ -1125,20 +1131,26 @@ export default function ReservarCartasPage() {
               borderColor: "divider",
               borderRadius: 1,
               overflow: "hidden",
+              width: "100%",
+              maxWidth: "100%",
               "& .MuiDataGrid-columnHeaders": { bgcolor: "grey.50" },
             }}
           >
-            <DataGrid
-              rows={incomingGridRows}
-              columns={columnsIncoming}
-              getRowId={(row) => row.id}
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-              disableRowSelectionOnClick
-              autoHeight
-              rowHeight={68}
-              sx={{ border: 0 }}
-            />
+            <Box sx={{ width: "100%", overflowX: "auto" }}>
+              <Box sx={{ minWidth: 560 }}>
+                <DataGrid
+                  rows={incomingGridRows}
+                  columns={columnsIncoming}
+                  getRowId={(row) => row.id}
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                  disableRowSelectionOnClick
+                  autoHeight
+                  rowHeight={68}
+                  sx={{ border: 0 }}
+                />
+              </Box>
+            </Box>
           </Box>
         )}
       </Paper>

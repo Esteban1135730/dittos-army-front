@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  type ChangeEvent,
-  type KeyboardEvent,
-} from "react";
-import { logBarcodeScan } from "../../utils/barcode-scan-debug";
+import { useCallback, useEffect, useRef } from "react";
 
 const WEDGE_IDLE_MS = 120;
 
@@ -14,9 +7,18 @@ type UseLaserBarcodeInputOptions = {
   onScan: (value: string) => void;
 };
 
+function isEnterKey(e: KeyboardEvent): boolean {
+  return (
+    e.key === "Enter" ||
+    e.key === "NumpadEnter" ||
+    e.code === "Enter" ||
+    e.code === "NumpadEnter"
+  );
+}
+
 /**
- * Entrada para pistola láser (emula teclado + Enter).
- * Mantiene el foco en un input y dispara al pulsar Enter o tras pausa corta entre caracteres.
+ * Entrada para pistola QR (emula teclado + Enter).
+ * Listeners nativos en el <input> (compatible con MUI TextField).
  */
 export function useLaserBarcodeInput({ enabled, onScan }: UseLaserBarcodeInputOptions) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,92 +28,92 @@ export function useLaserBarcodeInput({ enabled, onScan }: UseLaserBarcodeInputOp
   onScanRef.current = onScan;
 
   const focus = useCallback(() => {
-    if (enabled) {
-      inputRef.current?.focus();
-    }
-  }, [enabled]);
+    inputRef.current?.focus();
+  }, []);
 
-  const flush = useCallback((raw: string, reason: "enter" | "idle") => {
+  const flush = useCallback((raw: string) => {
     const value = raw.trim();
-    logBarcodeScan("laser", "flush", { reason, length: value.length, value });
-    if (!value) {
-      logBarcodeScan("laser", "flush_empty", { reason });
-      return;
-    }
+    if (!value) return;
     onScanRef.current(value);
     if (inputRef.current) {
       inputRef.current.value = "";
     }
   }, []);
 
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current != null) {
+      window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
   const scheduleIdleFlush = useCallback(
     (currentValue: string) => {
-      if (idleTimerRef.current != null) {
-        window.clearTimeout(idleTimerRef.current);
-      }
+      clearIdleTimer();
       idleTimerRef.current = window.setTimeout(() => {
         idleTimerRef.current = null;
-        logBarcodeScan("laser", "idle_timeout", {
-          length: currentValue.length,
-          preview: currentValue.slice(0, 80),
-        });
-        flush(currentValue, "idle");
+        flush(currentValue);
       }, WEDGE_IDLE_MS);
     },
-    [flush],
-  );
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      logBarcodeScan("laser", "keydown", {
-        key: e.key,
-        code: e.code,
-        len: e.currentTarget.value.length,
-      });
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (idleTimerRef.current != null) {
-          window.clearTimeout(idleTimerRef.current);
-          idleTimerRef.current = null;
-        }
-        flush(e.currentTarget.value, "enter");
-      }
-    },
-    [flush],
-  );
-
-  const handleChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const v = e.target.value;
-      logBarcodeScan("laser", "input", {
-        length: v.length,
-        lastChar: v.slice(-1),
-        preview: v.slice(-24),
-      });
-      scheduleIdleFlush(v);
-    },
-    [scheduleIdleFlush],
+    [clearIdleTimer, flush],
   );
 
   useEffect(() => {
-    logBarcodeScan("laser", enabled ? "enabled" : "disabled");
+    if (!enabled) {
+      clearIdleTimer();
+      return;
+    }
+
+    let el = inputRef.current;
+    let attachTimer: number | undefined;
+
+    const bind = (input: HTMLInputElement) => {
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (!isEnterKey(e)) return;
+        e.preventDefault();
+        clearIdleTimer();
+        flush(input.value);
+      };
+
+      const onInput = () => {
+        scheduleIdleFlush(input.value);
+      };
+
+      input.addEventListener("keydown", onKeyDown);
+      input.addEventListener("input", onInput);
+
+      return () => {
+        input.removeEventListener("keydown", onKeyDown);
+        input.removeEventListener("input", onInput);
+      };
+    };
+
+    let unbind: (() => void) | undefined;
+
+    if (el) {
+      unbind = bind(el);
+    } else {
+      attachTimer = window.setTimeout(() => {
+        el = inputRef.current;
+        if (el) unbind = bind(el);
+      }, 50);
+    }
+
+    return () => {
+      if (attachTimer != null) window.clearTimeout(attachTimer);
+      unbind?.();
+      clearIdleTimer();
+    };
+  }, [enabled, clearIdleTimer, flush, scheduleIdleFlush]);
+
+  useEffect(() => {
     if (!enabled) return;
     const t = window.setTimeout(focus, 100);
     return () => window.clearTimeout(t);
   }, [enabled, focus]);
 
-  useEffect(() => {
-    return () => {
-      if (idleTimerRef.current != null) {
-        window.clearTimeout(idleTimerRef.current);
-      }
-    };
-  }, []);
-
   return {
     inputRef,
-    handleKeyDown,
-    handleChange,
     focus,
   };
 }

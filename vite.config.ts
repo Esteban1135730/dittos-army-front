@@ -9,6 +9,9 @@ export default defineConfig({
     // Evita dos copias de @zxing/library (rompe `instanceof NotFoundException` en el bucle de escaneo).
     dedupe: ["@zxing/library"],
   },
+  optimizeDeps: {
+    include: ["recharts"],
+  },
   server: {
     host: true,
     // API Nest por HTTP en el PC; el navegador (móvil) solo habla HTTPS con Vite.

@@ -1,7 +1,8 @@
 export {
-  parseStockBarcodePayload,
   parseStockQrPayload,
+  parseStockBarcodePayload,
+  STOCK_QR_PREFIX,
   STOCK_BARCODE_PREFIX,
 } from "./stock-barcode-payload";
-export { openStockBarcodeLabelsPrintWindow } from "./export-stock-barcode-labels";
-export type { StockBarcodeExportRow, StockScanView } from "./types";
+export { openStockQrLabelsPrintWindow } from "./export-stock-qr-labels";
+export type { StockBarcodeExportRow, StockQrExportRow, StockScanView } from "./types";
