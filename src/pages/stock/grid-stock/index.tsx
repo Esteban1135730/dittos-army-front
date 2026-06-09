@@ -27,6 +27,7 @@ import {
 import { PvpInlineCell } from "./pvp-inline-cell";
 import { API_BASE, apiUrl } from "../../../config/api";
 import {
+  filterQrExportRowsByStockIds,
   openStockQrLabelsPrintWindow,
   type StockQrExportRow,
 } from "../../../modules/stock-barcode";
@@ -777,20 +778,39 @@ export default function StockGrid() {
     );
   };
 
+  const hayFiltrosVisibles =
+    busqueda.trim().length > 0 || filtroTags.length > 0 || filtroSinTags;
+
   const handleExportarQr = async () => {
     try {
       setExportandoBarcode(true);
       const res = await axios.get<StockQrExportRow[]>(
         apiUrl("/stock/qr-export"),
       );
-      const rows = Array.isArray(res.data) ? res.data : [];
+      const apiRows = Array.isArray(res.data) ? res.data : [];
+      const visibleIds = stockFiltrado.map((item) => item._id);
+      const rows = filterQrExportRowsByStockIds(apiRows, visibleIds);
+
       if (rows.length === 0) {
         window.alert(
-          "No hay líneas con PVP en stock vendible para exportar QR.",
+          hayFiltrosVisibles
+            ? `Ninguna de las ${stockFiltrado.length} líneas visibles tiene PVP en stock vendible para QR. Quita filtros o asigna PVP.`
+            : "No hay líneas con PVP en stock vendible para exportar QR.",
         );
         return;
       }
-      await openStockQrLabelsPrintWindow(rows);
+
+      const subtitleParts = [
+        `${rows.length} etiquetas`,
+        hayFiltrosVisibles
+          ? `filtro activo (${stockFiltrado.length} visibles en grilla)`
+          : "todo el stock con PVP",
+        "hoja carta 4×12",
+      ];
+
+      await openStockQrLabelsPrintWindow(rows, {
+        subtitle: subtitleParts.join(" · "),
+      });
     } catch (err: unknown) {
       const msg =
         err instanceof Error

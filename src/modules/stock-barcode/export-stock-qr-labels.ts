@@ -2,11 +2,26 @@ import QRCode from "qrcode";
 import type { StockQrExportRow } from "./types";
 import { formatCOP } from "../../utils/convert";
 
+export type QrLabelsPrintOptions = {
+  /** Texto bajo el título (p. ej. filtros activos). */
+  subtitle?: string;
+};
+
+const COLS = 4;
+const ROWS = 12;
+
+/** Una línea corta para etiqueta pequeña. */
+function shortCardName(name: string, max = 32): string {
+  const t = name.trim() || "Sin nombre";
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
 /**
- * Ventana imprimible con código QR por línea (pistola QR o cámara).
+ * Hoja carta (letter) 4×12 — QR + nombre + PVP, guías de corte punteadas.
  */
 export async function openStockQrLabelsPrintWindow(
   rows: StockQrExportRow[],
+  options?: QrLabelsPrintOptions,
 ): Promise<void> {
   if (rows.length === 0) {
     throw new Error("No hay líneas de stock para exportar.");
@@ -19,10 +34,14 @@ export async function openStockQrLabelsPrintWindow(
         type: "svg",
         errorCorrectionLevel: "M",
         margin: 1,
-        width: 150,
+        width: 52,
       }),
     })),
   );
+
+  const subtitle =
+    options?.subtitle ??
+    `${cards.length} etiquetas · hoja carta adhesiva (${COLS}×${ROWS})`;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -30,94 +49,119 @@ export async function openStockQrLabelsPrintWindow(
   <meta charset="utf-8" />
   <title>QR — stock</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: "Segoe UI", system-ui, sans-serif;
-      margin: 20px;
-      color: #1a1a2e;
-      background: #f8fafc;
+      font-family: Arial, "Segoe UI", sans-serif;
+      color: #111;
+      background: #e2e8f0;
     }
-    h1 { font-size: 1.25rem; margin: 0 0 4px; font-weight: 700; }
-    .subtitle { color: #64748b; font-size: 0.875rem; margin-bottom: 20px; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
+    .no-print {
+      padding: 12px 16px;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 13px;
     }
-    .card {
+    .no-print h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .no-print p { opacity: 0.9; line-height: 1.4; }
+    .no-print ul { margin: 8px 0 0 18px; font-size: 12px; opacity: 0.85; }
+    .sheet-wrap { padding: 8px; display: flex; justify-content: center; }
+    .sheet {
+      width: 8.5in;
+      min-height: 11in;
       background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 12px 10px;
-      text-align: center;
+      padding: 0.12in 0.08in;
+      display: grid;
+      grid-template-columns: repeat(${COLS}, 2.08in);
+      grid-auto-rows: 0.86in;
+      gap: 0;
+      align-content: start;
+    }
+    .label {
+      width: 2.08in;
+      height: 0.86in;
+      border: 1px dashed #94a3b8;
+      position: relative;
+      overflow: hidden;
       page-break-inside: avoid;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      background: #fff;
     }
-    .card svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+    .label-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      /* Zona segura: aleja QR y texto del borde de corte */
+      padding: 0.06in 0.08in;
+      gap: 1px;
+      text-align: center;
+    }
+    .qr {
+      flex: 0 0 auto;
+      width: 0.5in;
+      height: 0.5in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr svg { width: 100% !important; height: 100% !important; display: block; }
+    .info {
+      width: 100%;
+      min-width: 0;
+      line-height: 1.1;
+    }
     .name {
-      font-size: 12px;
+      font-size: 5.5pt;
       font-weight: 700;
-      margin-top: 8px;
-      line-height: 1.25;
-      min-height: 2.5em;
-    }
-    .meta {
-      font-size: 10px;
-      color: #475569;
-      margin-top: 6px;
-      line-height: 1.4;
-    }
-    .meta-row { margin-top: 2px; }
-    .tag {
-      display: inline-block;
-      background: #f1f5f9;
-      border-radius: 4px;
-      padding: 1px 5px;
-      margin: 2px 2px 0 0;
-      font-size: 9px;
-      font-weight: 600;
-      color: #334155;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
     .pvp {
-      font-size: 13px;
+      font-size: 6.5pt;
       font-weight: 800;
       color: #0d47a1;
-      margin-top: 8px;
-      padding-top: 6px;
-      border-top: 1px dashed #cbd5e1;
+      white-space: nowrap;
     }
     @media print {
-      body { margin: 8px; background: #fff; }
-      .card { box-shadow: none; }
+      @page { size: letter; margin: 0; }
+      body { background: #fff; }
+      .no-print { display: none !important; }
+      .sheet-wrap { padding: 0; }
+      .sheet { padding: 0.12in 0.08in; }
+      .label { border-color: #aaa; }
     }
   </style>
 </head>
 <body>
-  <h1>Etiquetas QR — stock</h1>
-  <p class="subtitle">${cards.length} líneas · Venta asistida QR en el panel</p>
-  <div class="grid">
-    ${cards
-      .map((c) => {
-        const tags = [
-          c.rareza ? `<span class="tag">${escapeHtml(c.rareza)}</span>` : "",
-          c.language ? `<span class="tag">${escapeHtml(c.language)}</span>` : "",
-        ]
-          .filter(Boolean)
-          .join("");
-        return `
-    <div class="card">
-      ${c.svg}
-      <div class="name">${escapeHtml(c.card_name || "Sin nombre")}</div>
-      <div class="meta">
-        ${c.expansion ? `<div class="meta-row">${escapeHtml(c.expansion)}</div>` : ""}
-        ${tags ? `<div class="meta-row">${tags}</div>` : ""}
-      </div>
-      <div class="pvp">COP ${escapeHtml(formatCOP(c.price_cop))}</div>
-    </div>`;
-      })
-      .join("")}
+  <div class="no-print">
+    <h1>Etiquetas QR — stock</h1>
+    <p>${escapeHtml(subtitle)}</p>
+    <ul>
+      <li>Hoja carta: ${COLS} columnas × ${ROWS} filas (hasta ${COLS * ROWS} por página).</li>
+      <li>QR centrado con margen interno (zona segura) lejos del borde de corte.</li>
+    </ul>
   </div>
-  <script>window.onload = () => { setTimeout(() => window.print(), 400); };</script>
+  <div class="sheet-wrap">
+    <div class="sheet">
+    ${cards
+      .map(
+        (c) => `
+      <div class="label">
+        <div class="label-inner">
+          <div class="qr">${c.svg}</div>
+          <div class="info">
+            <div class="name" title="${escapeHtml(c.card_name || "")}">${escapeHtml(shortCardName(c.card_name || ""))}</div>
+            <div class="pvp">COP ${escapeHtml(formatCOP(c.price_cop))}</div>
+          </div>
+        </div>
+      </div>`,
+      )
+      .join("")}
+    </div>
+  </div>
+  <script>window.onload = () => { setTimeout(() => window.print(), 500); };</script>
 </body>
 </html>`;
 
