@@ -55,6 +55,9 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/cotizar/pedido-cliente" className={subLinkClass} onNavigate={onNavigate}>
           Pedido CardTrader
         </NavLink>
+        <NavLink to="/test-cardtrader" className={subLinkClass} onNavigate={onNavigate}>
+          Consolidado tránsito
+        </NavLink>
         <NavLink to="/ventas" onNavigate={onNavigate}>
           Ventas
         </NavLink>

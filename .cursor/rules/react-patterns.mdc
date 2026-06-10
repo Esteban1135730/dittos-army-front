@@ -1,0 +1,41 @@
+---
+description: Patrones React para páginas y componentes
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# React Patterns
+
+## Componentes
+
+- Componentes funcionales; extraer lógica a custom hooks (`use-*.ts`).
+- Colocar páginas en `src/pages/`, módulos reutilizables en `src/modules/`, UI compartida en `src/components/`.
+- Tipar props con interfaces; exportar tipos cuando otros archivos los consuman.
+
+## Estado y datos remotos
+
+- **Servidor**: `@tanstack/react-query` con keys estables y descriptivas.
+- **UI local**: `useState` / `useMemo`; evitar duplicar datos que ya vienen del servidor.
+- Invalidar queries tras mutaciones exitosas.
+
+```tsx
+// ✅ GOOD
+const { data, isLoading, error } = useQuery({
+  queryKey: ["stock", filters],
+  queryFn: () => fetchStock(filters),
+});
+```
+
+## MUI
+
+- Usar componentes MUI para dialogs, alerts, grids (`DataGrid`).
+- Feedback de errores con `Alert` o `Snackbar`; no solo `console.error`.
+
+## Rutas
+
+- Definir rutas en `app.route.tsx`; usar `Link` y `useNavigate` de react-router-dom.
+
+## Rendimiento
+
+- `useMemo` para columnas de DataGrid o cálculos costosos.
+- Evitar funciones inline pesadas en props de listas grandes sin memoización.

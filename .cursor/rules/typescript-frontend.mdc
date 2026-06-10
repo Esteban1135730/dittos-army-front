@@ -1,0 +1,35 @@
+---
+description: TypeScript estricto para frontend React
+globs: "src/**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript Frontend
+
+## Tipos
+
+- Tipos de dominio en `src/types/` o colocados junto al módulo si son locales.
+- Preferir `type` para unions y `interface` para objetos extensibles.
+- No usar `as` para silenciar errores; corregir el tipo en origen.
+
+## API
+
+- Base URL via `API_BASE` / `apiUrl()` de `src/config/api.ts`.
+- Tipar respuestas axios; manejar errores con narrowing:
+
+```typescript
+// ✅ GOOD
+if (axios.isAxiosError(err)) {
+  const msg = err.response?.data?.message ?? err.message;
+}
+```
+
+## Utils
+
+- Funciones puras en `src/utils/` con tests `*.test.ts`.
+- Sin efectos secundarios en utils; side effects en hooks o handlers.
+
+## Imports
+
+- Orden: React → librerías → componentes locales → tipos (`import type`).
+- Rutas relativas consistentes con el archivo vecino (no mezclar alias sin convención).

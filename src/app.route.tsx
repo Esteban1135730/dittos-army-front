@@ -22,6 +22,7 @@ import IncomingShipRoundReviewPage from "./pages/incoming/ship-round-review/inco
 import CotizarCardtraderPage from "./pages/cotizar/cotizar-cardtrader-page";
 import CotizarPedidoClientePage from "./pages/cotizar/cotizar-pedido-cliente-page";
 import VentaAsistidaQrPage from "./pages/ventas/venta-asistida-qr-page";
+import TestCardtraderPage from "./pages/test-cardtrader/test-cardtrader-page";
 
 export default function AppRouter() {
   return (
@@ -127,6 +128,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <CotizarPedidoClientePage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/test-cardtrader"
+        element={
+          <SideLayout>
+            <TestCardtraderPage />
           </SideLayout>
         }
       />

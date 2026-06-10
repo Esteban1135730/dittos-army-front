@@ -1,12 +1,33 @@
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { apiUrl } from "../../../config/api";
+import { operationalRarezaLabel } from "../../../constants/item-rareza";
+import type { Ct0BoxItem } from "../../../utils/cardtrader-ct0-box";
+import {
+  buildCt0HomologIndex,
+  homologateIncomingItems,
+  summarizeIncomingHomolog,
+} from "../../../utils/incoming-ct0-homolog";
+import {
+  buildCt0PackageProfile,
+  buildIncomingBatchProfile,
+  scoreCt0ToIncomingBatchPair,
+} from "../../../utils/incoming-ct0-package-match";
+import { buildPurchasePackages } from "../../../utils/purchase-package-consolidated";
+import {
+  inferOperationalRarezaFromCtProperties,
+  readCtCondition,
+  readCtLanguage,
+} from "../../../utils/cardtrader-order-item-map";
 import { exportIncomingBatchToPdf } from "../export-incoming-batch-pdf";
 import SimulateRealCardPriceDialog from "../simulate-real-card-price-dialog";
 import { API_INCOMING } from "../../clientes/cliente-types";
+
+const API_CARDTRADER = apiUrl("/cardtrader");
 
 type IncomingBatchItemRow = {
   batch_item_id: string;
@@ -57,6 +78,71 @@ export default function IncomingBatchRoundsPage() {
       return res.data as IncomingBatchMeta;
     },
   });
+
+  const ct0Query = useQuery<Ct0BoxItem[]>({
+    queryKey: ["cardtrader", "ct0-box-items-homolog"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_CARDTRADER}/ct0-box-items`);
+      return Array.isArray(res.data) ? (res.data as Ct0BoxItem[]) : [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ct0HomologIndex = useMemo(
+    () =>
+      buildCt0HomologIndex({
+        ct0Items: ct0Query.data ?? [],
+        readLanguage: readCtLanguage,
+        readRareza: (props) => inferOperationalRarezaFromCtProperties(props),
+      }),
+    [ct0Query.data],
+  );
+
+  const homologByItemId = useMemo(() => {
+    return homologateIncomingItems(batchItems, ct0HomologIndex);
+  }, [batchItems, ct0HomologIndex]);
+
+  const homologSummary = useMemo(
+    () => summarizeIncomingHomolog(homologByItemId.values(), ct0HomologIndex.ct0UnitsTotal),
+    [homologByItemId, ct0HomologIndex.ct0UnitsTotal],
+  );
+
+  const [showOnlyMissingInCt0, setShowOnlyMissingInCt0] = useState(false);
+
+  const visibleBatchItems = useMemo(() => {
+    if (!showOnlyMissingInCt0) return batchItems;
+    return batchItems.filter(
+      (it) => homologByItemId.get(it.batch_item_id)?.onlyInIncoming === true,
+    );
+  }, [batchItems, homologByItemId, showOnlyMissingInCt0]);
+
+  const batchProfile = useMemo(() => {
+    if (!batchId || !batchMeta) return null;
+    return buildIncomingBatchProfile(batchId, batchMeta.purchase_date, batchItems);
+  }, [batchId, batchMeta, batchItems]);
+
+  const matchedCtCheckouts = useMemo(() => {
+    if (!batchProfile || !ct0Query.data?.length) return [];
+    const { packages } = buildPurchasePackages({
+      ct0Items: ct0Query.data,
+      copByPackageKey: {},
+      parseCop: () => null,
+      readCondition: readCtCondition,
+      readLanguage: readCtLanguage,
+      variantLabel: (props) =>
+        operationalRarezaLabel(inferOperationalRarezaFromCtProperties(props)),
+    });
+    return packages
+      .map((pkg) => {
+        const scored = scoreCt0ToIncomingBatchPair(
+          buildCt0PackageProfile(pkg),
+          batchProfile,
+        );
+        return scored ? { ...scored, isSamePackage: true as const } : null;
+      })
+      .filter((m): m is NonNullable<typeof m> => m != null)
+      .sort((a, b) => Date.parse(b.ct0PaidAt) - Date.parse(a.ct0PaidAt));
+  }, [batchProfile, ct0Query.data]);
 
   const [purchaseDate, setPurchaseDate] = useState<string>("");
   const [totalCopCardsCost, setTotalCopCardsCost] = useState<string>("");
@@ -191,18 +277,96 @@ export default function IncomingBatchRoundsPage() {
         {mensaje && <p className="text-sm mt-2 text-gray-700">{mensaje}</p>}
       </div>
 
+      {matchedCtCheckouts.length > 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <div className="text-sm font-semibold text-gray-700">
+              Checkouts CT Zero emparejados ({matchedCtCheckouts.length})
+            </div>
+            <p className="text-xs text-gray-600 mt-0.5">
+              Mismo paquete si ≥60% de cartas CT coinciden por nombre y la fecha está a ±14 días del
+              lote.
+            </p>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {matchedCtCheckouts.map((m) => (
+              <li
+                key={m.ct0PackageKey}
+                className="px-4 py-2.5 text-sm flex flex-wrap gap-x-4 gap-y-1 items-center"
+              >
+                <span className="font-medium text-gray-800">
+                  {new Date(m.ct0PaidAt).toLocaleString("es-CO", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+                <span className="text-gray-600">
+                  {Math.round(m.nameOverlapRatio * 100)}% nombres · {m.matchedUnits}/{m.ctUnits} uds
+                  · {m.dateDiffDays === 0 ? "misma fecha" : `±${m.dateDiffDays} días`}
+                </span>
+                <Link
+                  to="/test-cardtrader"
+                  className="text-blue-700 hover:underline text-xs font-medium"
+                >
+                  Ver en consolidado CT
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold text-gray-700">Homologación CT Zero</div>
+            <p className="text-xs text-gray-600 mt-0.5">
+              Etiqueta = sin cobertura en CT Zero. Las cartas amarillas con precio están en
+              Consolidado tránsito.
+            </p>
+          </div>
+          {ct0Query.isLoading ? (
+            <span className="text-xs text-gray-500">Comparando con CT Zero…</span>
+          ) : ct0Query.isError ? (
+            <span className="text-xs text-amber-700">No se pudo cargar CT Zero para comparar.</span>
+          ) : (
+            <div className="text-xs text-gray-700">
+              {homologSummary.onlyIncomingLines} líneas · {homologSummary.onlyIncomingUnits} uds
+              solo panel · {homologSummary.matchedUnits}/{homologSummary.ct0UnitsTotal} uds CT
+              emparejadas
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-2 flex flex-wrap items-center gap-3 border-b border-gray-100">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showOnlyMissingInCt0}
+              onChange={(e) => setShowOnlyMissingInCt0(e.target.checked)}
+            />
+            Solo cartas sin match en CT Zero
+          </label>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
         <div className="px-4 py-3 bg-gray-50 text-sm font-semibold text-gray-700">Cartas del pedido</div>
         {isLoadingItems && <div className="p-4 text-gray-600">Cargando cartas...</div>}
         {!isLoadingItems && batchItems.length === 0 && (
           <div className="p-4 text-gray-600">Este batch no tiene cartas cargadas.</div>
         )}
-        {!isLoadingItems && batchItems.length > 0 && (
+        {!isLoadingItems && batchItems.length > 0 && visibleBatchItems.length === 0 && (
+          <div className="p-4 text-gray-600">Todas las cartas pendientes tienen match en CT Zero.</div>
+        )}
+        {!isLoadingItems && visibleBatchItems.length > 0 && (
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {batchItems.map((it) => (
+            {visibleBatchItems.map((it) => {
+              const homolog = homologByItemId.get(it.batch_item_id);
+              const onlyIncoming = homolog?.onlyInIncoming === true;
+              return (
               <div
                 key={it.batch_item_id}
-                className="flex gap-3 border rounded-lg p-3 bg-white items-start"
+                className="flex gap-3 border rounded-lg p-3 bg-white border-gray-200 items-start"
               >
                 <div className="w-14 h-18 flex-shrink-0 bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
                   {it.image_url ? (
@@ -216,7 +380,21 @@ export default function IncomingBatchRoundsPage() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-gray-800 truncate">{it.card_name}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-medium text-gray-800 truncate">{it.card_name}</div>
+                    {onlyIncoming ? (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                        Sin CT Zero
+                        {homolog && homolog.missingFromCt0Qty > 0
+                          ? ` · ${homolog.missingFromCt0Qty} uds`
+                          : ""}
+                      </span>
+                    ) : homolog && homolog.ct0MatchedQty > 0 ? (
+                      <span className="text-[10px] font-medium text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                        CT0 · {homolog.ct0MatchedQty}/{homolog.incomingRemainingQty}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="text-xs text-gray-500 mt-0.5 break-all">{it.card_id}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Idioma: {it.language}
@@ -248,7 +426,8 @@ export default function IncomingBatchRoundsPage() {
                   </button>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
