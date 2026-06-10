@@ -4,6 +4,7 @@ import {
   buildConsolidatedTransitLots,
   computeLotRealCop,
   filterConsolidatedTransitLots,
+  mergeCtPackagesForBatch,
 } from './consolidated-transit-lots';
 
 const pkg = (partial: Partial<PurchasePackage> & Pick<PurchasePackage, 'packageKey'>): PurchasePackage => ({
@@ -218,5 +219,46 @@ describe('consolidated-transit-lots', () => {
     const filteredPanel = filterConsolidatedTransitLots(lots, 'mew');
     expect(filteredPanel[0].ctPackages).toHaveLength(0);
     expect(filteredPanel[0].panelOnlyLines).toHaveLength(1);
+  });
+
+  it('une checkout CT al lote si alguna carta coincide con el batch aunque falle match de paquete', () => {
+    const paidAt = '2026-05-29T15:33:34.000Z';
+    const ctPkg = pkg({
+      packageKey: paidAt,
+      paidAt,
+      lines: [
+        {
+          lineKey: 'a',
+          location: 'ct0-ready',
+          name: 'Mewtwo',
+          qty: 1,
+          language: 'en',
+          condition: 'NM',
+          variantLabel: '—',
+          referencePrice: '$1',
+          referenceUsd: 1,
+          unitCostCop: 1000,
+          lineCostCop: 1000,
+          expansion: 'Base',
+          ct0ItemId: 1,
+          blueprintId: 1,
+        },
+      ],
+    });
+
+    const merged = mergeCtPackagesForBatch([], [ctPkg], [
+      {
+        batch_item_id: 'x',
+        card_id: 'sv1',
+        card_name: 'Mewtwo',
+        language: 'en',
+        quantity_ordered: 1,
+        remaining_quantity: 1,
+        unit_cost_cop: 5000,
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].lines[0].location).toBe('ct0-ready');
   });
 });

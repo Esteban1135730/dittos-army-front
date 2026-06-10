@@ -108,4 +108,36 @@ describe('incoming-ct0-homolog', () => {
     );
     expect(cop).toBe(30000);
   });
+
+  it('empareja CT Zero listas (ok) aunque el idioma del panel difiera', () => {
+    const index = buildCt0HomologIndex({
+      ct0Items: [
+        ct0({
+          id: 1,
+          name: 'Pikachu',
+          quantity: { ok: 1 },
+          properties: { pokemon_language: 'en' },
+        }),
+      ],
+      readLanguage: (p) => String(p?.pokemon_language ?? ''),
+      readRareza: () => null,
+    });
+
+    const statuses = homologateIncomingItems(
+      [
+        {
+          batch_item_id: 'a',
+          card_id: 'base1-58',
+          card_name: 'Pikachu',
+          language: 'English',
+          quantity_ordered: 1,
+          remaining_quantity: 1,
+        },
+      ],
+      index,
+    );
+
+    expect(statuses.get('a')?.onlyInIncoming).toBe(false);
+    expect(statuses.get('a')?.missingFromCt0Qty).toBe(0);
+  });
 });

@@ -1,13 +1,15 @@
-import type { IncomingPanelLine } from './incoming-ct0-homolog';
-import { panelLinesForBatch } from './incoming-ct0-homolog';
+import type { IncomingHomologItem, IncomingPanelLine } from './incoming-ct0-homolog';
+import { findBatchItemForCtLineName, findBatchItemForTransitLine, panelLinesForBatch } from './incoming-ct0-homolog';
 import type { PackageMatchResult } from './incoming-ct0-package-match';
 import { matchesForBatch } from './incoming-ct0-package-match';
+import type { OrderTransitPackage } from './order-transit-packages';
 import type { PurchasePackage } from './purchase-package-consolidated';
 
 export type IncomingBatchLotSource = {
   batchId: string;
   purchaseDate: string;
   totalCopCardsCost?: number;
+  items?: IncomingHomologItem[];
 };
 
 export type ConsolidatedTransitLot = {
@@ -18,6 +20,7 @@ export type ConsolidatedTransitLot = {
   batchTotalCopCardsCost: number | null;
   ctPackages: PurchasePackage[];
   ctMatches: PackageMatchResult[];
+  orderPackages: OrderTransitPackage[];
   panelOnlyLines: IncomingPanelLine[];
   totalUnits: number;
   ctSubtotalUsd: number;
@@ -27,6 +30,8 @@ export type ConsolidatedTransitLot = {
 export function computeLotRealCop(
   ctPackages: PurchasePackage[],
   panelOnlyLines: IncomingPanelLine[],
+  orderPackages: OrderTransitPackage[] = [],
+  batchItems: IncomingHomologItem[] = [],
 ): number {
   let total = 0;
   for (const pkg of ctPackages) {
@@ -37,18 +42,54 @@ export function computeLotRealCop(
   for (const line of panelOnlyLines) {
     total += line.lineCostCop;
   }
+  for (const pkg of orderPackages) {
+    for (const line of pkg.lines) {
+      const item = findBatchItemForTransitLine(
+        line.name,
+        line.language,
+        line.unitPriceEur,
+        batchItems,
+      );
+      const unit = item?.unit_cost_cop;
+      if (unit != null && unit > 0) total += unit * line.qty;
+    }
+  }
   return Math.round(total);
 }
 
-function countLotUnits(ctPackages: PurchasePackage[], panelOnlyLines: IncomingPanelLine[]): number {
+function countLotUnits(
+  ctPackages: PurchasePackage[],
+  panelOnlyLines: IncomingPanelLine[],
+  orderPackages: OrderTransitPackage[] = [],
+): number {
   let units = 0;
   for (const pkg of ctPackages) units += pkg.units;
   for (const line of panelOnlyLines) units += line.qty;
+  for (const pkg of orderPackages) units += pkg.units;
   return units;
 }
 
 function sumCtSubtotalUsd(packages: PurchasePackage[]): number {
   return packages.reduce((s, p) => s + p.ctSubtotalUsd, 0);
+}
+
+/** Incluye checkouts CT cuyas cartas coinciden con ítems del lote aunque falle el match de paquete. */
+export function mergeCtPackagesForBatch(
+  byPackageMatch: PurchasePackage[],
+  allPackages: PurchasePackage[],
+  batchItems: IncomingHomologItem[],
+): PurchasePackage[] {
+  if (batchItems.length === 0) return byPackageMatch;
+
+  const byKey = new Map(byPackageMatch.map((p) => [p.packageKey, p]));
+  for (const pkg of allPackages) {
+    if (byKey.has(pkg.packageKey)) continue;
+    const touchesBatch = pkg.lines.some((line) =>
+      findBatchItemForCtLineName(line.name, line.language, batchItems),
+    );
+    if (touchesBatch) byKey.set(pkg.packageKey, pkg);
+  }
+  return [...byKey.values()];
 }
 
 /**
@@ -57,30 +98,43 @@ function sumCtSubtotalUsd(packages: PurchasePackage[]): number {
  */
 export function buildConsolidatedTransitLots(args: {
   packages: PurchasePackage[];
+  orderPackages?: OrderTransitPackage[];
+  orderMatches?: PackageMatchResult[];
   bundles: IncomingBatchLotSource[];
   panelOnlyLinesAll: IncomingPanelLine[];
   allMatches: PackageMatchResult[];
 }): ConsolidatedTransitLot[] {
+  const orderPackages = args.orderPackages ?? [];
+  const orderMatches = args.orderMatches ?? [];
+  const orderPackageByKey = new Map(orderPackages.map((p) => [p.packageKey, p]));
+
+  const orderPackagesForBatch = (batchId: string): OrderTransitPackage[] => {
+    const matches = matchesForBatch(orderMatches, batchId);
+    return matches
+      .map((m) => orderPackageByKey.get(m.ct0PackageKey))
+      .filter((p): p is OrderTransitPackage => p != null);
+  };
   const lots: ConsolidatedTransitLot[] = [];
   const packageByKey = new Map(args.packages.map((p) => [p.packageKey, p]));
   const matchedCtKeys = new Set<string>();
-  const batchIdsWithCtMatch = new Set<string>();
 
   for (const bundle of args.bundles) {
     const batchMatches = matchesForBatch(args.allMatches, bundle.batchId);
-    const ctPackages = batchMatches
+    const batchItems = bundle.items ?? [];
+    const ctFromMatch = batchMatches
       .map((m) => packageByKey.get(m.ct0PackageKey))
       .filter((p): p is PurchasePackage => p != null);
+    const ctPackages = mergeCtPackagesForBatch(ctFromMatch, args.packages, batchItems);
 
     const panelOnlyLines = panelLinesForBatch(args.panelOnlyLinesAll, bundle.batchId);
+    const orderPkgs = orderPackagesForBatch(bundle.batchId);
 
-    if (ctPackages.length > 0) {
-      for (const m of batchMatches) matchedCtKeys.add(m.ct0PackageKey);
-      batchIdsWithCtMatch.add(bundle.batchId);
+    if (ctPackages.length > 0 || panelOnlyLines.length > 0 || orderPkgs.length > 0) {
+      for (const pkg of ctPackages) matchedCtKeys.add(pkg.packageKey);
 
       lots.push({
         lotKey: `batch:${bundle.batchId}`,
-        kind: 'batch',
+        kind: ctPackages.length > 0 ? 'batch' : panelOnlyLines.length > 0 ? 'panel-only' : 'batch',
         batchId: bundle.batchId,
         batchPurchaseDate: bundle.purchaseDate,
         batchTotalCopCardsCost:
@@ -89,30 +143,11 @@ export function buildConsolidatedTransitLots(args: {
             : null,
         ctPackages,
         ctMatches: batchMatches,
+        orderPackages: orderPkgs,
         panelOnlyLines,
-        totalUnits: countLotUnits(ctPackages, panelOnlyLines),
+        totalUnits: countLotUnits(ctPackages, panelOnlyLines, orderPkgs),
         ctSubtotalUsd: sumCtSubtotalUsd(ctPackages),
-        realCopTotal: computeLotRealCop(ctPackages, panelOnlyLines),
-      });
-      continue;
-    }
-
-    if (panelOnlyLines.length > 0) {
-      lots.push({
-        lotKey: `panel:${bundle.batchId}`,
-        kind: 'panel-only',
-        batchId: bundle.batchId,
-        batchPurchaseDate: bundle.purchaseDate,
-        batchTotalCopCardsCost:
-          bundle.totalCopCardsCost != null && bundle.totalCopCardsCost > 0
-            ? Math.round(bundle.totalCopCardsCost)
-            : null,
-        ctPackages: [],
-        ctMatches: [],
-        panelOnlyLines,
-        totalUnits: countLotUnits([], panelOnlyLines),
-        ctSubtotalUsd: 0,
-        realCopTotal: computeLotRealCop([], panelOnlyLines),
+        realCopTotal: computeLotRealCop(ctPackages, panelOnlyLines, orderPkgs, batchItems),
       });
     }
   }
@@ -127,6 +162,7 @@ export function buildConsolidatedTransitLots(args: {
       batchTotalCopCardsCost: null,
       ctPackages: [pkg],
       ctMatches: [],
+      orderPackages: [],
       panelOnlyLines: [],
       totalUnits: pkg.units,
       ctSubtotalUsd: pkg.ctSubtotalUsd,
@@ -147,6 +183,14 @@ export function buildConsolidatedTransitLots(args: {
   });
 
   return lots;
+}
+
+export function orderPackagesWithoutBatchMatch(
+  orderPackages: OrderTransitPackage[],
+  orderMatches: PackageMatchResult[],
+): OrderTransitPackage[] {
+  const matched = new Set(orderMatches.map((m) => m.ct0PackageKey));
+  return orderPackages.filter((p) => !matched.has(p.packageKey));
 }
 
 export function normalizeCardSearchQuery(raw: string): string {
@@ -187,15 +231,31 @@ export function filterConsolidatedLotBySearch(
       (line.rareza ? textMatchesCardSearch(line.rareza, query) : false),
   );
 
-  if (ctPackages.length === 0 && panelOnlyLines.length === 0) return null;
+  const orderPackages = lot.orderPackages
+    .map((pkg) => ({
+      ...pkg,
+      lines: pkg.lines.filter(
+        (line) =>
+          textMatchesCardSearch(line.name, query) ||
+          textMatchesCardSearch(line.expansion, query) ||
+          textMatchesCardSearch(line.language, query) ||
+          textMatchesCardSearch(line.orderCode, query),
+      ),
+    }))
+    .filter((pkg) => pkg.lines.length > 0);
+
+  if (ctPackages.length === 0 && panelOnlyLines.length === 0 && orderPackages.length === 0) {
+    return null;
+  }
 
   return {
     ...lot,
     ctPackages,
+    orderPackages,
     panelOnlyLines,
-    totalUnits: countLotUnits(ctPackages, panelOnlyLines),
+    totalUnits: countLotUnits(ctPackages, panelOnlyLines, orderPackages),
     ctSubtotalUsd: sumCtSubtotalUsd(ctPackages),
-    realCopTotal: computeLotRealCop(ctPackages, panelOnlyLines),
+    realCopTotal: computeLotRealCop(ctPackages, panelOnlyLines, orderPackages),
   };
 }
 

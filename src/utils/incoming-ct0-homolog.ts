@@ -1,5 +1,6 @@
 import type { Ct0BoxItem } from './cardtrader-ct0-box';
 import { ct0ItemUnitsInTransit, filterCt0ItemsInTransit } from './cardtrader-ct0-box';
+import { normalizeCardNameForMatch } from './incoming-ct0-package-match';
 
 export type IncomingHomologItem = {
   batch_item_id: string;
@@ -36,6 +37,8 @@ export type Ct0HomologBucket = {
 export type Ct0HomologIndex = {
   byCardId: Map<string, Ct0HomologBucket>;
   byName: Map<string, Ct0HomologBucket>;
+  /** Nombre normalizado sin idioma — fallback cuando panel y CT difieren en language. */
+  byNameOnly: Map<string, Ct0HomologBucket>;
   ct0UnitsTotal: number;
 };
 
@@ -63,8 +66,31 @@ export function normalizeMatchLanguage(raw: string | undefined): string {
   const s = String(raw ?? '')
     .trim()
     .toLowerCase();
-  if (!s) return '';
-  const alias: Record<string, string> = { jp: 'ja', jpn: 'ja', por: 'pt' };
+  if (!s || s === '—' || s === '-') return '';
+  const alias: Record<string, string> = {
+    jp: 'ja',
+    jpn: 'ja',
+    japanese: 'ja',
+    por: 'pt',
+    portuguese: 'pt',
+    english: 'en',
+    en: 'en',
+    ingles: 'en',
+    español: 'es',
+    espanol: 'es',
+    spanish: 'es',
+    es: 'es',
+    french: 'fr',
+    fr: 'fr',
+    german: 'de',
+    de: 'de',
+    italian: 'it',
+    it: 'it',
+    korean: 'ko',
+    ko: 'ko',
+    chinese: 'zh',
+    zh: 'zh',
+  };
   return alias[s] ?? s;
 }
 
@@ -80,6 +106,15 @@ export function incomingCardMatchKey(item: IncomingHomologItem): string {
 
 export function incomingNameMatchKey(name: string, language: string): string {
   return `${name.trim().toLowerCase()}|${normalizeMatchLanguage(language)}`;
+}
+
+export function pricesMatchForTransit(
+  orderEur: number,
+  panelEur: number,
+  toleranceRatio = 0.1,
+): boolean {
+  if (panelEur <= 0 || orderEur <= 0) return false;
+  return Math.abs(orderEur - panelEur) / panelEur <= toleranceRatio;
 }
 
 function addQty(map: Map<string, Ct0HomologBucket>, key: string, qty: number): void {
@@ -101,6 +136,7 @@ export function buildCt0HomologIndex(args: {
 }): Ct0HomologIndex {
   const byCardId = new Map<string, Ct0HomologBucket>();
   const byName = new Map<string, Ct0HomologBucket>();
+  const byNameOnly = new Map<string, Ct0HomologBucket>();
   const tcgdx = args.tcgdxByCt0ItemId ?? {};
   let ct0UnitsTotal = 0;
 
@@ -109,9 +145,10 @@ export function buildCt0HomologIndex(args: {
     if (qty <= 0) continue;
     ct0UnitsTotal += qty;
 
-    const lang = args.readLanguage(item.properties);
+    const lang = normalizeMatchLanguage(args.readLanguage(item.properties));
     const rareza = args.readRareza(item.properties);
     addQty(byName, incomingNameMatchKey(item.name, lang), qty);
+    addQty(byNameOnly, normalizeCardNameForMatch(item.name), qty);
 
     const tcgId = tcgdx[item.id];
     if (tcgId) {
@@ -123,7 +160,7 @@ export function buildCt0HomologIndex(args: {
     }
   }
 
-  return { byCardId, byName, ct0UnitsTotal };
+  return { byCardId, byName, byNameOnly, ct0UnitsTotal };
 }
 
 function cloneIndex(index: Ct0HomologIndex): Ct0HomologIndex {
@@ -135,6 +172,7 @@ function cloneIndex(index: Ct0HomologIndex): Ct0HomologIndex {
   return {
     byCardId: cloneMap(index.byCardId),
     byName: cloneMap(index.byName),
+    byNameOnly: cloneMap(index.byNameOnly),
     ct0UnitsTotal: index.ct0UnitsTotal,
   };
 }
@@ -143,6 +181,34 @@ function takeQty(bucket: Ct0HomologBucket | undefined, wanted: number): number {
   if (!bucket || wanted <= 0 || bucket.totalQty <= 0) return 0;
   const taken = Math.min(wanted, bucket.totalQty);
   bucket.totalQty -= taken;
+  return taken;
+}
+
+/** Consume unidades CT sin contar dos veces la misma carta (nombre+idioma vs solo nombre). */
+function takeCt0UnitsForPanelLine(
+  available: Ct0HomologIndex,
+  cardName: string,
+  language: string,
+  wanted: number,
+): number {
+  const langKey = incomingNameMatchKey(cardName, normalizeMatchLanguage(language));
+  const nameKey = normalizeCardNameForMatch(cardName);
+
+  let taken = takeQty(available.byName.get(langKey), wanted);
+  if (taken > 0) {
+    takeQty(available.byNameOnly.get(nameKey), taken);
+    return taken;
+  }
+
+  taken = takeQty(available.byNameOnly.get(nameKey), wanted);
+  if (taken > 0) {
+    for (const [key, bucket] of available.byName) {
+      if (!key.startsWith(`${nameKey}|`)) continue;
+      const share = takeQty(bucket, taken);
+      taken = share;
+      break;
+    }
+  }
   return taken;
 }
 
@@ -179,8 +245,12 @@ export function homologateIncomingItems(
     }
 
     if (matched < remaining) {
-      const nameKey = incomingNameMatchKey(it.card_name || it.card_id, it.language);
-      const fromName = takeQty(available.byName.get(nameKey), remaining - matched);
+      const fromName = takeCt0UnitsForPanelLine(
+        available,
+        it.card_name || it.card_id,
+        it.language,
+        remaining - matched,
+      );
       if (fromName > 0) {
         matched += fromName;
         if (matchMethod === 'none') matchMethod = 'name';
@@ -279,14 +349,42 @@ export function findBatchItemForCtLineName(
   lineLanguage: string,
   batchItems: IncomingHomologItem[],
 ): IncomingHomologItem | undefined {
-  const key = incomingNameMatchKey(lineName, lineLanguage);
-  const exact = batchItems.find(
-    (it) => incomingNameMatchKey(it.card_name || it.card_id, it.language) === key,
-  );
-  if (exact) return exact;
+  return findBatchItemForTransitLine(lineName, lineLanguage, null, batchItems);
+}
 
+/** Match panel por nombre, idioma y precio EUR (tolerancia relativa). */
+export function findBatchItemForTransitLine(
+  lineName: string,
+  lineLanguage: string,
+  unitPriceEur: number | null,
+  batchItems: IncomingHomologItem[],
+  priceToleranceRatio = 0.1,
+): IncomingHomologItem | undefined {
+  const key = incomingNameMatchKey(lineName, normalizeMatchLanguage(lineLanguage));
   const nameNorm = lineName.trim().toLowerCase();
-  return batchItems.find((it) => (it.card_name || it.card_id).trim().toLowerCase() === nameNorm);
+  const candidates = batchItems.filter(
+    (it) =>
+      incomingNameMatchKey(it.card_name || it.card_id, normalizeMatchLanguage(it.language)) ===
+        key ||
+      (it.card_name || it.card_id).trim().toLowerCase() === nameNorm,
+  );
+  if (candidates.length === 0) {
+    const nameOnly = normalizeCardNameForMatch(lineName);
+    return batchItems.find(
+      (it) => normalizeCardNameForMatch(it.card_name || it.card_id) === nameOnly,
+    );
+  }
+
+  if (unitPriceEur != null && unitPriceEur > 0) {
+    const priced = candidates.filter((it) => {
+      const eur = it.eur_unit_price;
+      if (eur == null || eur <= 0) return false;
+      return Math.abs(unitPriceEur - eur) / eur <= priceToleranceRatio;
+    });
+    if (priced.length > 0) return priced[0];
+  }
+
+  return candidates[0];
 }
 
 /** Suma unit_cost_cop × qty de líneas CT emparejadas por nombre con el lote panel. */

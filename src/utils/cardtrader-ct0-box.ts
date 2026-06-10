@@ -82,6 +82,20 @@ export function ct0ItemUnitsInTransit(item: Ct0BoxItem): number {
   return ct0ItemQtyForState(item, 'ok') + ct0ItemQtyForState(item, 'pending');
 }
 
+/** Todas las unidades en CT Zero (ok + pending + missing). */
+export function ct0ItemUnitsAll(item: Ct0BoxItem): number {
+  return (
+    ct0ItemQtyForState(item, 'ok') +
+    ct0ItemQtyForState(item, 'pending') +
+    ct0ItemQtyForState(item, 'missing')
+  );
+}
+
+export function filterCt0ItemsAll(items: Ct0BoxItem[], pokemonOnly = true): Ct0BoxItem[] {
+  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
+  return rows.filter((item) => ct0ItemUnitsAll(item) > 0);
+}
+
 export function ct0ItemLineUsdInTransit(item: Ct0BoxItem): number {
   return ct0LineWeight(item, 'ok') + ct0LineWeight(item, 'pending');
 }

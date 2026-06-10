@@ -9,7 +9,6 @@ import {
   Chip,
   CircularProgress,
   Collapse,
-  Divider,
   IconButton,
   Paper,
   Skeleton,
@@ -18,66 +17,40 @@ import {
   Typography,
 } from "@mui/material";
 import { apiBase, apiUrl } from "../../config/api";
-import { operationalRarezaLabel } from "../../constants/item-rareza";
-import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
+import {
+  buildBatchConsolidatedPackages,
+  filterBatchPackagesBySearch,
+  groupBatchConsolidatedLines,
+  type BatchConsolidatedLine,
+  type BatchConsolidatedPackage,
+  type SoloCardtraderLine,
+} from "../../utils/batch-consolidated-package";
 import {
   buildBlueprintImageUrlMapFromExport,
   normalizeCtExpansions,
   resolveCtExpansionId,
 } from "../../utils/cardtrader-blueprint-image";
 import { getPedidoBlueprintImageDisplaySrc } from "../../utils/cardtrader-pedido-blueprint-image-cache";
-import { formatCop, formatRateCopPerUnit } from "../../utils/cardtrader-order-pricing";
+import { formatCop } from "../../utils/cardtrader-order-pricing";
+import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
+import { readCtLanguage } from "../../utils/cardtrader-order-item-map";
+import type { IncomingHomologItem } from "../../utils/incoming-ct0-homolog";
 import {
-  inferOperationalRarezaFromCtProperties,
-  readCtCondition,
-  readCtLanguage,
-} from "../../utils/cardtrader-order-item-map";
-import {
-  buildConsolidatedTransitLots,
-  filterConsolidatedTransitLots,
-  type ConsolidatedTransitLot,
-} from "../../utils/consolidated-transit-lots";
-import {
-  buildCt0HomologIndex,
-  buildPanelOnlyLines,
-  computeSuggestedCopFromBatchItems,
-  homologateIncomingItems,
-  summarizeIncomingHomolog,
-  type IncomingHomologItem,
-  type IncomingPanelLine,
-} from "../../utils/incoming-ct0-homolog";
-import {
-  buildCt0PackageProfile,
-  buildIncomingBatchProfile,
-  matchCt0PackagesToIncomingBatches,
-  matchMapByCt0PackageKey,
-} from "../../utils/incoming-ct0-package-match";
-import {
-  buildPurchasePackages,
-  locationLabel,
-  type PurchasePackageLine,
-} from "../../utils/purchase-package-consolidated";
+  buildOrderTransitPackages,
+  normalizeCtOrdersResponse,
+} from "../../utils/order-transit-packages";
 import { API_INCOMING } from "../clientes/cliente-types";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 
-function parseCopInput(raw: string): number | null {
-  const cleaned = raw.replace(/[^\d.,]/g, "").replace(/\./g, "").replace(",", ".");
-  const n = Number(cleaned);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n);
-}
-
-function variantLabelFromProps(props: Record<string, unknown> | undefined): string {
-  return operationalRarezaLabel(inferOperationalRarezaFromCtProperties(props));
-}
-
-function Ct0LineCard(props: {
-  line: PurchasePackageLine;
-  imageSrc?: string;
+function BatchLineCard(props: {
+  line: BatchConsolidatedLine;
+  ct0ImageSrc?: string;
   imageLoading?: boolean;
 }) {
-  const { line, imageSrc, imageLoading } = props;
+  const { line, ct0ImageSrc, imageLoading } = props;
+  const isSoloRegistro = line.panelOnlyUnits === line.qty;
+  const hasEnvioMatch = line.orderUnits > 0;
 
   return (
     <Paper
@@ -87,6 +60,8 @@ function Ct0LineCard(props: {
         display: "flex",
         gap: 1.5,
         alignItems: "flex-start",
+        bgcolor: hasEnvioMatch ? "#e3f2fd" : isSoloRegistro ? "#ffebee" : "#ffffff",
+        borderColor: hasEnvioMatch ? "#1565c0" : isSoloRegistro ? "#c62828" : "#e0e0e0",
       }}
     >
       <Box
@@ -104,99 +79,10 @@ function Ct0LineCard(props: {
       >
         {imageLoading ? (
           <Skeleton variant="rounded" width={72} height={100} />
-        ) : imageSrc ? (
+        ) : ct0ImageSrc || line.imageUrl ? (
           <Box
             component="img"
-            src={imageSrc}
-            alt={line.name}
-            loading="lazy"
-            sx={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-              display: "block",
-            }}
-            onError={(ev) => {
-              (ev.target as HTMLImageElement).style.display = "none";
-            }}
-          />
-        ) : (
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: "center" }}>
-            Sin imagen
-          </Typography>
-        )}
-      </Box>
-
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", mb: 0.5 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            {line.qty}× {line.name}
-          </Typography>
-          <Chip size="small" label={locationLabel(line.location)} />
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
-          {line.condition} · {line.language} · {line.variantLabel}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" display="block">
-          {line.expansion}
-        </Typography>
-      </Box>
-
-      <Box sx={{ textAlign: "right", minWidth: 100 }}>
-        <Typography variant="body2">{line.referencePrice}</Typography>
-        <Typography variant="caption" color="text.secondary" display="block">
-          Ref. CT
-        </Typography>
-        {line.unitCostCop != null ? (
-          <>
-            <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600 }}>
-              {formatCop(line.unitCostCop)}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              / ud · {line.lineCostCop != null ? formatCop(line.lineCostCop) : "—"} línea
-            </Typography>
-          </>
-        ) : (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
-            Sin COP en panel
-          </Typography>
-        )}
-      </Box>
-    </Paper>
-  );
-}
-
-function PanelLineCard(props: { line: IncomingPanelLine }) {
-  const { line } = props;
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        p: 1.5,
-        display: "flex",
-        gap: 1.5,
-        alignItems: "flex-start",
-        bgcolor: "#fff8e1",
-        borderColor: "#ffca28",
-      }}
-    >
-      <Box
-        sx={{
-          width: 72,
-          minWidth: 72,
-          height: 100,
-          borderRadius: 1,
-          overflow: "hidden",
-          bgcolor: "grey.100",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {line.imageUrl ? (
-          <Box
-            component="img"
-            src={line.imageUrl}
+            src={ct0ImageSrc || line.imageUrl}
             alt={line.cardName}
             loading="lazy"
             sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
@@ -213,7 +99,8 @@ function PanelLineCard(props: { line: IncomingPanelLine }) {
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
             {line.qty}× {line.cardName}
           </Typography>
-          <Chip size="small" color="warning" label="Solo tu registro" />
+          {isSoloRegistro ? <Chip size="small" color="error" label="Solo tu registro" /> : null}
+          {hasEnvioMatch ? <Chip size="small" color="info" label="Match envío" /> : null}
         </Box>
         <Typography variant="body2" color="text.secondary">
           {line.language}
@@ -221,7 +108,45 @@ function PanelLineCard(props: { line: IncomingPanelLine }) {
         </Typography>
         {line.eurUnitPrice != null ? (
           <Typography variant="caption" color="text.secondary" display="block">
-            Ref. €{line.eurUnitPrice.toFixed(2)}/ud
+            Ref. panel €{line.eurUnitPrice.toFixed(2)}/ud
+          </Typography>
+        ) : null}
+
+        {line.ct0Matches.length > 0 ? (
+          <Box sx={{ mt: 1, display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {line.ct0Matches.map((m) => (
+              <Chip
+                key={`ct0-${m.ct0ItemId}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                label={`CT Zero ×${m.qty} · ${m.stateLabels.join(", ")}`}
+              />
+            ))}
+          </Box>
+        ) : null}
+
+        {line.orderMatches.length > 0 ? (
+          <Box sx={{ mt: 1, display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {line.orderMatches.map((m) => (
+              <Chip
+                key={m.lineKey}
+                size="small"
+                color="info"
+                variant="outlined"
+                label={`${m.orderState} ×${m.qty} · ${m.orderCode}`}
+              />
+            ))}
+          </Box>
+        ) : null}
+
+        {isSoloRegistro ? (
+          <Typography variant="caption" color="error.main" display="block" sx={{ mt: 1 }}>
+            Sin match en CardTrader
+          </Typography>
+        ) : line.panelOnlyUnits > 0 ? (
+          <Typography variant="caption" color="error.main" display="block" sx={{ mt: 1 }}>
+            {line.panelOnlyUnits} ud sin match en CardTrader
           </Typography>
         ) : null}
       </Box>
@@ -231,116 +156,69 @@ function PanelLineCard(props: { line: IncomingPanelLine }) {
           {formatCop(line.unitCostCop)}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block">
-          / ud · {formatCop(line.lineCostCop)} línea
+          / ud · {formatCop(line.lineCostCop)}
         </Typography>
       </Box>
     </Paper>
   );
 }
 
-function useLotBlueprintImages(lot: ConsolidatedTransitLot | null, enabled: boolean) {
-  const ctLines = useMemo(
-    () => (lot ? lot.ctPackages.flatMap((p) => p.lines) : []),
-    [lot],
+function SoloCardtraderCard(props: { line: SoloCardtraderLine }) {
+  const { line } = props;
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5, display: "flex", gap: 1.5, bgcolor: "#fafafa" }}>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+          {line.qty}× {line.name}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {line.language} · {line.label}
+          {line.orderCode ? ` · ${line.orderCode}` : ""}
+        </Typography>
+      </Box>
+      <Typography variant="body2">{line.referencePrice}</Typography>
+    </Paper>
   );
-  const expansionNames = useMemo(
-    () => [...new Set(ctLines.map((l) => l.expansion).filter(Boolean))],
-    [ctLines],
-  );
-
-  const expansionsQuery = useQuery({
-    queryKey: ["cardtrader", "expansions", "pokemon"],
-    queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER}/expansions`, {
-        params: { game_id: 5 },
-      });
-      return res.data;
-    },
-    staleTime: 60 * 60 * 1000,
-  });
-
-  return useQuery<Record<number, string>>({
-    queryKey: ["ct0-blueprint-images", lot?.lotKey, expansionNames.join("|")],
-    enabled: enabled && !!lot && ctLines.length > 0 && expansionsQuery.isSuccess && expansionNames.length > 0,
-    staleTime: 30 * 60 * 1000,
-    queryFn: async () => {
-      const expansions = normalizeCtExpansions(expansionsQuery.data);
-      const expansionIds = [
-        ...new Set(
-          expansionNames
-            .map((name) => resolveCtExpansionId(expansions, name))
-            .filter((id): id is number => id != null),
-        ),
-      ];
-
-      const imageUrlByBlueprint = new Map<number, string>();
-      await Promise.all(
-        expansionIds.map(async (expansionId) => {
-          try {
-            const res = await axios.get(`${API_CARDTRADER}/blueprints`, {
-              params: { expansion_id: expansionId },
-            });
-            for (const [bpId, url] of buildBlueprintImageUrlMapFromExport(res.data)) {
-              imageUrlByBlueprint.set(bpId, url);
-            }
-          } catch {
-            /* expansión sin export */
-          }
-        }),
-      );
-
-      const out: Record<number, string> = {};
-      for (const line of ctLines) {
-        const bpId = line.blueprintId;
-        if (out[bpId]) continue;
-        const imageUrl = imageUrlByBlueprint.get(bpId);
-        const src = getPedidoBlueprintImageDisplaySrc(bpId, imageUrl, apiBase());
-        if (src) out[bpId] = src;
-      }
-      return out;
-    },
-  });
 }
 
-function ConsolidatedLotCard(props: {
-  lot: ConsolidatedTransitLot;
-  expanded: boolean;
-  onToggle: () => void;
+function BatchLineList(props: {
+  lines: BatchConsolidatedLine[];
+  blueprintImages: Record<number, string>;
+  imagesLoading: boolean;
 }) {
-  const { lot, expanded, onToggle } = props;
-  const blueprintImagesQuery = useLotBlueprintImages(lot, expanded);
-
-  const title =
-    lot.kind === "batch" || lot.kind === "panel-only"
-      ? lot.batchPurchaseDate
-        ? new Date(lot.batchPurchaseDate).toLocaleDateString("es-CO", {
-            dateStyle: "long",
-          })
-        : "Compra en camino"
-      : lot.ctPackages[0]?.paidAtLabel ?? "Checkout CT";
-
-  const subtitleParts: string[] = [];
-  if (lot.ctPackages.length > 0) {
-    subtitleParts.push(
-      `${lot.ctPackages.length} pago${lot.ctPackages.length > 1 ? "s" : ""} CT · ${lot.ctSubtotalUsd.toFixed(2)} USD ref.`,
-    );
-  }
-  if (lot.panelOnlyLines.length > 0) {
-    subtitleParts.push(
-      `${lot.panelOnlyLines.reduce((s, l) => s + l.qty, 0)} uds solo en tu registro`,
-    );
-  }
-  subtitleParts.push(`${lot.totalUnits} cartas en total`);
+  const { lines, blueprintImages, imagesLoading } = props;
+  if (lines.length === 0) return null;
 
   return (
-    <Paper
-      sx={{
-        mb: 2,
-        borderTop: 4,
-        borderColor: lot.batchId ? "#1565c0" : "#546e7a",
-        overflow: "hidden",
-      }}
-    >
+    <Stack spacing={1.5}>
+      {lines.map((line) => {
+        const bpId = line.ct0Matches[0]?.blueprintId;
+        return (
+          <BatchLineCard
+            key={line.batchItemId}
+            line={line}
+            ct0ImageSrc={bpId ? blueprintImages[bpId] : undefined}
+            imageLoading={imagesLoading && !!bpId && !blueprintImages[bpId]}
+          />
+        );
+      })}
+    </Stack>
+  );
+}
+
+function BatchPackageCard(props: {
+  pkg: BatchConsolidatedPackage;
+  expanded: boolean;
+  onToggle: () => void;
+  blueprintImages: Record<number, string>;
+  imagesLoading: boolean;
+}) {
+  const { pkg, expanded, onToggle, blueprintImages, imagesLoading } = props;
+  const title = new Date(pkg.purchaseDate).toLocaleDateString("es-CO", { dateStyle: "long" });
+  const { soloRegistro, conEnvio, otras } = groupBatchConsolidatedLines(pkg.lines);
+
+  return (
+    <Paper sx={{ mb: 2, borderTop: 4, borderColor: "#1565c0", overflow: "hidden" }}>
       <Box
         role="button"
         tabIndex={0}
@@ -354,135 +232,85 @@ function ConsolidatedLotCard(props: {
         sx={{
           p: 2,
           display: "flex",
-          flexWrap: "wrap",
-          gap: 2,
-          alignItems: "flex-start",
+          gap: 1,
           cursor: "pointer",
-          userSelect: "none",
           "&:hover": { bgcolor: "action.hover" },
         }}
       >
         <IconButton
           size="small"
-          aria-label={expanded ? "Contraer lote" : "Expandir lote"}
-          sx={{ mt: 0.25, transform: expanded ? "rotate(180deg)" : "none", transition: "0.2s" }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
+          sx={{ transform: expanded ? "rotate(180deg)" : "none", transition: "0.2s" }}
         >
           ▼
         </IconButton>
-
-        <Box sx={{ flex: 1, minWidth: 200 }}>
+        <Box sx={{ flex: 1 }}>
           <Typography variant="h6">{title}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {subtitleParts.join(" · ")}
+            {pkg.lines.length} líneas · {pkg.totalUnits} uds
+            {soloRegistro.length > 0 ? ` · ${soloRegistro.length} solo registro` : ""}
+            {conEnvio.length > 0 ? ` · ${conEnvio.length} con envío` : ""}
           </Typography>
-          {lot.ctMatches.length > 0 ? (
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-              Match panel:{" "}
-              {lot.ctMatches
-                .map((m) => `${Math.round(m.nameOverlapRatio * 100)}% (${m.ct0PaidAt.slice(0, 10)})`)
-                .join(" · ")}
-            </Typography>
-          ) : null}
         </Box>
-
-        <Box sx={{ textAlign: { xs: "left", sm: "right" }, minWidth: 180 }}>
-          <Typography variant="caption" color="text.secondary" display="block">
-            Compra real (COP)
+        <Box sx={{ textAlign: "right" }}>
+          <Typography variant="caption" color="text.secondary">
+            COP registro
           </Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark" }}>
-            {formatCop(lot.realCopTotal)}
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "success.dark" }}>
+            {formatCop(pkg.realCopTotal)}
           </Typography>
-          {lot.batchTotalCopCardsCost != null &&
-          lot.batchTotalCopCardsCost !== lot.realCopTotal ? (
-            <Typography variant="caption" color="text.secondary" display="block">
-              Registro panel: {formatCop(lot.batchTotalCopCardsCost)}
-            </Typography>
-          ) : null}
-          {lot.ctSubtotalUsd > 0 && lot.realCopTotal > 0 ? (
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-              Tasa ref.:{" "}
-              {formatRateCopPerUnit(lot.realCopTotal / lot.ctSubtotalUsd, "USD")}
-            </Typography>
-          ) : null}
         </Box>
       </Box>
 
       <Collapse in={expanded} unmountOnExit>
         <Box sx={{ px: 2, pb: 2 }}>
-          {lot.batchId ? (
-            <Button
-              component={RouterLink}
-              to={`/incoming/batch/${lot.batchId}`}
-              size="small"
-              sx={{ mb: 2 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              Ver lote en panel
-            </Button>
-          ) : null}
-
-          {lot.ctPackages.length > 0 ? (
-        <>
-          {lot.ctPackages.map((pkg) => (
-            <Box key={pkg.packageKey} sx={{ mb: 2 }}>
-              {lot.ctPackages.length > 1 ? (
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                  Pago CT · {pkg.paidAtLabel} · {pkg.units} cartas
+          <Button
+            component={RouterLink}
+            to={`/incoming/batch/${pkg.batchId}`}
+            size="small"
+            sx={{ mb: 2 }}
+          >
+            Ver lote en panel
+          </Button>
+          <Stack spacing={2}>
+            {soloRegistro.length > 0 ? (
+              <Box>
+                <Typography variant="overline" color="error.main" sx={{ fontWeight: 700 }}>
+                  Solo tu registro ({soloRegistro.length})
                 </Typography>
-              ) : null}
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 1 }}>
-                {pkg.locations.map((loc) => (
-                  <Chip key={`${pkg.packageKey}-${loc}`} size="small" label={locationLabel(loc)} />
-                ))}
+                <BatchLineList
+                  lines={soloRegistro}
+                  blueprintImages={blueprintImages}
+                  imagesLoading={imagesLoading}
+                />
               </Box>
-              <Stack spacing={1.5}>
-                {pkg.lines.map((line) => (
-                  <Ct0LineCard
-                    key={line.lineKey}
-                    line={line}
-                    imageSrc={blueprintImagesQuery.data?.[line.blueprintId]}
-                    imageLoading={
-                      blueprintImagesQuery.isFetching &&
-                      !blueprintImagesQuery.data?.[line.blueprintId]
-                    }
-                  />
-                ))}
-              </Stack>
-            </Box>
-          ))}
-        </>
-      ) : null}
-
-      {lot.panelOnlyLines.length > 0 ? (
-        <>
-          {lot.ctPackages.length > 0 ? (
-            <>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-                En tu registro, aún no en CardTrader
-              </Typography>
-            </>
-          ) : null}
-          <Stack spacing={1.5}>
-            {lot.panelOnlyLines.map((line) => (
-              <PanelLineCard key={line.batchItemId} line={line} />
-            ))}
+            ) : null}
+            {conEnvio.length > 0 ? (
+              <Box>
+                <Typography variant="overline" color="info.main" sx={{ fontWeight: 700 }}>
+                  Match envío ({conEnvio.length})
+                </Typography>
+                <BatchLineList
+                  lines={conEnvio}
+                  blueprintImages={blueprintImages}
+                  imagesLoading={imagesLoading}
+                />
+              </Box>
+            ) : null}
+            {otras.length > 0 ? (
+              <Box>
+                {soloRegistro.length > 0 || conEnvio.length > 0 ? (
+                  <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+                    CT Zero / otras ({otras.length})
+                  </Typography>
+                ) : null}
+                <BatchLineList
+                  lines={otras}
+                  blueprintImages={blueprintImages}
+                  imagesLoading={imagesLoading}
+                />
+              </Box>
+            ) : null}
           </Stack>
-        </>
-      ) : null}
-
-      {blueprintImagesQuery.isFetching && lot.ctPackages.length > 0 ? (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
-          <CircularProgress size={16} />
-          <Typography variant="caption" color="text.secondary">
-            Cargando imágenes CT…
-          </Typography>
-        </Box>
-      ) : null}
         </Box>
       </Collapse>
     </Paper>
@@ -490,9 +318,9 @@ function ConsolidatedLotCard(props: {
 }
 
 export default function TestCardtraderPage() {
-  const [copByPackage] = useState<Record<string, string>>({});
   const [cardSearch, setCardSearch] = useState("");
-  const [expandedLotKeys, setExpandedLotKeys] = useState<Set<string>>(() => new Set());
+  const [expandedBatchIds, setExpandedBatchIds] = useState<Set<string>>(() => new Set());
+  const [soloSectionOpen, setSoloSectionOpen] = useState(false);
 
   const boxQuery = useQuery<Ct0BoxItem[]>({
     queryKey: ["cardtrader", "ct0-box-items"],
@@ -500,6 +328,24 @@ export default function TestCardtraderPage() {
       const res = await axios.get(`${API_CARDTRADER}/ct0-box-items`);
       return Array.isArray(res.data) ? (res.data as Ct0BoxItem[]) : [];
     },
+  });
+
+  const ordersQuery = useQuery({
+    queryKey: ["cardtrader", "orders", "in-transit"],
+    queryFn: async () => {
+      const states = ["paid", "sent", "done"] as const;
+      const byId = new Map<number, ReturnType<typeof normalizeCtOrdersResponse>[number]>();
+      await Promise.all(
+        states.map(async (state) => {
+          const res = await axios.get(`${API_CARDTRADER}/orders`, {
+            params: { state, order_as: "buyer", limit: 100 },
+          });
+          for (const o of normalizeCtOrdersResponse(res.data)) byId.set(o.id, o);
+        }),
+      );
+      return [...byId.values()];
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const incomingOpenQuery = useQuery<
@@ -567,161 +413,120 @@ export default function TestCardtraderPage() {
     },
   });
 
-  const incomingItemsFlat = useMemo(
-    () => (incomingBundlesQuery.data ?? []).flatMap((b) => b.items),
-    [incomingBundlesQuery.data],
-  );
-
-  const panelHomolog = useMemo(() => {
-    const index = buildCt0HomologIndex({
+  const consolidated = useMemo(() => {
+    const bundles = incomingBundlesQuery.data ?? [];
+    const orderPackages = buildOrderTransitPackages(ordersQuery.data ?? []);
+    return buildBatchConsolidatedPackages({
+      bundles,
       ct0Items: boxQuery.data ?? [],
-      readLanguage: readCtLanguage,
-      readRareza: (props) => inferOperationalRarezaFromCtProperties(props),
+      orderPackages,
+      readCt0Language: (item) => readCtLanguage(item.properties),
     });
-    const homologByItemId = homologateIncomingItems(incomingItemsFlat, index);
-    const bundles = incomingBundlesQuery.data ?? [];
-    const panelOnlyLines = buildPanelOnlyLines(bundles, homologByItemId);
-    const summary = summarizeIncomingHomolog(homologByItemId.values(), index.ct0UnitsTotal);
-    return { panelOnlyLines, summary };
-  }, [boxQuery.data, incomingItemsFlat, incomingBundlesQuery.data]);
+  }, [incomingBundlesQuery.data, boxQuery.data, ordersQuery.data]);
 
-  const basePackagesResult = useMemo(
-    () =>
-      buildPurchasePackages({
-        ct0Items: boxQuery.data ?? [],
-        copByPackageKey: {},
-        parseCop: parseCopInput,
-        readCondition: readCtCondition,
-        readLanguage: readCtLanguage,
-        variantLabel: variantLabelFromProps,
-      }),
-    [boxQuery.data],
-  );
-
-  const allPackageMatches = useMemo(() => {
-    const batchProfiles = (incomingBundlesQuery.data ?? []).map((b) =>
-      buildIncomingBatchProfile(
-        b.batchId,
-        b.purchaseDate,
-        b.items.map((it) => ({
-          card_name: it.card_name,
-          quantity_ordered: it.quantity_ordered,
-          remaining_quantity: it.remaining_quantity,
-        })),
-      ),
-    );
-    const ctProfiles = basePackagesResult.packages.map(buildCt0PackageProfile);
-    return matchCt0PackagesToIncomingBatches(ctProfiles, batchProfiles);
-  }, [basePackagesResult.packages, incomingBundlesQuery.data]);
-
-  const packageMatchByKey = useMemo(
-    () => matchMapByCt0PackageKey(allPackageMatches),
-    [allPackageMatches],
-  );
-
-  const suggestedCopByPackage = useMemo(() => {
-    const out: Record<string, number> = {};
-    const bundles = incomingBundlesQuery.data ?? [];
-    for (const pkg of basePackagesResult.packages) {
-      const match = packageMatchByKey.get(pkg.packageKey);
-      if (!match) continue;
-      const bundle = bundles.find((b) => b.batchId === match.batchId);
-      if (!bundle) continue;
-      const cop = computeSuggestedCopFromBatchItems(pkg.lines, bundle.items);
-      if (cop != null) out[pkg.packageKey] = cop;
-    }
-    return out;
-  }, [basePackagesResult.packages, packageMatchByKey, incomingBundlesQuery.data]);
-
-  const effectiveCopByPackage = useMemo(() => {
-    const out: Record<string, string> = { ...copByPackage };
-    for (const [key, cop] of Object.entries(suggestedCopByPackage)) {
-      if (!out[key]?.trim()) out[key] = String(cop);
-    }
-    return out;
-  }, [copByPackage, suggestedCopByPackage]);
-
-  const batchItemsByPackageKey = useMemo(() => {
-    const out: Record<string, IncomingHomologItem[]> = {};
-    const bundles = incomingBundlesQuery.data ?? [];
-    for (const [key, match] of packageMatchByKey) {
-      const bundle = bundles.find((b) => b.batchId === match.batchId);
-      if (bundle) out[key] = bundle.items;
-    }
-    return out;
-  }, [packageMatchByKey, incomingBundlesQuery.data]);
-
-  const { packages, summary } = useMemo(
-    () =>
-      buildPurchasePackages({
-        ct0Items: boxQuery.data ?? [],
-        copByPackageKey: effectiveCopByPackage,
-        batchItemsByPackageKey,
-        parseCop: parseCopInput,
-        readCondition: readCtCondition,
-        readLanguage: readCtLanguage,
-        variantLabel: variantLabelFromProps,
-      }),
-    [boxQuery.data, effectiveCopByPackage, batchItemsByPackageKey],
-  );
-
-  const consolidatedLots = useMemo(
-    () =>
-      buildConsolidatedTransitLots({
-        packages,
-        bundles: (incomingBundlesQuery.data ?? []).map((b) => ({
-          batchId: b.batchId,
-          purchaseDate: b.purchaseDate,
-          totalCopCardsCost: b.totalCopCardsCost,
-        })),
-        panelOnlyLinesAll: panelHomolog.panelOnlyLines,
-        allMatches: allPackageMatches,
-      }),
-    [packages, incomingBundlesQuery.data, panelHomolog.panelOnlyLines, allPackageMatches],
-  );
-
-  const lotsSummary = useMemo(() => {
-    const realCopTotal = consolidatedLots.reduce((s, l) => s + l.realCopTotal, 0);
-    const panelOnlyUnits = consolidatedLots.reduce(
-      (s, l) => s + l.panelOnlyLines.reduce((a, p) => a + p.qty, 0),
-      0,
-    );
-    return { realCopTotal, panelOnlyUnits, lotCount: consolidatedLots.length };
-  }, [consolidatedLots]);
-
-  const filteredLots = useMemo(
-    () => filterConsolidatedTransitLots(consolidatedLots, cardSearch),
-    [consolidatedLots, cardSearch],
+  const filtered = useMemo(
+    () => filterBatchPackagesBySearch(consolidated.packages, consolidated.soloCardtrader, cardSearch),
+    [consolidated, cardSearch],
   );
 
   const searchActive = cardSearch.trim().length > 0;
 
-  const visibleCardCount = useMemo(
-    () => filteredLots.reduce((s, l) => s + l.totalUnits, 0),
-    [filteredLots],
-  );
-
   useEffect(() => {
     if (!searchActive) {
-      setExpandedLotKeys(new Set());
+      setExpandedBatchIds(new Set());
       return;
     }
-    setExpandedLotKeys(new Set(filteredLots.map((l) => l.lotKey)));
-  }, [searchActive, filteredLots]);
+    setExpandedBatchIds(new Set(filtered.packages.map((p) => p.batchId)));
+    if (filtered.soloCardtrader.length > 0) setSoloSectionOpen(true);
+  }, [searchActive, filtered.packages, filtered.soloCardtrader.length]);
 
-  const toggleLot = (lotKey: string) => {
-    setExpandedLotKeys((prev) => {
+  const blueprintIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const pkg of filtered.packages) {
+      for (const line of pkg.lines) {
+        for (const m of line.ct0Matches) ids.add(m.blueprintId);
+      }
+    }
+    return [...ids];
+  }, [filtered.packages]);
+
+  const expansionsQuery = useQuery({
+    queryKey: ["cardtrader", "expansions", "pokemon"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_CARDTRADER}/expansions`, { params: { game_id: 5 } });
+      return res.data;
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const blueprintImagesQuery = useQuery<Record<number, string>>({
+    queryKey: ["batch-consolidated-bp-images", blueprintIds.join(",")],
+    enabled: expansionsQuery.isSuccess && blueprintIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const expansions = normalizeCtExpansions(expansionsQuery.data);
+      const ct0Items = boxQuery.data ?? [];
+      const expansionNames = [
+        ...new Set(
+          ct0Items
+            .filter((i) => blueprintIds.includes(i.blueprint_id))
+            .map((i) => i.expansion)
+            .filter(Boolean),
+        ),
+      ];
+      const expansionIds = [
+        ...new Set(
+          expansionNames
+            .map((name) => resolveCtExpansionId(expansions, name))
+            .filter((id): id is number => id != null),
+        ),
+      ];
+
+      const imageUrlByBlueprint = new Map<number, string>();
+      await Promise.all(
+        expansionIds.map(async (expansionId) => {
+          try {
+            const res = await axios.get(`${API_CARDTRADER}/blueprints`, {
+              params: { expansion_id: expansionId },
+            });
+            for (const [bpId, url] of buildBlueprintImageUrlMapFromExport(res.data)) {
+              imageUrlByBlueprint.set(bpId, url);
+            }
+          } catch {
+            /* skip */
+          }
+        }),
+      );
+
+      const out: Record<number, string> = {};
+      for (const bpId of blueprintIds) {
+        const src = getPedidoBlueprintImageDisplaySrc(
+          bpId,
+          imageUrlByBlueprint.get(bpId),
+          apiBase(),
+        );
+        if (src) out[bpId] = src;
+      }
+      return out;
+    },
+  });
+
+  const loading =
+    boxQuery.isLoading ||
+    ordersQuery.isLoading ||
+    incomingOpenQuery.isLoading ||
+    ((incomingOpenQuery.data?.length ?? 0) > 0 && incomingBundlesQuery.isLoading);
+
+  const toggleBatch = (batchId: string) => {
+    setExpandedBatchIds((prev) => {
       const next = new Set(prev);
-      if (next.has(lotKey)) next.delete(lotKey);
-      else next.add(lotKey);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
       return next;
     });
   };
 
-  const loading =
-    boxQuery.isLoading ||
-    incomingOpenQuery.isLoading ||
-    ((incomingOpenQuery.data?.length ?? 0) > 0 && incomingBundlesQuery.isLoading);
+  const totalCop = filtered.packages.reduce((s, p) => s + p.realCopTotal, 0);
 
   return (
     <Box sx={{ p: 2, maxWidth: 960, mx: "auto" }}>
@@ -729,104 +534,121 @@ export default function TestCardtraderPage() {
         Consolidado tránsito
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Cada lote muestra las cartas de CardTrader y, en amarillo dentro de la misma caja, las que
-        solo están en tu registro. El total COP suma ambas fuentes con los precios del panel.
+        1) Lote desde tu registro · 2) Cruce CT Zero (toda la API) · 3) Pedidos en camino por
+        nombre y precio · Rojo = solo tu registro · Al final = solo CardTrader.
       </Typography>
 
       <Alert severity="info" sx={{ mb: 2 }}>
         Demo: no modifica datos existentes.
       </Alert>
 
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
+        <Chip label="Tu registro = base del lote" />
+        <Chip color="error" variant="outlined" label="Rojo = solo tu registro" />
+        <Chip color="info" variant="outlined" label="Azul = match envío" />
+        <Chip color="primary" variant="outlined" label="CT Zero = match hub" />
+      </Box>
+
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
           gap: 2,
-          mb: 3,
+          mb: 2,
         }}
       >
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#37474f" }}>
-          <Typography variant="h5">{lotsSummary.lotCount}</Typography>
-          <Typography variant="caption">Lotes consolidados</Typography>
+          <Typography variant="h5">{filtered.packages.length}</Typography>
+          <Typography variant="caption">Lotes</Typography>
         </Paper>
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#1565c0" }}>
-          <Typography variant="h5">{summary.ct0HubUnits}</Typography>
-          <Typography variant="caption">En hub CT</Typography>
-        </Paper>
-        <Paper sx={{ p: 2, borderTop: 4, borderColor: "#2e7d32" }}>
-          <Typography variant="h5">{summary.ct0ReadyUnits}</Typography>
-          <Typography variant="caption">Listas CT</Typography>
-        </Paper>
-        <Paper sx={{ p: 2, borderTop: 4, borderColor: "#546e7a" }}>
-          <Typography variant="h5">${summary.ctSubtotalUsd.toFixed(2)}</Typography>
-          <Typography variant="caption">Ref. USD CT</Typography>
+          <Typography variant="h5">{boxQuery.data?.length ?? 0}</Typography>
+          <Typography variant="caption">Filas CT Zero API</Typography>
         </Paper>
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#ffca28" }}>
-          <Typography variant="h5">{formatCop(lotsSummary.realCopTotal)}</Typography>
-          <Typography variant="caption">Compra real COP (todos los lotes)</Typography>
+          <Typography variant="h5">{formatCop(totalCop)}</Typography>
+          <Typography variant="caption">COP registro (visible)</Typography>
+        </Paper>
+        <Paper sx={{ p: 2, borderTop: 4, borderColor: "#546e7a" }}>
+          <Typography variant="h5">{filtered.soloCardtrader.length}</Typography>
+          <Typography variant="caption">Solo CardTrader</Typography>
         </Paper>
       </Box>
 
       {loading ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 4 }}>
           <CircularProgress size={24} />
-          <Typography variant="body2">Cargando consolidado…</Typography>
+          <Typography variant="body2">Cargando…</Typography>
         </Box>
-      ) : consolidatedLots.length === 0 ? (
-        <Alert severity="warning">No hay cartas en tránsito ni lotes abiertos en el panel.</Alert>
       ) : (
         <>
           <TextField
             fullWidth
             size="small"
             label="Buscar carta"
-            placeholder="Nombre, idioma, expansión o id…"
             value={cardSearch}
             onChange={(e) => setCardSearch(e.target.value)}
             sx={{ mb: 2, maxWidth: 480 }}
-            helperText={
-              searchActive
-                ? `${filteredLots.length} lote${filteredLots.length !== 1 ? "s" : ""} · ${visibleCardCount} carta${visibleCardCount !== 1 ? "s" : ""} coincidente${visibleCardCount !== 1 ? "s" : ""}`
-                : "Filtra cartas en todos los lotes. Los lotes con coincidencias se expanden solos."
-            }
           />
 
-          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 2 }}>
-            <Typography variant="subtitle1">
-              Lotes ({filteredLots.length}
-              {searchActive && filteredLots.length !== consolidatedLots.length
-                ? ` de ${consolidatedLots.length}`
-                : ""}
-              )
-            </Typography>
-            {!searchActive && filteredLots.length > 0 ? (
-              <Button
-                size="small"
-                onClick={() =>
-                  setExpandedLotKeys(
-                    expandedLotKeys.size === filteredLots.length
-                      ? new Set()
-                      : new Set(filteredLots.map((l) => l.lotKey)),
-                  )
-                }
-              >
-                {expandedLotKeys.size === filteredLots.length ? "Contraer todos" : "Expandir todos"}
-              </Button>
-            ) : null}
-          </Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Lotes ({filtered.packages.length})
+          </Typography>
 
-          {filteredLots.length === 0 ? (
-            <Alert severity="info">Ninguna carta coincide con «{cardSearch.trim()}».</Alert>
+          {filtered.packages.length === 0 ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              No hay lotes abiertos con cartas pendientes.
+            </Alert>
           ) : (
-            filteredLots.map((lot) => (
-              <ConsolidatedLotCard
-                key={lot.lotKey}
-                lot={lot}
-                expanded={expandedLotKeys.has(lot.lotKey)}
-                onToggle={() => toggleLot(lot.lotKey)}
+            filtered.packages.map((pkg) => (
+              <BatchPackageCard
+                key={pkg.batchId}
+                pkg={pkg}
+                expanded={expandedBatchIds.has(pkg.batchId)}
+                onToggle={() => toggleBatch(pkg.batchId)}
+                blueprintImages={blueprintImagesQuery.data ?? {}}
+                imagesLoading={blueprintImagesQuery.isFetching}
               />
             ))
           )}
+
+          {filtered.soloCardtrader.length > 0 ? (
+            <Paper sx={{ mt: 3, overflow: "hidden", borderTop: 4, borderColor: "#546e7a" }}>
+              <Box
+                role="button"
+                tabIndex={0}
+                onClick={() => setSoloSectionOpen((v) => !v)}
+                sx={{
+                  p: 2,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
+              >
+                <IconButton
+                  size="small"
+                  sx={{ transform: soloSectionOpen ? "rotate(180deg)" : "none", transition: "0.2s" }}
+                >
+                  ▼
+                </IconButton>
+                <Box>
+                  <Typography variant="h6">Solo CardTrader</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {filtered.soloCardtrader.length} líneas sin match en tu registro
+                  </Typography>
+                </Box>
+              </Box>
+              <Collapse in={soloSectionOpen} unmountOnExit>
+                <Stack spacing={1.5} sx={{ px: 2, pb: 2 }}>
+                  {filtered.soloCardtrader.map((line) => (
+                    <SoloCardtraderCard key={line.lineKey} line={line} />
+                  ))}
+                </Stack>
+              </Collapse>
+            </Paper>
+          ) : null}
         </>
       )}
     </Box>
