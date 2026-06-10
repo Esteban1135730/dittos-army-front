@@ -49,8 +49,64 @@ export type PackageMatchResult = {
   isSamePackage: boolean;
 };
 
+const DELTA_CHAR_RE = /[\u0394\u03b4δ]/g;
+
 export function normalizeCardNameForMatch(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return name
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+    .replace(DELTA_CHAR_RE, ' δ ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasDeltaVariantMarker(normalized: string): boolean {
+  return normalized.includes(' δ') || /\bdelta\s+species\b/.test(normalized);
+}
+
+/** Claves equivalentes (TCGdex acorta variantes que CardTrader escribe completas). */
+export function cardNameMatchKeys(name: string): string[] {
+  const normalized = normalizeCardNameForMatch(name);
+  if (!normalized) return [];
+
+  const keys = new Set<string>([normalized]);
+
+  const withoutDeltaSpecies = normalized
+    .replace(/\bdelta\s+species\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (withoutDeltaSpecies) keys.add(withoutDeltaSpecies);
+
+  return [...keys];
+}
+
+export function cardNamesMatchForTransit(
+  aName: string,
+  bName: string,
+  mode: 'strict' | 'relaxed' = 'strict',
+): boolean {
+  const keysA = cardNameMatchKeys(aName);
+  const keysB = cardNameMatchKeys(bName);
+
+  if (keysA.some((ka) => keysB.includes(ka))) return true;
+
+  if (mode !== 'relaxed') return false;
+
+  for (const ka of keysA) {
+    for (const kb of keysB) {
+      const [shorter, longer] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+      if (shorter.length < 3 || !longer.startsWith(shorter)) continue;
+      if (hasDeltaVariantMarker(longer) && !hasDeltaVariantMarker(shorter)) continue;
+
+      const rest = longer.slice(shorter.length).trim();
+      if (!rest) continue;
+      if (/^δ(?:\s+delta\s+species)?$/i.test(rest)) return true;
+      if (/^delta\s+species$/i.test(rest)) return true;
+    }
+  }
+
+  return false;
 }
 
 export function startOfUtcDayMs(iso: string): number {

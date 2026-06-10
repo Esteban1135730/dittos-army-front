@@ -1,6 +1,6 @@
 import type { Ct0BoxItem } from './cardtrader-ct0-box';
 import { ct0ItemUnitsInTransit, filterCt0ItemsInTransit } from './cardtrader-ct0-box';
-import { normalizeCardNameForMatch } from './incoming-ct0-package-match';
+import { cardNameMatchKeys, cardNamesMatchForTransit, normalizeCardNameForMatch } from './incoming-ct0-package-match';
 
 export type IncomingHomologItem = {
   batch_item_id: string;
@@ -117,6 +117,18 @@ export function pricesMatchForTransit(
   return Math.abs(orderEur - panelEur) / panelEur <= toleranceRatio;
 }
 
+/** Segunda pasada: tolerancia amplia o diferencia absoluta pequeña en EUR. */
+export function pricesMatchRelaxedForTransit(
+  orderEur: number,
+  panelEur: number,
+  toleranceRatio = 0.3,
+  absToleranceEur = 0.3,
+): boolean {
+  if (panelEur <= 0 || orderEur <= 0) return true;
+  if (pricesMatchForTransit(orderEur, panelEur, toleranceRatio)) return true;
+  return Math.abs(orderEur - panelEur) <= absToleranceEur;
+}
+
 function addQty(map: Map<string, Ct0HomologBucket>, key: string, qty: number): void {
   if (qty <= 0 || !key) return;
   const prev = map.get(key);
@@ -148,7 +160,9 @@ export function buildCt0HomologIndex(args: {
     const lang = normalizeMatchLanguage(args.readLanguage(item.properties));
     const rareza = args.readRareza(item.properties);
     addQty(byName, incomingNameMatchKey(item.name, lang), qty);
-    addQty(byNameOnly, normalizeCardNameForMatch(item.name), qty);
+    for (const nameKey of cardNameMatchKeys(item.name)) {
+      addQty(byNameOnly, nameKey, qty);
+    }
 
     const tcgId = tcgdx[item.id];
     if (tcgId) {
@@ -192,24 +206,27 @@ function takeCt0UnitsForPanelLine(
   wanted: number,
 ): number {
   const langKey = incomingNameMatchKey(cardName, normalizeMatchLanguage(language));
-  const nameKey = normalizeCardNameForMatch(cardName);
 
   let taken = takeQty(available.byName.get(langKey), wanted);
   if (taken > 0) {
-    takeQty(available.byNameOnly.get(nameKey), taken);
+    for (const nameKey of cardNameMatchKeys(cardName)) {
+      takeQty(available.byNameOnly.get(nameKey), taken);
+    }
     return taken;
   }
 
-  taken = takeQty(available.byNameOnly.get(nameKey), wanted);
-  if (taken > 0) {
-    for (const [key, bucket] of available.byName) {
-      if (!key.startsWith(`${nameKey}|`)) continue;
-      const share = takeQty(bucket, taken);
-      taken = share;
-      break;
+  for (const nameKey of cardNameMatchKeys(cardName)) {
+    taken = takeQty(available.byNameOnly.get(nameKey), wanted);
+    if (taken > 0) {
+      for (const [key, bucket] of available.byName) {
+        if (!key.startsWith(`${nameKey}|`)) continue;
+        takeQty(bucket, taken);
+        break;
+      }
+      return taken;
     }
   }
-  return taken;
+  return 0;
 }
 
 export function homologateIncomingItems(
@@ -360,18 +377,14 @@ export function findBatchItemForTransitLine(
   batchItems: IncomingHomologItem[],
   priceToleranceRatio = 0.1,
 ): IncomingHomologItem | undefined {
-  const key = incomingNameMatchKey(lineName, normalizeMatchLanguage(lineLanguage));
-  const nameNorm = lineName.trim().toLowerCase();
-  const candidates = batchItems.filter(
-    (it) =>
-      incomingNameMatchKey(it.card_name || it.card_id, normalizeMatchLanguage(it.language)) ===
-        key ||
-      (it.card_name || it.card_id).trim().toLowerCase() === nameNorm,
-  );
+  const langNorm = normalizeMatchLanguage(lineLanguage);
+  const candidates = batchItems.filter((it) => {
+    if (normalizeMatchLanguage(it.language) !== langNorm) return false;
+    return cardNamesMatchForTransit(lineName, it.card_name || it.card_id, 'strict');
+  });
   if (candidates.length === 0) {
-    const nameOnly = normalizeCardNameForMatch(lineName);
-    return batchItems.find(
-      (it) => normalizeCardNameForMatch(it.card_name || it.card_id) === nameOnly,
+    return batchItems.find((it) =>
+      cardNamesMatchForTransit(lineName, it.card_name || it.card_id, 'relaxed'),
     );
   }
 

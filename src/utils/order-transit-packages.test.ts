@@ -9,14 +9,15 @@ import {
 } from './order-transit-packages';
 
 describe('order-transit-packages', () => {
-  it('filtra paid, sent y done', () => {
+  it('filtra paid y sent; excluye done', () => {
     const orders: CtOrder[] = [
       { id: 1, code: 'a', state: 'paid', order_as: 'buyer', size: 1 },
       { id: 2, code: 'b', state: 'sent', order_as: 'buyer', size: 1 },
       { id: 3, code: 'c', state: 'done', order_as: 'buyer', size: 1 },
       { id: 4, code: 'd', state: 'arrived', order_as: 'buyer', size: 1 },
     ];
-    expect(filterInTransitOrders(orders)).toHaveLength(3);
+    expect(filterInTransitOrders(orders)).toHaveLength(2);
+    expect(filterInTransitOrders(orders).map((o) => o.state)).toEqual(['paid', 'sent']);
   });
 
   it('agrupa líneas por pedido con precio', () => {

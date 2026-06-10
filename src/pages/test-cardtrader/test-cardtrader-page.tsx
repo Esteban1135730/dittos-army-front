@@ -37,8 +37,11 @@ import { readCtLanguage } from "../../utils/cardtrader-order-item-map";
 import type { IncomingHomologItem } from "../../utils/incoming-ct0-homolog";
 import {
   buildOrderTransitPackages,
+  IN_TRANSIT_ORDER_STATES,
   normalizeCtOrdersResponse,
 } from "../../utils/order-transit-packages";
+import { fetchExpansionHomologIndex } from "../../utils/transit-card-match";
+import type { Ct0UnregisteredLine, Ct0UnregisteredLot } from "../../utils/ct0-unregistered-inventory";
 import { API_INCOMING } from "../clientes/cliente-types";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
@@ -163,11 +166,44 @@ function BatchLineCard(props: {
   );
 }
 
-function SoloCardtraderCard(props: { line: SoloCardtraderLine }) {
-  const { line } = props;
+function SoloCardtraderCard(props: {
+  line: SoloCardtraderLine;
+  imageSrc?: string;
+  imageLoading?: boolean;
+}) {
+  const { line, imageSrc, imageLoading } = props;
   return (
     <Paper variant="outlined" sx={{ p: 1.5, display: "flex", gap: 1.5, bgcolor: "#fafafa" }}>
-      <Box sx={{ flex: 1 }}>
+      <Box
+        sx={{
+          width: 72,
+          minWidth: 72,
+          height: 100,
+          borderRadius: 1,
+          overflow: "hidden",
+          bgcolor: "grey.100",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {imageLoading ? (
+          <Skeleton variant="rounded" width={72} height={100} />
+        ) : imageSrc ? (
+          <Box
+            component="img"
+            src={imageSrc}
+            alt={line.name}
+            loading="lazy"
+            sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          />
+        ) : (
+          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: "center" }}>
+            Sin imagen
+          </Typography>
+        )}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           {line.qty}× {line.name}
         </Typography>
@@ -175,8 +211,122 @@ function SoloCardtraderCard(props: { line: SoloCardtraderLine }) {
           {line.language} · {line.label}
           {line.orderCode ? ` · ${line.orderCode}` : ""}
         </Typography>
+        {line.expansion ? (
+          <Typography variant="caption" color="text.secondary" display="block">
+            {line.expansion}
+          </Typography>
+        ) : null}
       </Box>
-      <Typography variant="body2">{line.referencePrice}</Typography>
+      <Typography variant="body2" sx={{ alignSelf: "center" }}>
+        {line.referencePrice}
+      </Typography>
+    </Paper>
+  );
+}
+
+function Ct0UnregisteredLineCard(props: {
+  line: Ct0UnregisteredLine;
+  imageSrc?: string;
+  imageLoading?: boolean;
+}) {
+  const { line, imageSrc, imageLoading } = props;
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ p: 1.5, display: "flex", gap: 1.5, bgcolor: "#fff8e1", borderColor: "#ffb300" }}
+    >
+      <Box
+        sx={{
+          width: 72,
+          minWidth: 72,
+          height: 100,
+          borderRadius: 1,
+          overflow: "hidden",
+          bgcolor: "grey.100",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {imageLoading ? (
+          <Skeleton variant="rounded" width={72} height={100} />
+        ) : imageSrc ? (
+          <Box
+            component="img"
+            src={imageSrc}
+            alt={line.name}
+            loading="lazy"
+            sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          />
+        ) : (
+          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: "center" }}>
+            Sin imagen
+          </Typography>
+        )}
+      </Box>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+          {line.qty}× {line.name}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {line.language} · {line.expansion}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block">
+          {line.label} · {line.referencePrice}
+        </Typography>
+      </Box>
+      <Chip size="small" color="warning" variant="outlined" label="Sin registro panel" />
+    </Paper>
+  );
+}
+
+function Ct0UnregisteredLotCard(props: {
+  lot: Ct0UnregisteredLot;
+  expanded: boolean;
+  onToggle: () => void;
+  blueprintImages: Record<number, string>;
+  imagesLoading: boolean;
+}) {
+  const { lot, expanded, onToggle, blueprintImages, imagesLoading } = props;
+  return (
+    <Paper sx={{ mb: 2, overflow: "hidden", borderTop: 4, borderColor: "#ff8f00" }}>
+      <Box
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        sx={{
+          p: 2,
+          display: "flex",
+          gap: 1,
+          cursor: "pointer",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        <IconButton
+          size="small"
+          sx={{ transform: expanded ? "rotate(180deg)" : "none", transition: "0.2s" }}
+        >
+          ▼
+        </IconButton>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6">{lot.paidAtLabel}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {lot.lineCount} líneas · {lot.totalUnits} uds · {lot.languages.join(", ")}
+          </Typography>
+        </Box>
+      </Box>
+      <Collapse in={expanded} unmountOnExit>
+        <Stack spacing={1.5} sx={{ px: 2, pb: 2 }}>
+          {lot.lines.map((line) => (
+            <Ct0UnregisteredLineCard
+              key={line.lineKey}
+              line={line}
+              imageSrc={line.blueprintId ? blueprintImages[line.blueprintId] : undefined}
+              imageLoading={imagesLoading && !!line.blueprintId && !blueprintImages[line.blueprintId]}
+            />
+          ))}
+        </Stack>
+      </Collapse>
     </Paper>
   );
 }
@@ -321,6 +471,8 @@ export default function TestCardtraderPage() {
   const [cardSearch, setCardSearch] = useState("");
   const [expandedBatchIds, setExpandedBatchIds] = useState<Set<string>>(() => new Set());
   const [soloSectionOpen, setSoloSectionOpen] = useState(false);
+  const [ct0UnregisteredOpen, setCt0UnregisteredOpen] = useState(true);
+  const [expandedCt0LotKeys, setExpandedCt0LotKeys] = useState<Set<string>>(() => new Set());
 
   const boxQuery = useQuery<Ct0BoxItem[]>({
     queryKey: ["cardtrader", "ct0-box-items"],
@@ -331,12 +483,11 @@ export default function TestCardtraderPage() {
   });
 
   const ordersQuery = useQuery({
-    queryKey: ["cardtrader", "orders", "in-transit"],
+    queryKey: ["cardtrader", "orders", "in-transit", [...IN_TRANSIT_ORDER_STATES].join(",")],
     queryFn: async () => {
-      const states = ["paid", "sent", "done"] as const;
       const byId = new Map<number, ReturnType<typeof normalizeCtOrdersResponse>[number]>();
       await Promise.all(
-        states.map(async (state) => {
+        [...IN_TRANSIT_ORDER_STATES].map(async (state) => {
           const res = await axios.get(`${API_CARDTRADER}/orders`, {
             params: { state, order_as: "buyer", limit: 100 },
           });
@@ -413,6 +564,32 @@ export default function TestCardtraderPage() {
     },
   });
 
+  const uniqueExpansions = useMemo(() => {
+    const expansions = new Set<string>();
+    for (const item of boxQuery.data ?? []) {
+      if (item.expansion?.trim()) expansions.add(item.expansion.trim());
+    }
+    for (const order of ordersQuery.data ?? []) {
+      for (const item of order.order_items ?? []) {
+        if (item.expansion?.trim()) expansions.add(item.expansion.trim());
+      }
+    }
+    return [...expansions];
+  }, [boxQuery.data, ordersQuery.data]);
+
+  const expansionHomologQuery = useQuery({
+    queryKey: ["cardtrader", "expansion-homolog", uniqueExpansions.join("|")],
+    enabled: uniqueExpansions.length > 0,
+    staleTime: 24 * 60 * 60 * 1000,
+    queryFn: () =>
+      fetchExpansionHomologIndex(async (expansion) => {
+        const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
+          params: { expansion },
+        });
+        return res.data as { tcgdex_set_id?: string | null };
+      }, uniqueExpansions),
+  });
+
   const consolidated = useMemo(() => {
     const bundles = incomingBundlesQuery.data ?? [];
     const orderPackages = buildOrderTransitPackages(ordersQuery.data ?? []);
@@ -421,13 +598,27 @@ export default function TestCardtraderPage() {
       ct0Items: boxQuery.data ?? [],
       orderPackages,
       readCt0Language: (item) => readCtLanguage(item.properties),
+      expansionHomolog: expansionHomologQuery.data ?? {},
     });
-  }, [incomingBundlesQuery.data, boxQuery.data, ordersQuery.data]);
+  }, [
+    incomingBundlesQuery.data,
+    boxQuery.data,
+    ordersQuery.data,
+    expansionHomologQuery.data,
+  ]);
 
   const filtered = useMemo(
-    () => filterBatchPackagesBySearch(consolidated.packages, consolidated.soloCardtrader, cardSearch),
+    () =>
+      filterBatchPackagesBySearch(
+        consolidated.packages,
+        consolidated.soloCardtrader,
+        cardSearch,
+        consolidated.ct0UnregisteredLots,
+      ),
     [consolidated, cardSearch],
   );
+
+  const ct0UnregisteredUnits = filtered.ct0UnregisteredLots.reduce((s, lot) => s + lot.totalUnits, 0);
 
   const searchActive = cardSearch.trim().length > 0;
 
@@ -438,7 +629,17 @@ export default function TestCardtraderPage() {
     }
     setExpandedBatchIds(new Set(filtered.packages.map((p) => p.batchId)));
     if (filtered.soloCardtrader.length > 0) setSoloSectionOpen(true);
-  }, [searchActive, filtered.packages, filtered.soloCardtrader.length]);
+    if (filtered.ct0UnregisteredLots.length > 0) {
+      setCt0UnregisteredOpen(true);
+      setExpandedCt0LotKeys(new Set(filtered.ct0UnregisteredLots.map((l) => l.lotKey)));
+    }
+  }, [searchActive, filtered.packages, filtered.soloCardtrader.length, filtered.ct0UnregisteredLots]);
+
+  useEffect(() => {
+    if (searchActive) return;
+    if (filtered.ct0UnregisteredLots.length === 0) return;
+    setExpandedCt0LotKeys(new Set(filtered.ct0UnregisteredLots.map((l) => l.lotKey)));
+  }, [searchActive, filtered.ct0UnregisteredLots]);
 
   const blueprintIds = useMemo(() => {
     const ids = new Set<number>();
@@ -447,8 +648,16 @@ export default function TestCardtraderPage() {
         for (const m of line.ct0Matches) ids.add(m.blueprintId);
       }
     }
+    for (const lot of filtered.ct0UnregisteredLots) {
+      for (const line of lot.lines) {
+        if (line.blueprintId) ids.add(line.blueprintId);
+      }
+    }
+    for (const line of filtered.soloCardtrader) {
+      if (line.blueprintId) ids.add(line.blueprintId);
+    }
     return [...ids];
-  }, [filtered.packages]);
+  }, [filtered.packages, filtered.ct0UnregisteredLots, filtered.soloCardtrader]);
 
   const expansionsQuery = useQuery({
     queryKey: ["cardtrader", "expansions", "pokemon"],
@@ -466,17 +675,27 @@ export default function TestCardtraderPage() {
     queryFn: async () => {
       const expansions = normalizeCtExpansions(expansionsQuery.data);
       const ct0Items = boxQuery.data ?? [];
-      const expansionNames = [
-        ...new Set(
-          ct0Items
-            .filter((i) => blueprintIds.includes(i.blueprint_id))
-            .map((i) => i.expansion)
-            .filter(Boolean),
-        ),
-      ];
+      const expansionNames = new Set<string>();
+      for (const item of ct0Items) {
+        if (blueprintIds.includes(item.blueprint_id) && item.expansion) {
+          expansionNames.add(item.expansion);
+        }
+      }
+      for (const line of filtered.soloCardtrader) {
+        if (line.blueprintId && blueprintIds.includes(line.blueprintId) && line.expansion) {
+          expansionNames.add(line.expansion);
+        }
+      }
+      for (const lot of filtered.ct0UnregisteredLots) {
+        for (const line of lot.lines) {
+          if (line.blueprintId && blueprintIds.includes(line.blueprintId) && line.expansion) {
+            expansionNames.add(line.expansion);
+          }
+        }
+      }
       const expansionIds = [
         ...new Set(
-          expansionNames
+          [...expansionNames]
             .map((name) => resolveCtExpansionId(expansions, name))
             .filter((id): id is number => id != null),
         ),
@@ -515,7 +734,8 @@ export default function TestCardtraderPage() {
     boxQuery.isLoading ||
     ordersQuery.isLoading ||
     incomingOpenQuery.isLoading ||
-    ((incomingOpenQuery.data?.length ?? 0) > 0 && incomingBundlesQuery.isLoading);
+    ((incomingOpenQuery.data?.length ?? 0) > 0 && incomingBundlesQuery.isLoading) ||
+    (uniqueExpansions.length > 0 && expansionHomologQuery.isLoading);
 
   const toggleBatch = (batchId: string) => {
     setExpandedBatchIds((prev) => {
@@ -546,6 +766,7 @@ export default function TestCardtraderPage() {
         <Chip label="Tu registro = base del lote" />
         <Chip color="error" variant="outlined" label="Rojo = solo tu registro" />
         <Chip color="info" variant="outlined" label="Azul = match envío" />
+        <Chip color="warning" variant="outlined" label="Ámbar = CT Zero JP/ZH sin registro" />
         <Chip color="primary" variant="outlined" label="CT Zero = match hub" />
       </Box>
 
@@ -568,6 +789,10 @@ export default function TestCardtraderPage() {
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#ffca28" }}>
           <Typography variant="h5">{formatCop(totalCop)}</Typography>
           <Typography variant="caption">COP registro (visible)</Typography>
+        </Paper>
+        <Paper sx={{ p: 2, borderTop: 4, borderColor: "#ff8f00" }}>
+          <Typography variant="h5">{ct0UnregisteredUnits}</Typography>
+          <Typography variant="caption">CT Zero JP/ZH sin panel</Typography>
         </Paper>
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#546e7a" }}>
           <Typography variant="h5">{filtered.soloCardtrader.length}</Typography>
@@ -612,6 +837,63 @@ export default function TestCardtraderPage() {
             ))
           )}
 
+          {filtered.ct0UnregisteredLots.length > 0 ? (
+            <Paper sx={{ mt: 3, overflow: "hidden", borderTop: 4, borderColor: "#ff8f00" }}>
+              <Box
+                role="button"
+                tabIndex={0}
+                onClick={() => setCt0UnregisteredOpen((v) => !v)}
+                sx={{
+                  p: 2,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  cursor: "pointer",
+                  bgcolor: "#fff8e1",
+                  "&:hover": { bgcolor: "#ffecb3" },
+                }}
+              >
+                <IconButton
+                  size="small"
+                  sx={{
+                    transform: ct0UnregisteredOpen ? "rotate(180deg)" : "none",
+                    transition: "0.2s",
+                  }}
+                >
+                  ▼
+                </IconButton>
+                <Box>
+                  <Typography variant="h6">CT Zero — japonés / chino sin registro</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {filtered.ct0UnregisteredLots.length} lotes · {ct0UnregisteredUnits} uds en hub
+                    (no están en tu panel a propósito)
+                  </Typography>
+                </Box>
+              </Box>
+              <Collapse in={ct0UnregisteredOpen} unmountOnExit>
+                <Box sx={{ px: 2, pb: 2, pt: 1 }}>
+                  {filtered.ct0UnregisteredLots.map((lot) => (
+                    <Ct0UnregisteredLotCard
+                      key={lot.lotKey}
+                      lot={lot}
+                      expanded={expandedCt0LotKeys.has(lot.lotKey)}
+                      onToggle={() =>
+                        setExpandedCt0LotKeys((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(lot.lotKey)) next.delete(lot.lotKey);
+                          else next.add(lot.lotKey);
+                          return next;
+                        })
+                      }
+                      blueprintImages={blueprintImagesQuery.data ?? {}}
+                      imagesLoading={blueprintImagesQuery.isFetching}
+                    />
+                  ))}
+                </Box>
+              </Collapse>
+            </Paper>
+          ) : null}
+
           {filtered.soloCardtrader.length > 0 ? (
             <Paper sx={{ mt: 3, overflow: "hidden", borderTop: 4, borderColor: "#546e7a" }}>
               <Box
@@ -643,7 +925,20 @@ export default function TestCardtraderPage() {
               <Collapse in={soloSectionOpen} unmountOnExit>
                 <Stack spacing={1.5} sx={{ px: 2, pb: 2 }}>
                   {filtered.soloCardtrader.map((line) => (
-                    <SoloCardtraderCard key={line.lineKey} line={line} />
+                    <SoloCardtraderCard
+                      key={line.lineKey}
+                      line={line}
+                      imageSrc={
+                        line.blueprintId
+                          ? (blueprintImagesQuery.data ?? {})[line.blueprintId]
+                          : undefined
+                      }
+                      imageLoading={
+                        blueprintImagesQuery.isFetching &&
+                        !!line.blueprintId &&
+                        !(blueprintImagesQuery.data ?? {})[line.blueprintId]
+                      }
+                    />
                   ))}
                 </Stack>
               </Collapse>

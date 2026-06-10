@@ -1,14 +1,14 @@
 import type { CtOrder, CtOrderItem } from './cardtrader-order-pricing';
 import { moneyToUnits } from './cardtrader-order-pricing';
-import { readCtLanguage } from './cardtrader-order-item-map';
+import { readCollectorNumber, readCtLanguage, inferOperationalRarezaFromCtProperties } from './cardtrader-order-item-map';
 import type { Ct0HomologIndex } from './incoming-ct0-homolog';
 import { incomingNameMatchKey, normalizeMatchLanguage } from './incoming-ct0-homolog';
 import { normalizeCardNameForMatch } from './incoming-ct0-package-match';
 import type { Ct0PackageProfile } from './incoming-ct0-package-match';
 import { startOfUtcDayMs } from './incoming-ct0-package-match';
 
-/** Pedidos en camino vía API (aún no recibidos en CT Zero). */
-export const IN_TRANSIT_ORDER_STATES = new Set(['paid', 'sent', 'done']);
+/** Pedidos en camino vía API (excluye `done` — ya cerrados en CardTrader). */
+export const IN_TRANSIT_ORDER_STATES = new Set(['paid', 'sent']);
 
 export type OrderTransitLine = {
   lineKey: string;
@@ -20,6 +20,8 @@ export type OrderTransitLine = {
   qty: number;
   language: string;
   expansion: string;
+  collectorNumber: string | null;
+  rareza: string | null;
   referencePrice: string;
   unitPrice: number;
   priceCurrency: string;
@@ -105,6 +107,8 @@ export function buildOrderTransitPackages(orders: CtOrder[]): OrderTransitPackag
         qty: Math.max(1, Math.floor(item.quantity ?? 1)),
         language: readCtLanguage(item.properties),
         expansion: item.expansion ?? '',
+        collectorNumber: readCollectorNumber(item.properties),
+        rareza: inferOperationalRarezaFromCtProperties(item.properties),
         referencePrice: lineReferencePrice(item),
         unitPrice: price.amount,
         priceCurrency: price.currency,

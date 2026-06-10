@@ -3,6 +3,8 @@ import type { PurchasePackage } from './purchase-package-consolidated';
 import {
   buildCt0PackageProfile,
   buildIncomingBatchProfile,
+  cardNameMatchKeys,
+  cardNamesMatchForTransit,
   matchCt0PackagesToIncomingBatches,
   scoreCt0ToIncomingBatchPair,
 } from './incoming-ct0-package-match';
@@ -34,6 +36,20 @@ const pkg = (paidAt: string, lines: { name: string; qty: number }[]): PurchasePa
 });
 
 describe('incoming-ct0-package-match', () => {
+  it('normaliza nombres con variante δ', () => {
+    expect(cardNameMatchKeys('Anorith δ Delta Species')).toContain('anorith δ');
+    expect(cardNameMatchKeys('Anorith δ')).toContain('anorith δ');
+  });
+
+  it('empareja TCGdex acortado con CardTrader completo', () => {
+    expect(cardNamesMatchForTransit('Anorith δ', 'Anorith δ Delta Species', 'strict')).toBe(true);
+  });
+
+  it('no empareja Anorith base con variante δ', () => {
+    expect(cardNamesMatchForTransit('Anorith', 'Anorith δ Delta Species', 'strict')).toBe(false);
+    expect(cardNamesMatchForTransit('Anorith', 'Anorith δ Delta Species', 'relaxed')).toBe(false);
+  });
+
   it('empareja cuando nombres mayoría y fecha cercana', () => {
     const ct = buildCt0PackageProfile(
       pkg('2026-05-29T15:00:00.000Z', [
