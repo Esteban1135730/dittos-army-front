@@ -835,24 +835,41 @@ export default function StockGrid() {
   const handleActualizarInformacionTienda = async () => {
     try {
       setActualizandoTienda(true);
-      const [invRes, upRes] = await Promise.all([
-        axios.post(apiUrl("/stock/export-store-inventory")),
-        axios.post(apiUrl("/stock/export-store-upcoming")),
-      ]);
-      const inv = invRes.data;
-      const up = upRes.data;
+      const { data } = await axios.post(apiUrl("/stock/publish-store-catalog"));
+      const inv = data?.inventory;
+      const up = data?.upcoming;
+      const publish = data?.publish;
       const invOk = inv?.success === true;
       const upOk = up?.success === true;
-      if (invOk && upOk) {
-        window.alert(
-          `Tienda actualizada: ${inv.count ?? 0} cartas en catálogo, ${up.count ?? 0} en Próximamente (compras en camino).`
-        );
-      } else {
+
+      if (!invOk || !upOk) {
         const parts: string[] = [];
         if (!invOk) parts.push("Inventario: " + (inv?.error || "error"));
         if (!upOk) parts.push("Próximamente: " + (up?.error || "error"));
         window.alert("Error al actualizar la tienda. " + parts.join(" "));
+        return;
       }
+
+      const base = `Catálogo generado: ${inv.count ?? 0} cartas, ${up.count ?? 0} en Próximamente.`;
+      if (!publish?.enabled) {
+        window.alert(
+          `${base}\nPublicación git desactivada (STORE_AUTO_PUBLISH=false).`
+        );
+        return;
+      }
+      if (publish.pushed) {
+        window.alert(
+          `${base}\nPublicado en git (${publish.branch}). Firebase desplegará la tienda en unos minutos.`
+        );
+        return;
+      }
+      if (publish.skippedReason) {
+        window.alert(`${base}\n${publish.skippedReason}`);
+        return;
+      }
+      window.alert(
+        `${base}\nNo se pudo publicar en git: ${publish.error || data?.error || "error desconocido"}`
+      );
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
@@ -995,7 +1012,7 @@ export default function StockGrid() {
             </button>
             <button
               type="button"
-              title="Genera inventory.json (catálogo) y upcoming.json (compras en camino) en dittos-army-store/public"
+              title="Genera inventory.json y upcoming.json en dittos-army-store/public y hace push a main (despliegue Firebase)"
               onClick={handleActualizarInformacionTienda}
               disabled={actualizandoTienda}
               className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"

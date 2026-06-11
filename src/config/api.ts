@@ -2,7 +2,7 @@ const API_PORT = import.meta.env.VITE_API_PORT ?? "3000";
 
 /**
  * URL base del API Nest (sin barra final).
- * En dev: mismo origen HTTPS + proxy Vite `/api` → Nest :3000 (evita mixed content en móvil).
+ * En dev: mismo origen HTTPS + proxy Vite `/api` → Nest (`VITE_API_PORT`, default 3000).
  * Override: VITE_API_BASE=https://otro-host:3000
  */
 export function getApiBase(): string {

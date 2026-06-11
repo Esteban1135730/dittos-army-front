@@ -23,6 +23,10 @@ import CotizarCardtraderPage from "./pages/cotizar/cotizar-cardtrader-page";
 import CotizarPedidoClientePage from "./pages/cotizar/cotizar-pedido-cliente-page";
 import VentaAsistidaQrPage from "./pages/ventas/venta-asistida-qr-page";
 import TestCardtraderPage from "./pages/test-cardtrader/test-cardtrader-page";
+import StockReviewStartPage from "./pages/stock/revision/start-page";
+import StockReviewVerifyPage from "./pages/stock/revision/verify-page";
+import StockReviewResolvePage from "./pages/stock/revision/resolve-page";
+import StockLostCardsPage from "./pages/stock/lost-cards";
 
 export default function AppRouter() {
   return (
@@ -48,6 +52,38 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <AperturaSelladoPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/revision"
+        element={
+          <SideLayout>
+            <StockReviewStartPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/revision/:sessionId/resolucion"
+        element={
+          <SideLayout>
+            <StockReviewResolvePage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/revision/:sessionId"
+        element={
+          <SideLayout>
+            <StockReviewVerifyPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/perdidas"
+        element={
+          <SideLayout>
+            <StockLostCardsPage />
           </SideLayout>
         }
       />

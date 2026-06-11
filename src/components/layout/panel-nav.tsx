@@ -46,6 +46,12 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/stock/apertura-sellado" className={subLinkClass} onNavigate={onNavigate}>
           Apertura sellado
         </NavLink>
+        <NavLink to="/stock/revision" className={subLinkClass} onNavigate={onNavigate}>
+          Revisión de stock
+        </NavLink>
+        <NavLink to="/stock/perdidas" className={subLinkClass} onNavigate={onNavigate}>
+          Cartas perdidas
+        </NavLink>
         <NavLink to="/incoming" onNavigate={onNavigate}>
           Compras en camino
         </NavLink>

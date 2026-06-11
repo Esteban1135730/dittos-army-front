@@ -2,6 +2,10 @@ import axios from "axios";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../../../config/api";
+import {
+  fetchTcgDexCardForImport,
+  mapCardTraderLangForStorage,
+} from "../../../utils/cardtrader-json-import";
 import { API_INCOMING } from "../../clientes/cliente-types";
 
 const API_TCG_SEARCH = apiUrl("/tcg-dex/card/search");
@@ -67,16 +71,6 @@ function mergeLineIntoList(prev: LineaEntrada[], line: LineaEntrada): LineaEntra
   return [...prev, line];
 }
 
-function mapCardTraderLang(code: string | undefined): string {
-  const c = String(code || "")
-    .toLowerCase()
-    .trim();
-  const alias: Record<string, string> = { jp: "ja", jpn: "ja" };
-  const mapped = alias[c] || c;
-  if (LANGUAGE_OPTIONS.some((o) => o.value === mapped)) return mapped;
-  return "otro";
-}
-
 function inferRarezaFromCardTrader(row: CardTraderJsonRow): CartaRareza {
   const sub = String(row.expansion_subvariant || "").toLowerCase();
   if (row.first_edition) return "first edition";
@@ -84,27 +78,6 @@ function inferRarezaFromCardTrader(row: CardTraderJsonRow): CartaRareza {
   if (row.poke_ball_reverse_holo) return "pokeball";
   if (row.reverse_holo) return "foil";
   return null;
-}
-
-async function fetchTcgDexCard(
-  cardId: string,
-): Promise<{ id: string; name: string; image: string } | null> {
-  try {
-    const res = await axios.get(`${API_TCG_FIND}/${encodeURIComponent(cardId)}`);
-    const d = res.data as Record<string, unknown> | null | undefined;
-    if (!d || typeof d !== "object") return null;
-    const id = d.id as string | undefined;
-    if (!id) return null;
-    const images = d.images as { small?: string; large?: string } | undefined;
-    const image =
-      (typeof d.image === "string" && d.image) ||
-      (images?.small as string) ||
-      (images?.large as string) ||
-      "";
-    return { id, name: typeof d.name === "string" ? d.name : "", image };
-  } catch {
-    return null;
-  }
 }
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -224,7 +197,7 @@ export default function IncomingCreatePage() {
         return;
       }
 
-      const language = mapCardTraderLang(row.language_code);
+      const language = mapCardTraderLangForStorage(row.language_code);
       const rareza = inferRarezaFromCardTrader(row);
       const baseName = String(row.card_name || "").trim() || "Sin nombre";
 
@@ -234,14 +207,17 @@ export default function IncomingCreatePage() {
           : "";
 
       let card_id: string;
-      let card_name = baseName;
+      const card_name = baseName;
       let image_url = "";
 
       if (dexId) {
-        const card = await fetchTcgDexCard(dexId);
+        const card = await fetchTcgDexCardForImport(
+          API_TCG_FIND,
+          dexId,
+          row.language_code,
+        );
         if (card) {
           card_id = card.id;
-          if (card.name) card_name = card.name;
           image_url = card.image || "";
         } else {
           card_id = dexId;
