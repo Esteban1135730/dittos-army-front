@@ -55,6 +55,9 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/incoming" onNavigate={onNavigate}>
           Compras en camino
         </NavLink>
+        <NavLink to="/incoming-v2" className={subLinkClass} onNavigate={onNavigate}>
+          Compras en camino v2
+        </NavLink>
         <NavLink to="/cotizar" onNavigate={onNavigate}>
           Cotizar carta
         </NavLink>

@@ -128,6 +128,7 @@ export default function IncomingCreatePage() {
   const [lineas, setLineas] = useState<LineaEntrada[]>([]);
 
   const [total_cop_cards_cost, setTotalCopCardsCost] = useState<string>("");
+  const [cards_cost_currency, setCardsCostCurrency] = useState<"EUR" | "USD">("USD");
   const [purchase_date, setPurchaseDate] = useState<string>(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -367,6 +368,7 @@ export default function IncomingCreatePage() {
         })),
         total_cop_cards_cost: totalCop,
         purchase_date,
+        cards_cost_currency,
       };
 
       const res = await axios.post(`${API_INCOMING}/batch`, body);
@@ -389,7 +391,7 @@ export default function IncomingCreatePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Nueva compra en camino</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Carga masiva (EUR por lote) y luego revisión con envío (COP).
+            Carga masiva (EUR o USD por lote) y luego revisión con envío (COP).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -546,7 +548,7 @@ export default function IncomingCreatePage() {
                       {l.rareza ? ` · Rareza: ${l.rareza}` : ""}
                     </div>
                     <div className="text-xs text-gray-700 mt-1">
-                      EUR total lote: {l.eur_total_lot.toFixed(2)}
+                      {cards_cost_currency} total lote: {l.eur_total_lot.toFixed(2)}
                     </div>
                   </div>
                   <button
@@ -576,6 +578,20 @@ export default function IncomingCreatePage() {
           />
 
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            Moneda de los costos de cartas
+          </label>
+          <select
+            value={cards_cost_currency}
+            onChange={(e) =>
+              setCardsCostCurrency(e.target.value === "USD" ? "USD" : "EUR")
+            }
+            className="w-full px-3 py-2 border rounded-md mb-3"
+          >
+            <option value="USD">USD (dólares)</option>
+            <option value="EUR">EUR (euros)</option>
+          </select>
+
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Total COP costo de CARTAS (sin envío)
           </label>
           <input
@@ -587,10 +603,11 @@ export default function IncomingCreatePage() {
             className="w-full px-3 py-2 border rounded-md"
           />
           <p className="text-xs text-gray-500 mt-1">
-            En backend se calcula: valor_real_euro = totalCOP / totalEUR (cartas).
+            En backend se calcula: tasa = total COP / total {cards_cost_currency} (cartas).
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Total EUR (cartas) = EUR {totalEurCards.toFixed(2)}
+            Total {cards_cost_currency} (cartas) = {cards_cost_currency === "USD" ? "$" : "€"}
+            {totalEurCards.toFixed(2)}
           </p>
         </div>
         <button

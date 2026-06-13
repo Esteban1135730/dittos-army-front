@@ -19,6 +19,7 @@ import IncomingCreatePage from "./pages/incoming/create/incoming-create";
 import IncomingBatchRoundsPage from "./pages/incoming/batch-rounds/incoming-batch-rounds";
 import IncomingRoundReviewPage from "./pages/incoming/round-review/incoming-round-review";
 import IncomingShipRoundReviewPage from "./pages/incoming/ship-round-review/incoming-ship-round-review";
+import IncomingV2Page from "./pages/incoming-v2/incoming-v2-page";
 import CotizarCardtraderPage from "./pages/cotizar/cotizar-cardtrader-page";
 import CotizarPedidoClientePage from "./pages/cotizar/cotizar-pedido-cliente-page";
 import VentaAsistidaQrPage from "./pages/ventas/venta-asistida-qr-page";
@@ -132,6 +133,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <IncomingShipRoundReviewPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/incoming-v2"
+        element={
+          <SideLayout>
+            <IncomingV2Page />
           </SideLayout>
         }
       />
