@@ -4,6 +4,7 @@ import {
   scoreWordOverlap,
   tokenizeCardName,
   buildCreateTandaCardsPayload,
+  resolveNovedadUnitCostCop,
 } from './sent-unit-homolog';
 
 describe('sent-unit-homolog', () => {
@@ -181,5 +182,105 @@ describe('sent-unit-homolog', () => {
 
     expect(cards[0].purchase_price_eur).toBe(1.2);
     expect(cards[0].unit_cost_cop).toBe(6000);
+  });
+
+  it('resolveNovedadUnitCostCop usa TRM del sistema según moneda', () => {
+    const unit = {
+      status: 'novedad' as const,
+      unit_cost_cop: null,
+      unit_price_fx: 2,
+      unit_price_eur: null,
+      purchase_price_fx: null,
+      purchase_price_eur: null,
+      price_currency: 'USD',
+      purchase_price_currency: null,
+    };
+    expect(
+      resolveNovedadUnitCostCop(unit, { euroToCop: 5000, usdToCop: 4000 }),
+    ).toBe(8000);
+    expect(
+      resolveNovedadUnitCostCop(
+        { ...unit, price_currency: 'EUR', unit_price_fx: 1.5 },
+        { euroToCop: 5000, usdToCop: 4000 },
+      ),
+    ).toBe(7500);
+  });
+
+  it('buildCreateTandaCardsPayload usa $1 COP si la novedad no tiene precio', () => {
+    const cards = buildCreateTandaCardsPayload(
+      [
+        {
+          sent_unit_key: 'k2',
+          line_key: 'l2',
+          unit_index: 0,
+          order_id: 2,
+          order_code: 'B',
+          name: 'Sin precio',
+          expansion: '',
+          language: 'EN',
+          blueprint_id: 2,
+          unit_price_eur: null,
+          unit_price_fx: null,
+          price_currency: 'USD',
+          paid_at: null,
+          rareza: null,
+          status: 'novedad',
+          batch_item_id: null,
+          batch_id: null,
+          batch_item_card_id: null,
+          batch_item_card_name: null,
+          unit_cost_cop: null,
+          purchase_price_eur: null,
+          purchase_price_fx: null,
+          purchase_price_currency: null,
+          match_score: null,
+          novedad_notes: 'sin TRM',
+        },
+      ],
+      [],
+      { euroToCop: null, usdToCop: null },
+    );
+
+    expect(cards[0].unit_cost_cop).toBe(1);
+  });
+
+  it('buildCreateTandaCardsPayload asigna COP a novedades con TRM del sistema', () => {
+    const cards = buildCreateTandaCardsPayload(
+      [
+        {
+          sent_unit_key: 'k1',
+          line_key: 'l1',
+          unit_index: 0,
+          order_id: 1,
+          order_code: 'A',
+          name: 'Charizard',
+          expansion: '',
+          language: 'EN',
+          blueprint_id: 1,
+          unit_price_eur: null,
+          unit_price_fx: 3,
+          price_currency: 'USD',
+          paid_at: null,
+          rareza: null,
+          status: 'novedad',
+          batch_item_id: null,
+          batch_id: null,
+          batch_item_card_id: null,
+          batch_item_card_name: null,
+          unit_cost_cop: null,
+          purchase_price_eur: null,
+          purchase_price_fx: null,
+          purchase_price_currency: null,
+          match_score: null,
+          novedad_notes: 'carta extra',
+        },
+      ],
+      [],
+      { euroToCop: 5000, usdToCop: 4200 },
+    );
+
+    expect(cards[0].is_novedad).toBe(true);
+    expect(cards[0].unit_cost_cop).toBe(12600);
+    expect(cards[0].purchase_price_eur).toBe(3);
   });
 });

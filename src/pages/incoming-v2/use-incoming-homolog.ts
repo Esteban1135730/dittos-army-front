@@ -240,6 +240,18 @@ export function useHomologMutations() {
     },
   });
 
+  const revertConversion = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const res = await axios.post(
+        `${API_HOMOLOG}/sessions/${sessionId}/revert-conversion`,
+      );
+      return res.data as HomologSessionResponse & { deleted_round_id?: string };
+    },
+    onSuccess: async (_data, sessionId) => {
+      await invalidate(sessionId);
+    },
+  });
+
   return {
     createSession,
     syncSent,
@@ -249,6 +261,7 @@ export function useHomologMutations() {
     createTanda,
     cancelSession,
     resolveNovedad,
+    revertConversion,
     axiosMessage,
   };
 }

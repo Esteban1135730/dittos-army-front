@@ -140,6 +140,51 @@ export function scoreWordOverlap(aName: string, bName: string): {
   return { score, matchedWords: matched };
 }
 
+export const FALLBACK_UNIT_COST_COP = 1;
+
+export type SystemTrmRates = {
+  euroToCop: number | null;
+  usdToCop: number | null;
+};
+
+export function copFromSystemTrm(
+  fxAmount: number | null | undefined,
+  currency: CardsCostCurrency,
+  rates: SystemTrmRates,
+): number | null {
+  if (fxAmount == null || !Number.isFinite(fxAmount) || fxAmount <= 0) {
+    return null;
+  }
+  const copPerUnit =
+    currency === 'USD' ? rates.usdToCop : rates.euroToCop;
+  if (copPerUnit == null || !Number.isFinite(copPerUnit) || copPerUnit <= 0) {
+    return null;
+  }
+  return fxAmount * copPerUnit;
+}
+
+export function resolveNovedadUnitCostCop(
+  unit: Pick<
+    SentHomologUnit,
+    | 'status'
+    | 'unit_cost_cop'
+    | 'unit_price_fx'
+    | 'unit_price_eur'
+    | 'purchase_price_fx'
+    | 'purchase_price_eur'
+    | 'price_currency'
+    | 'purchase_price_currency'
+  >,
+  systemTrm: SystemTrmRates,
+): number | null {
+  if (unit.unit_cost_cop != null && unit.unit_cost_cop > 0) {
+    return unit.unit_cost_cop;
+  }
+  if (unit.status !== 'novedad') return null;
+  const ctFx = fxUnitPriceFromSentUnit(unit);
+  return copFromSystemTrm(ctFx.amount, ctFx.currency, systemTrm);
+}
+
 export function computeUnitCostCop(
   purchasePriceFx: number,
   copPerFxUnit: number | null,
@@ -263,6 +308,7 @@ export function rankPanelCandidates(args: {
 export function buildCreateTandaCardsPayload(
   units: SentHomologUnit[],
   panelItems: PanelHomologItem[],
+  systemTrm: SystemTrmRates = { euroToCop: null, usdToCop: null },
 ): Array<{
   sent_unit_key: string;
   batch_item_id: string;
@@ -286,21 +332,26 @@ export function buildCreateTandaCardsPayload(
     }
 
     const unitCostCop =
-      u.status === 'novedad' && !u.batch_item_id
-        ? 0
-        : u.unit_cost_cop != null && u.unit_cost_cop > 0
-          ? u.unit_cost_cop
+      u.unit_cost_cop != null && u.unit_cost_cop > 0
+        ? u.unit_cost_cop
+        : u.status === 'novedad'
+          ? (resolveNovedadUnitCostCop(u, systemTrm) ?? FALLBACK_UNIT_COST_COP)
           : computeUnitCostCop(
               purchaseFx,
               panel?.real_euro_rate_cop_per_eur ?? null,
               panel?.unit_cost_cop ?? 0,
             );
 
+    const finalUnitCostCop =
+      Number.isFinite(unitCostCop) && unitCostCop > 0
+        ? unitCostCop
+        : FALLBACK_UNIT_COST_COP;
+
     return {
       sent_unit_key: u.sent_unit_key,
       batch_item_id: u.batch_item_id ?? '',
       purchase_price_eur: purchaseFx,
-      unit_cost_cop: unitCostCop,
+      unit_cost_cop: finalUnitCostCop,
       is_novedad: u.status === 'novedad',
       novedad_notes: u.novedad_notes ?? '',
     };

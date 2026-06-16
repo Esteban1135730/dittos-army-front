@@ -18,9 +18,11 @@ import { apiUrl } from '../../config/api';
 import {
   buildCreateTandaCardsPayload,
   rankPanelCandidates,
+  resolveNovedadUnitCostCop,
   type PanelHomologItem,
   type PanelMatchCandidate,
   type SentHomologUnit,
+  type SystemTrmRates,
 } from '../../utils/sent-unit-homolog';
 import { fetchExpansionHomologIndex } from '../../utils/transit-card-match';
 import {
@@ -52,13 +54,34 @@ import {
 import { HomologSearchField } from './homolog-search-field';
 import { NovedadDialog } from './novedad-dialog';
 import { HomologCreateTandaPanel } from './homolog-create-tanda-panel';
+import {
+  countOrphanNovedadUnits,
+  HomologNovedadStockSection,
+} from './homolog-novedad-stock-section';
+import { useNovedadStockList } from '../incoming/novedad-stock/use-novedad-stock';
+import { useExchangeRates } from '../../utils/tasa';
 
 const API_CARDTRADER = apiUrl('/cardtrader');
+
+type SentStatusFilter = 'all' | 'pending' | 'novedad';
 
 function unitStatusColor(status: SentHomologUnit['status']) {
   if (status === 'verified') return 'success';
   if (status === 'novedad') return 'warning';
   return 'default';
+}
+
+function homologUnitDisplayCop(
+  unit: SentHomologUnit,
+  systemTrm: SystemTrmRates,
+): number | null {
+  if (unit.unit_cost_cop != null && unit.unit_cost_cop > 0) {
+    return unit.unit_cost_cop;
+  }
+  if (unit.status === 'novedad') {
+    return resolveNovedadUnitCostCop(unit, systemTrm);
+  }
+  return null;
 }
 
 function CandidateRow(props: {
@@ -127,8 +150,14 @@ function CandidateRow(props: {
 export default function IncomingV2Page() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { rates, isPrompting } = useExchangeRates();
+  const systemTrm = useMemo<SystemTrmRates>(
+    () => ({ euroToCop: rates.euroToCop, usdToCop: rates.usdToCop }),
+    [rates.euroToCop, rates.usdToCop],
+  );
   const { data: activeData, isLoading: activeLoading } = useHomologActive();
   const { data: novedades = [] } = useHomologNovedades();
+  const { data: novedadStockRows = [] } = useNovedadStockList();
   const {
     createSession,
     syncSent,
@@ -138,6 +167,7 @@ export default function IncomingV2Page() {
     createTanda,
     cancelSession,
     resolveNovedad,
+    revertConversion,
     axiosMessage,
   } = useHomologMutations();
 
@@ -148,9 +178,11 @@ export default function IncomingV2Page() {
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [novedadOpen, setNovedadOpen] = useState(false);
   const [appliedSentSearch, setAppliedSentSearch] = useState('');
   const [appliedInventorySearch, setAppliedInventorySearch] = useState('');
+  const [sentStatusFilter, setSentStatusFilter] = useState<SentStatusFilter>('all');
 
   const expansions = useMemo(() => {
     const set = new Set<string>();
@@ -196,6 +228,22 @@ export default function IncomingV2Page() {
     novedad: 0,
   };
 
+  const orphanNovedadCount = useMemo(
+    () => countOrphanNovedadUnits(units),
+    [units],
+  );
+  const novedadStockPending = useMemo(
+    () =>
+      sessionId
+        ? novedadStockRows.filter(
+            (r) => r.session_id === sessionId && r.status === 'pending',
+          ).length
+        : 0,
+    [novedadStockRows, sessionId],
+  );
+  const showNovedadWorkflow =
+    orphanNovedadCount > 0 || novedadStockPending > 0 || summary.novedad > 0;
+
   const selectedUnit = useMemo(
     () => units.find((u) => u.sent_unit_key === selectedKey) ?? null,
     [units, selectedKey],
@@ -225,6 +273,10 @@ export default function IncomingV2Page() {
     ? panelItemByBatchItemId.get(selectedUnit.batch_item_id)
     : undefined;
 
+  const selectedUnitDisplayCop = selectedUnit
+    ? homologUnitDisplayCop(selectedUnit, systemTrm)
+    : null;
+
   const sentSearchHaystackByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const u of units) {
@@ -241,15 +293,26 @@ export default function IncomingV2Page() {
     return map;
   }, [panelItems]);
 
-  const filteredSentUnits = useMemo(
-    () =>
-      filterByHomologSearch(
-        units,
-        (u) => sentSearchHaystackByKey.get(u.sent_unit_key) ?? '',
-        appliedSentSearch,
-      ),
-    [units, appliedSentSearch, sentSearchHaystackByKey],
-  );
+  const filteredSentUnits = useMemo(() => {
+    const base =
+      sentStatusFilter === 'all'
+        ? units
+        : units.filter((u) => u.status === sentStatusFilter);
+    return filterByHomologSearch(
+      base,
+      (u) => sentSearchHaystackByKey.get(u.sent_unit_key) ?? '',
+      appliedSentSearch,
+    );
+  }, [units, appliedSentSearch, sentSearchHaystackByKey, sentStatusFilter]);
+
+  const sentListDenominator =
+    sentStatusFilter === 'pending'
+      ? summary.pending
+      : sentStatusFilter === 'novedad'
+        ? summary.novedad
+        : units.length;
+  const sentListFiltered =
+    sentStatusFilter !== 'all' || appliedSentSearch.trim().length > 0;
 
   const filteredPanelItems = useMemo(
     () =>
@@ -349,9 +412,15 @@ export default function IncomingV2Page() {
       setError('Quedan cartas sent sin verificar ni marcar como novedad.');
       return;
     }
+    if (novedadStockPending > 0) {
+      setError(
+        `Hay ${novedadStockPending} novedad(es) sin pasar a stock. Usa el Paso 1 arriba antes de crear la tanda.`,
+      );
+      return;
+    }
     setError(null);
     try {
-      const cards = buildCreateTandaCardsPayload(units, panelItems);
+      const cards = buildCreateTandaCardsPayload(units, panelItems, systemTrm);
       const res = await createTanda.mutateAsync({
         sessionId,
         shipping_total_cop: shippingTotalCop,
@@ -393,20 +462,54 @@ export default function IncomingV2Page() {
     );
   }
 
-  if (session.status === 'converted' && session.ship_round_id) {
+  if (session.status === 'converted') {
+    const handleRevertConversion = async () => {
+      if (!sessionId) return;
+      setError(null);
+      try {
+        await revertConversion.mutateAsync(sessionId);
+        await queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] });
+      } catch (e) {
+        setError(axiosMessage(e));
+      }
+    };
+
     return (
       <Box maxWidth={720} mx="auto">
+        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
         <Alert severity="success" sx={{ mb: 2 }}>
-          Esta sesión ya generó la tanda{' '}
-          <strong>{session.ship_round_id}</strong>.
+          Esta sesión ya generó una tanda
+          {session.ship_round_id ? (
+            <>
+              {' '}
+              (<strong>{session.ship_round_id}</strong>)
+            </>
+          ) : null}
+          .
         </Alert>
-        <Button
-          component={Link}
-          to={`/incoming/ship-round/${session.ship_round_id}`}
-          variant="contained"
-        >
-          Ir a revisar tanda
-        </Button>
+        <Stack direction="row" spacing={1} flexWrap="wrap">
+          {session.ship_round_id ? (
+            <Button
+              component={Link}
+              to={`/incoming/ship-round/${session.ship_round_id}`}
+              variant="contained"
+            >
+              Ir a revisar tanda
+            </Button>
+          ) : null}
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={() => void handleRevertConversion()}
+            disabled={revertConversion.isPending}
+          >
+            {revertConversion.isPending ? 'Restaurando…' : 'Restaurar homologación'}
+          </Button>
+        </Stack>
+        <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+          Restaurar elimina la tanda en revisión y recupera el progreso de homologación (solo si la
+          tanda no fue finalizada a stock).
+        </Typography>
       </Box>
     );
   }
@@ -452,6 +555,42 @@ export default function IncomingV2Page() {
         </Alert>
       ) : null}
 
+      {info ? (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setInfo(null)}>
+          {info}
+        </Alert>
+      ) : null}
+
+      {showNovedadWorkflow || summary.pending === 0 ? (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#fafafa' }}>
+          {summary.novedad > 0 && isPrompting ? (
+            <Alert severity="warning" sx={{ mb: 1.5 }}>
+              Hay {summary.novedad} carta(s) marcadas como novedad. Configura las tasas EUR/USD → COP
+              en el panel lateral para el paso 1 (stock).
+            </Alert>
+          ) : null}
+
+          <HomologNovedadStockSection
+            orphanNovedadCount={orphanNovedadCount}
+            sessionId={sessionId}
+            onError={setError}
+            onInfo={(msg) => {
+              setError(null);
+              setInfo(msg);
+            }}
+          />
+
+          <HomologCreateTandaPanel
+            pendingCount={summary.pending}
+            totalUnits={summary.total}
+            verifiedCount={summary.verified}
+            novedadStockPending={novedadStockPending}
+            isSubmitting={createTanda.isPending}
+            onCreate={handleCreateTanda}
+          />
+        </Paper>
+      ) : null}
+
       <Box
         display="grid"
         gridTemplateColumns={{ xs: '1fr', lg: '360px 1fr 300px' }}
@@ -461,8 +600,36 @@ export default function IncomingV2Page() {
         <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 640, overflow: 'auto' }}>
           <Typography variant="subtitle2" fontWeight={600} gutterBottom>
             Cartas sent ({filteredSentUnits.length}
-            {appliedSentSearch.trim() ? ` / ${units.length}` : ''})
+            {sentListFiltered ? ` / ${sentListDenominator}` : ''})
           </Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1 }}>
+            <Chip
+              label="Todas"
+              size="small"
+              clickable
+              color={sentStatusFilter === 'all' ? 'primary' : 'default'}
+              variant={sentStatusFilter === 'all' ? 'filled' : 'outlined'}
+              onClick={() => setSentStatusFilter('all')}
+            />
+            <Chip
+              label={`Pendientes (${summary.pending})`}
+              size="small"
+              clickable
+              color={sentStatusFilter === 'pending' ? 'primary' : 'default'}
+              variant={sentStatusFilter === 'pending' ? 'filled' : 'outlined'}
+              onClick={() => setSentStatusFilter('pending')}
+              disabled={summary.pending === 0}
+            />
+            <Chip
+              label={`Novedad (${summary.novedad})`}
+              size="small"
+              clickable
+              color={sentStatusFilter === 'novedad' ? 'warning' : 'default'}
+              variant={sentStatusFilter === 'novedad' ? 'filled' : 'outlined'}
+              onClick={() => setSentStatusFilter('novedad')}
+              disabled={summary.novedad === 0}
+            />
+          </Stack>
           <HomologSearchField
             placeholder="Buscar nombre, pedido, expansión… (Enter)"
             onApply={setAppliedSentSearch}
@@ -471,7 +638,13 @@ export default function IncomingV2Page() {
           <Stack spacing={1}>
             {filteredSentUnits.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                {appliedSentSearch.trim() ? 'Sin resultados.' : 'No hay cartas sent.'}
+                {appliedSentSearch.trim()
+                  ? 'Sin resultados.'
+                  : sentStatusFilter === 'pending'
+                    ? 'No hay cartas pendientes.'
+                    : sentStatusFilter === 'novedad'
+                      ? 'No hay cartas con novedad.'
+                      : 'No hay cartas sent.'}
               </Typography>
             ) : null}
             {filteredSentUnits.map((u) => {
@@ -520,7 +693,7 @@ export default function IncomingV2Page() {
                 </Box>
                 {u.status === 'verified' || u.status === 'novedad' ? (
                   <HomologPriceChip
-                    cop={u.unit_cost_cop}
+                    cop={homologUnitDisplayCop(u, systemTrm)}
                     fx={fxUnitPriceFromSentUnit(u).amount}
                     currency={fxUnitPriceFromSentUnit(u).currency}
                   />
@@ -586,13 +759,15 @@ export default function IncomingV2Page() {
               </Typography>
 
               {(selectedUnit.status === 'verified' || selectedUnit.status === 'novedad') &&
-              selectedUnit.unit_cost_cop != null ? (
+              selectedUnitDisplayCop != null ? (
                 <Box mb={2}>
                   <HomologPriceBlock
-                    cop={selectedUnit.unit_cost_cop}
+                    cop={selectedUnitDisplayCop}
                     fx={fxUnitPriceFromSentUnit(selectedUnit).amount}
                     currency={fxUnitPriceFromSentUnit(selectedUnit).currency}
-                    copLabel="Precio de compra"
+                    copLabel={
+                      selectedUnit.status === 'novedad' ? 'Precio TRM (sistema)' : 'Precio de compra'
+                    }
                     fxLabel="Pagado"
                     size="lg"
                   />
@@ -657,6 +832,12 @@ export default function IncomingV2Page() {
               {selectedUnit.status === 'novedad' ? (
                 <Alert severity="warning" sx={{ mt: 2 }}>
                   Novedad: {selectedUnit.novedad_notes || '(sin nota)'}
+                  {selectedUnitDisplayCop == null && isPrompting ? (
+                    <Typography variant="body2" display="block" mt={1}>
+                      Configura las tasas EUR/USD → COP en el panel lateral para calcular el precio
+                      de compra con TRM.
+                    </Typography>
+                  ) : null}
                   <Box mt={1}>
                     <Button
                       size="small"
@@ -838,17 +1019,15 @@ export default function IncomingV2Page() {
             )}
           </Paper>
 
-          <HomologCreateTandaPanel
-            pendingCount={summary.pending}
-            totalUnits={summary.total}
-            isSubmitting={createTanda.isPending}
-            onCreate={handleCreateTanda}
-          />
-
           <Paper variant="outlined" sx={{ p: 2, maxHeight: 360, overflow: 'auto' }}>
-            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-              Novedades en registro ({novedades.length})
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                Novedades en registro ({novedades.length})
+              </Typography>
+              <Button component={Link} to="/incoming/novedad-stock" size="small">
+                Cartas con novedad
+              </Button>
+            </Stack>
             {novedades.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 Sin novedades abiertas.

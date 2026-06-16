@@ -5,6 +5,8 @@ type HomologCreateTandaPanelProps = {
   pendingCount: number;
   totalUnits: number;
   isSubmitting: boolean;
+  novedadStockPending?: number;
+  verifiedCount?: number;
   onCreate: (shippingTotalCop: number) => void | Promise<void>;
 };
 
@@ -13,6 +15,8 @@ export function HomologCreateTandaPanel({
   pendingCount,
   totalUnits,
   isSubmitting,
+  novedadStockPending = 0,
+  verifiedCount = 0,
   onCreate,
 }: HomologCreateTandaPanelProps) {
   const [shippingInput, setShippingInput] = useState('');
@@ -28,12 +32,20 @@ export function HomologCreateTandaPanel({
     void onCreate(val);
   };
 
-  const canCreate = pendingCount === 0 && totalUnits > 0 && !isSubmitting;
+  const canCreate =
+    pendingCount === 0 &&
+    novedadStockPending === 0 &&
+    verifiedCount > 0 &&
+    !isSubmitting;
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Crear tanda
+        Paso 2 · Crear tanda (solo verificadas)
+      </Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+        Las cartas homologadas con inventario en camino entran en la tanda de llegada. Las
+        novedades sin inventario ya deben estar en stock (paso 1).
       </Typography>
       <TextField
         fullWidth
@@ -63,11 +75,19 @@ export function HomologCreateTandaPanel({
           ? 'Creando…'
           : pendingCount > 0
             ? `Faltan ${pendingCount} cartas`
-            : 'Crear tanda'}
+            : novedadStockPending > 0
+              ? `Pasa ${novedadStockPending} novedad(es) a stock`
+              : verifiedCount === 0
+                ? 'Sin cartas verificadas'
+                : 'Crear tanda'}
       </Button>
       {pendingCount > 0 ? (
         <Typography variant="caption" color="text.secondary" display="block" mt={1}>
           Verifica o marca novedad en todas las cartas sent antes de continuar.
+        </Typography>
+      ) : novedadStockPending > 0 ? (
+        <Typography variant="caption" color="error" display="block" mt={1}>
+          Primero crea las novedades en stock (paso 1 arriba).
         </Typography>
       ) : null}
     </Paper>
