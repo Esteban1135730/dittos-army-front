@@ -24,6 +24,9 @@ import CotizarCardtraderPage from "./pages/cotizar/cotizar-cardtrader-page";
 import CotizarPedidoClientePage from "./pages/cotizar/cotizar-pedido-cliente-page";
 import VentaAsistidaQrPage from "./pages/ventas/venta-asistida-qr-page";
 import TestCardtraderPage from "./pages/test-cardtrader/test-cardtrader-page";
+import CardtraderTransitListPage from "./pages/cardtrader-transit/cardtrader-transit-list-page";
+import CardtraderTransitLotDetailPage from "./pages/cardtrader-transit/cardtrader-transit-lot-detail-page";
+import CardtraderTransitImportPage from "./pages/cardtrader-transit/cardtrader-transit-import-page";
 import StockReviewStartPage from "./pages/stock/revision/start-page";
 import StockReviewVerifyPage from "./pages/stock/revision/verify-page";
 import StockReviewResolvePage from "./pages/stock/revision/resolve-page";
@@ -182,6 +185,30 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <CotizarPedidoClientePage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/cardtrader-transit"
+        element={
+          <SideLayout>
+            <CardtraderTransitListPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/cardtrader-transit/import"
+        element={
+          <SideLayout>
+            <CardtraderTransitImportPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/cardtrader-transit/lot/:lotId"
+        element={
+          <SideLayout>
+            <CardtraderTransitLotDetailPage />
           </SideLayout>
         }
       />

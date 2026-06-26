@@ -52,23 +52,32 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/stock/perdidas" className={subLinkClass} onNavigate={onNavigate}>
           Cartas perdidas
         </NavLink>
+        <NavLink to="/cardtrader-transit" onNavigate={onNavigate}>
+          Tránsito CardTrader
+        </NavLink>
+        <NavLink to="/cardtrader-transit/import" className={subLinkClass} onNavigate={onNavigate}>
+          Importar CT Zero
+        </NavLink>
+        <NavLink to="/test-cardtrader" className={subLinkClass} onNavigate={onNavigate}>
+          Consolidado tránsito
+        </NavLink>
         <NavLink to="/incoming" onNavigate={onNavigate}>
-          Compras en camino
+          <span className="text-gray-400">Compras en camino</span>
+          <span className="ml-1 text-[10px] uppercase text-amber-400">legacy</span>
         </NavLink>
         <NavLink to="/incoming-v2" className={subLinkClass} onNavigate={onNavigate}>
-          Compras en camino v2
+          <span className="text-gray-400">Compras v2</span>
+          <span className="ml-1 text-[10px] uppercase text-amber-400">legacy</span>
         </NavLink>
         <NavLink to="/incoming/novedad-stock" className={subLinkClass} onNavigate={onNavigate}>
-          Cartas con novedad
+          <span className="text-gray-400">Cartas con novedad</span>
+          <span className="ml-1 text-[10px] uppercase text-amber-400">legacy</span>
         </NavLink>
         <NavLink to="/cotizar" onNavigate={onNavigate}>
           Cotizar carta
         </NavLink>
         <NavLink to="/cotizar/pedido-cliente" className={subLinkClass} onNavigate={onNavigate}>
           Pedido CardTrader
-        </NavLink>
-        <NavLink to="/test-cardtrader" className={subLinkClass} onNavigate={onNavigate}>
-          Consolidado tránsito
         </NavLink>
         <NavLink to="/ventas" onNavigate={onNavigate}>
           Ventas

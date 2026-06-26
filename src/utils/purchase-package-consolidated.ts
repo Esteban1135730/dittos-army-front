@@ -6,7 +6,12 @@ import {
 } from './cardtrader-ct0-box';
 import type { IncomingHomologItem } from './incoming-ct0-homolog';
 import { findBatchItemForCtLineName } from './incoming-ct0-homolog';
+import { findBatchItemForCardName } from './incoming-ct0-package-match';
 import { moneyToUnits } from './cardtrader-order-pricing';
+import {
+  unitCostCopFromBatchItemRuleOfThree,
+  unitCostCopFromFxUnit,
+} from './purchase-currency';
 
 export type CardLocation = 'ct0-hub' | 'ct0-ready';
 
@@ -81,11 +86,31 @@ function applyCopAllocationToPackageLines(
 function applyIncomingBatchUnitCostsToLines(
   lines: PurchasePackageLine[],
   batchItems: IncomingHomologItem[],
+  realFxRateCop?: number | null,
 ): number {
   let total = 0;
   for (const line of lines) {
     const item = findBatchItemForCtLineName(line.name, line.language, batchItems);
-    const unit = item?.unit_cost_cop;
+    const fxUnit = line.qty > 0 ? line.referenceUsd / line.qty : 0;
+    const matched = item
+      ? {
+          unit_cost_cop: item.unit_cost_cop,
+          eur_unit_price: item.eur_unit_price,
+        }
+      : findBatchItemForCardName(
+          line.name,
+          batchItems.map((it) => ({
+            card_name: it.card_name,
+            quantity_ordered: it.quantity_ordered,
+            remaining_quantity: it.remaining_quantity,
+            unit_cost_cop: it.unit_cost_cop,
+            eur_unit_price: it.eur_unit_price,
+          })),
+        );
+    const unit =
+      unitCostCopFromBatchItemRuleOfThree(fxUnit, matched ?? {}) ??
+      unitCostCopFromFxUnit(item?.eur_unit_price ?? fxUnit, realFxRateCop) ??
+      (item?.unit_cost_cop != null && item.unit_cost_cop > 0 ? item.unit_cost_cop : null);
     if (unit != null && unit > 0) {
       line.unitCostCop = unit;
       line.lineCostCop = unit * line.qty;
@@ -101,6 +126,8 @@ export function buildPurchasePackages(args: {
   copByPackageKey: Record<string, string>;
   /** Lote panel emparejado → ítems con unit_cost_cop para autocompletar COP por línea. */
   batchItemsByPackageKey?: Record<string, IncomingHomologItem[]>;
+  /** Tasa COP/FX fija del lote legacy por checkout CT0. */
+  batchFxRateByPackageKey?: Record<string, number>;
   parseCop: (raw: string) => number | null;
   readCondition: (props: Record<string, unknown> | undefined) => string;
   readLanguage: (props: Record<string, unknown> | undefined) => string;
@@ -166,9 +193,23 @@ export function buildPurchasePackages(args: {
     pkg.lineCount = pkg.lines.length;
 
     const batchItems = args.batchItemsByPackageKey?.[pkg.packageKey];
+    const batchFxRate = args.batchFxRateByPackageKey?.[pkg.packageKey];
     let batchCopSum = 0;
     if (batchItems?.length) {
-      batchCopSum = applyIncomingBatchUnitCostsToLines(pkg.lines, batchItems);
+      batchCopSum = applyIncomingBatchUnitCostsToLines(pkg.lines, batchItems, batchFxRate);
+    }
+
+    if (batchFxRate != null && batchFxRate > 0) {
+      for (const line of pkg.lines) {
+        if (line.unitCostCop != null) continue;
+        const fxUnit = line.qty > 0 ? line.referenceUsd / line.qty : 0;
+        const unit = unitCostCopFromFxUnit(fxUnit, batchFxRate);
+        if (unit != null && unit > 0) {
+          line.unitCostCop = unit;
+          line.lineCostCop = unit * line.qty;
+        }
+      }
+      batchCopSum = pkg.lines.reduce((s, l) => s + (l.lineCostCop ?? 0), 0);
     }
 
     const copRaw = args.copByPackageKey[pkg.packageKey] ?? '';
@@ -177,7 +218,7 @@ export function buildPurchasePackages(args: {
       copPaid = batchCopSum;
     }
 
-    if (copPaid != null && pkg.ctSubtotalUsd > 0) {
+    if (copPaid != null && pkg.ctSubtotalUsd > 0 && batchFxRate == null) {
       const unpriced = pkg.lines.filter((l) => l.unitCostCop == null);
       if (unpriced.length === pkg.lines.length) {
         applyCopAllocationToPackageLines(pkg.lines, copPaid);

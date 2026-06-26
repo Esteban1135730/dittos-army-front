@@ -6,6 +6,11 @@ import {
 import { moneyToUnits } from './cardtrader-order-pricing';
 import type { IncomingHomologItem } from './incoming-ct0-homolog';
 import { normalizeMatchLanguage } from './incoming-ct0-homolog';
+import {
+  normalizeCardsCostCurrency,
+  resolveUnitCostCopFromBatchItem,
+  type CardsCostCurrency,
+} from './purchase-currency';
 import type { OrderTransitLine, OrderTransitPackage } from './order-transit-packages';
 import {
   buildCt0UnregisteredLots,
@@ -81,6 +86,9 @@ export type BatchConsolidatedPackage = {
   batchId: string;
   purchaseDate: string;
   totalCopCardsCost: number | null;
+  totalFxCardsCost: number | null;
+  realFxRateCop: number | null;
+  cardsCostCurrency: CardsCostCurrency;
   lines: BatchConsolidatedLine[];
   totalUnits: number;
   realCopTotal: number;
@@ -439,6 +447,9 @@ export function buildBatchConsolidatedPackages(args: {
     batchId: string;
     purchaseDate: string;
     totalCopCardsCost?: number;
+    totalFxCardsCost?: number;
+    realFxRateCop?: number;
+    cardsCostCurrency?: string;
     items: IncomingHomologItem[];
   }>;
   ct0Items: Ct0BoxItem[];
@@ -461,12 +472,26 @@ export function buildBatchConsolidatedPackages(args: {
 
   for (const bundle of sortedBundles) {
     const lines: BatchConsolidatedLine[] = [];
+    const cardsCostCurrency = normalizeCardsCostCurrency(bundle.cardsCostCurrency);
+    const realFxRateCop =
+      bundle.realFxRateCop != null && bundle.realFxRateCop > 0
+        ? bundle.realFxRateCop
+        : bundle.totalCopCardsCost != null &&
+            bundle.totalFxCardsCost != null &&
+            bundle.totalCopCardsCost > 0 &&
+            bundle.totalFxCardsCost > 0
+          ? bundle.totalCopCardsCost / bundle.totalFxCardsCost
+          : null;
 
     for (const it of bundle.items) {
       const qty = Math.max(0, it.remaining_quantity);
       if (qty <= 0) continue;
 
-      const unitCostCop = Math.max(0, Number(it.unit_cost_cop) || 0);
+      const unitCostCop = resolveUnitCostCopFromBatchItem(
+        it,
+        it.eur_unit_price ?? null,
+        realFxRateCop,
+      );
       const ct0Matches = takeCt0Units(
         ct0Pool,
         it,
@@ -512,6 +537,12 @@ export function buildBatchConsolidatedPackages(args: {
         bundle.totalCopCardsCost != null && bundle.totalCopCardsCost > 0
           ? Math.round(bundle.totalCopCardsCost)
           : null,
+      totalFxCardsCost:
+        bundle.totalFxCardsCost != null && bundle.totalFxCardsCost > 0
+          ? bundle.totalFxCardsCost
+          : null,
+      realFxRateCop,
+      cardsCostCurrency,
       lines,
       totalUnits: lines.reduce((s, l) => s + l.qty, 0),
       realCopTotal: lines.reduce((s, l) => s + l.lineCostCop, 0),
