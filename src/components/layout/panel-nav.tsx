@@ -52,6 +52,9 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/stock/perdidas" className={subLinkClass} onNavigate={onNavigate}>
           Cartas perdidas
         </NavLink>
+        <NavLink to="/stock/imprimir-etiquetas-qr" className={subLinkClass} onNavigate={onNavigate}>
+          Imprimir etiquetas QR
+        </NavLink>
         <NavLink to="/cardtrader-transit" onNavigate={onNavigate}>
           Tránsito CardTrader
         </NavLink>

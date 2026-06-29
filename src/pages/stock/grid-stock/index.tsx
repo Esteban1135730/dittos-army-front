@@ -31,6 +31,7 @@ import {
   openStockQrLabelsPrintWindow,
   type StockQrExportRow,
 } from "../../../modules/stock-barcode";
+import { filterStockVisibleInGrid } from "../../../utils/stock-grid-visible";
 
 export type StockItem = StockListItem;
 
@@ -164,11 +165,7 @@ export default function StockGrid() {
     queryFn: async () => {
       const res = await axios.get(apiUrl("/stock"));
       return Array.isArray(res.data)
-        ? res.data.filter(
-          (stockItem) =>
-            stockItem.card_state != "vendida" &&
-            stockItem.card_state != "propiedad"
-        )
+        ? filterStockVisibleInGrid(res.data)
         : [];
     },
   });

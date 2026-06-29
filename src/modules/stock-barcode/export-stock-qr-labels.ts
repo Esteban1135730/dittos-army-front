@@ -10,6 +10,10 @@ export type QrLabelsPrintOptions = {
 const COLS = 4;
 const ROWS = 12;
 
+export const QR_LABELS_COLS = COLS;
+export const QR_LABELS_ROWS = ROWS;
+export const QR_LABELS_PER_PAGE = COLS * ROWS;
+
 /** Una línea corta para etiqueta pequeña. */
 function shortCardName(name: string, max = 32): string {
   const t = name.trim() || "Sin nombre";

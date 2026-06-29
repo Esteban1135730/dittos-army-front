@@ -31,6 +31,7 @@ import StockReviewStartPage from "./pages/stock/revision/start-page";
 import StockReviewVerifyPage from "./pages/stock/revision/verify-page";
 import StockReviewResolvePage from "./pages/stock/revision/resolve-page";
 import StockLostCardsPage from "./pages/stock/lost-cards";
+import ImprimirEtiquetasQrPage from "./pages/stock/imprimir-etiquetas-qr-page";
 import NovedadStockPage from "./pages/incoming/novedad-stock/novedad-stock-page";
 
 export default function AppRouter() {
@@ -89,6 +90,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <StockLostCardsPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/stock/imprimir-etiquetas-qr"
+        element={
+          <SideLayout>
+            <ImprimirEtiquetasQrPage />
           </SideLayout>
         }
       />
