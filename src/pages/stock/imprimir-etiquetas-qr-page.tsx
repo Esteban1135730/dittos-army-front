@@ -98,14 +98,6 @@ export default function ImprimirEtiquetasQrPage() {
     return map;
   }, [qrExportRows]);
 
-  const expansionByStockId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const row of qrExportRows) {
-      if (row.expansion) map.set(row.stock_id, row.expansion);
-    }
-    return map;
-  }, [qrExportRows]);
-
   const eligibleIds = useMemo(
     () => new Set(qrExportRows.map((r) => r.stock_id)),
     [qrExportRows],
@@ -178,29 +170,30 @@ export default function ImprimirEtiquetasQrPage() {
   const loading = loadingStock || loadingQr;
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-4 md:p-6">
-      <div className="flex flex-wrap items-center gap-3 mb-2">
-        <h1 className="text-2xl font-bold text-gray-800">
+    <div className="w-full min-h-[calc(100vh-7rem)] flex flex-col">
+      <div className="flex flex-wrap items-center gap-3 mb-1">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
           Imprimir etiquetas QR
         </h1>
         <Link
           to="/stock"
-          className="text-sm text-blue-600 hover:underline no-print"
+          className="text-sm md:text-base text-blue-600 hover:underline no-print"
         >
           Volver a grilla Stock
         </Link>
       </div>
-      <p className="text-sm text-gray-600 mb-6">
+      <p className="text-sm md:text-base text-gray-600 mb-4">
         Busca líneas de inventario, arma una cola con cantidad y imprime
         etiquetas QR (misma plantilla 4×12 que Exportar QR en Stock).
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white border border-gray-200 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Buscador</h2>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 flex-1 min-h-0">
+        <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 flex flex-col min-h-[420px] xl:min-h-0">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3">
+            Buscador
+          </h2>
           <TextField
             fullWidth
-            size="small"
             label="Buscar en inventario"
             placeholder="Mín. 2 caracteres — nombre de carta (como en grilla Stock)"
             value={busqueda}
@@ -209,17 +202,17 @@ export default function ImprimirEtiquetasQrPage() {
           />
 
           {loading ? (
-            <p className="text-gray-500 text-sm mt-4">Cargando inventario…</p>
+            <p className="text-gray-500 text-base mt-4">Cargando inventario…</p>
           ) : busqueda.trim().length < 2 ? (
-            <p className="text-gray-500 text-sm mt-4">
+            <p className="text-gray-500 text-base mt-4">
               Escribe al menos 2 caracteres para ver resultados.
             </p>
           ) : resultados.length === 0 ? (
-            <p className="text-gray-500 text-sm mt-4 text-center py-6">
+            <p className="text-gray-500 text-base mt-4 text-center py-8">
               Sin coincidencias.
             </p>
           ) : (
-            <ul className="mt-4 space-y-2 max-h-[28rem] overflow-y-auto">
+            <ul className="mt-4 space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
               {resultados.map((item) => {
                 const elegible = eligibleIds.has(item._id);
                 const exportRow = exportByStockId.get(item._id);
@@ -229,51 +222,52 @@ export default function ImprimirEtiquetasQrPage() {
                 return (
                   <li
                     key={item._id}
-                    className="flex flex-wrap items-center gap-2 p-2 rounded border border-gray-100 bg-gray-50"
+                    className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50"
                   >
                     {item.image_url ? (
                       <img
                         src={item.image_url}
                         alt=""
-                        className="w-10 h-14 object-cover rounded flex-shrink-0"
+                        className="w-20 h-28 md:w-24 md:h-32 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0 shadow-sm"
                       />
                     ) : (
-                      <div className="w-10 h-14 bg-gray-200 rounded flex-shrink-0" />
+                      <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md flex-shrink-0" />
                     )}
-                    <div className="flex-1 min-w-[140px]">
-                      <p className="font-medium text-sm text-gray-900 leading-tight">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-base md:text-lg text-gray-900 leading-snug">
                         {item.card_name || item.card_id}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm md:text-base text-gray-600 mt-1">
                         {exportRow?.expansion ? `${exportRow.expansion} · ` : ""}
                         {item.language ? `${item.language} · ` : ""}
                         {rz ? `${rz} · ` : ""}
                         {cardStateLabel(item.card_state)}
                       </p>
                       {exportRow && (
-                        <p className="text-xs font-semibold text-blue-800">
+                        <p className="text-sm md:text-base font-bold text-blue-800 mt-1">
                           COP {formatCOP(exportRow.price_cop)}
                         </p>
                       )}
-                      <span
-                        className={`inline-block mt-1 text-xs px-1.5 py-0.5 rounded ${
-                          elegible
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-200 text-gray-600"
-                        }`}
-                      >
-                        {elegible ? "Elegible para QR" : "No elegible"}
-                      </span>
-                      {inQueue && (
-                        <span className="ml-1 text-xs text-blue-700">
-                          · en cola
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span
+                          className={`inline-block text-sm px-2 py-0.5 rounded ${
+                            elegible
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {elegible ? "Elegible para QR" : "No elegible"}
                         </span>
-                      )}
+                        {inQueue && (
+                          <span className="text-sm text-blue-700 font-medium">
+                            En cola
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
                       <TextField
                         type="number"
-                        size="small"
                         label="Cant."
                         value={getAddQty(item._id)}
                         onChange={(e) => {
@@ -283,7 +277,7 @@ export default function ImprimirEtiquetasQrPage() {
                             [item._id]: Number.isFinite(v) ? v : 1,
                           }));
                         }}
-                        inputProps={{ min: 1, style: { width: 48 } }}
+                        inputProps={{ min: 1, style: { width: 64 } }}
                         disabled={!elegible}
                       />
                       <Tooltip
@@ -296,9 +290,9 @@ export default function ImprimirEtiquetasQrPage() {
                         <span>
                           <Button
                             variant="contained"
-                            size="small"
                             disabled={!elegible}
                             onClick={() => handleAdd(item._id)}
+                            sx={{ minWidth: 96, whiteSpace: "nowrap" }}
                           >
                             Añadir
                           </Button>
@@ -312,78 +306,95 @@ export default function ImprimirEtiquetasQrPage() {
           )}
         </section>
 
-        <section className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">
+        <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 flex flex-col min-h-[320px] xl:min-h-0">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3">
             Cola de impresión
           </h2>
 
-          <div className="mb-4 p-3 rounded-lg bg-slate-100 border border-slate-200">
-            <p className="text-sm font-medium text-slate-900">
+          <div className="mb-4 p-3 md:p-4 rounded-lg bg-slate-100 border border-slate-200">
+            <p className="text-sm md:text-base font-medium text-slate-900">
               {formatQrLabelPageStatsMessage(pageStats)}
             </p>
           </div>
 
           {queue.length === 0 ? (
-            <p className="text-gray-500 text-sm flex-1 py-8 text-center">
+            <p className="text-gray-500 text-base flex-1 py-10 text-center">
               La cola está vacía. Busca cartas y pulsa Añadir.
             </p>
           ) : (
-            <ul className="space-y-2 flex-1 max-h-[22rem] overflow-y-auto mb-4">
+            <ul className="space-y-3 flex-1 min-h-0 overflow-y-auto mb-4 pr-1">
               {queue.map((entry) => {
                 const item = stockById.get(entry.stockId);
                 const exportRow = exportByStockId.get(entry.stockId);
                 const elegible = eligibleIds.has(entry.stockId);
+                const imageUrl = item?.image_url;
 
                 return (
                   <li
                     key={entry.stockId}
-                    className="flex flex-wrap items-center gap-2 p-2 rounded border border-gray-100"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50"
                   >
-                    <div className="flex-1 min-w-[120px]">
-                      <p className="text-sm font-medium text-gray-900">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt=""
+                        className="w-16 h-24 md:w-20 md:h-28 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-24 md:w-20 md:h-28 bg-gray-200 rounded-md flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-base font-semibold text-gray-900 leading-snug">
                         {item?.card_name ?? exportRow?.card_name ?? entry.stockId}
                       </p>
-                      {exportRow?.expansion && (
-                        <p className="text-xs text-gray-500">
-                          {exportRow.expansion}
+                      {(exportRow?.expansion || exportRow?.language) && (
+                        <p className="text-sm text-gray-600 mt-0.5">
+                          {[exportRow?.expansion, exportRow?.language]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </p>
                       )}
+                      <p className="text-sm font-medium text-slate-700 mt-1">
+                        {entry.quantity} etiqueta{entry.quantity === 1 ? "" : "s"}
+                      </p>
                       {!elegible && (
-                        <p className="text-xs text-amber-700">
+                        <p className="text-sm text-amber-700 mt-1">
                           Ya no elegible para QR
                         </p>
                       )}
                     </div>
-                    <TextField
-                      type="number"
-                      size="small"
-                      label="Cant."
-                      value={entry.quantity}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10);
-                        setQuantity(
-                          entry.stockId,
-                          Number.isFinite(v) ? v : 1,
-                        );
-                      }}
-                      inputProps={{ min: 1, style: { width: 56 } }}
-                    />
-                    <Button
-                      size="small"
-                      color="inherit"
-                      onClick={() => remove(entry.stockId)}
-                    >
-                      Quitar
-                    </Button>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
+                      <TextField
+                        type="number"
+                        label="Cant."
+                        value={entry.quantity}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          setQuantity(
+                            entry.stockId,
+                            Number.isFinite(v) ? v : 1,
+                          );
+                        }}
+                        inputProps={{ min: 1, style: { width: 64 } }}
+                      />
+                      <Button
+                        color="inherit"
+                        onClick={() => remove(entry.stockId)}
+                        sx={{ minWidth: 88 }}
+                      >
+                        Quitar
+                      </Button>
+                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+          <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-200">
             <Button
               variant="contained"
+              size="large"
               disabled={totalLabels === 0 || imprimiendo}
               onClick={() => void handleImprimir()}
             >
@@ -391,6 +402,7 @@ export default function ImprimirEtiquetasQrPage() {
             </Button>
             <Button
               variant="outlined"
+              size="large"
               color="inherit"
               disabled={queue.length === 0}
               onClick={clear}

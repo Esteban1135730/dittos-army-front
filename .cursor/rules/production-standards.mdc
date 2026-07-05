@@ -1,0 +1,21 @@
+---
+description: Estándares mínimos para código productivo en este repositorio (Dittos Army)
+alwaysApply: true
+---
+
+# Estándares productivos
+
+- **Pregunta primero**: ante ambigüedad, preguntar; no inferir alcance, prioridades ni detalles de producto. Si la decisión es naturalmente **cerrada** (varias opciones reales), usar **pregunta estructurada del agente** (formulario) u opciones numeradas; avanzar por **pasos claros**. No fabricar alternativas falsas. No implementar en **`dittos-army-back/`**, **`dittos-army-front/`**, **`dittos-army-store/`** ni **`dittos-army-mobile/`** una feature documentada en `docs/*/features/` hasta **validación humana explícita** de `spec-funcional.md` y `spec-tecnico.md` (en entregas **fullstack**, las **cuatro** specs del par antes de código).
+- **Backlog**: no cambiar estados de tareas ni del incremento en `backlog.md` sin instrucción o confirmación del humano (ver `AGENTS.md`).
+- **Tests**: el comportamiento nuevo en **backend** debe ir acompañado de tests Jest que lo protejan; ejecutar `npm test` en `dittos-army-back/` cuando aplique. En frontends, seguir o introducir el runner que defina el equipo.
+- **Cambios acotados**: un PR o cambio = una intención clara; evitar refactors masivos no solicitados.
+- **Seguridad**: sin credenciales en el código; validar y sanitizar entradas en fronteras (API Nest, formularios del panel y de la tienda).
+- **Coherencia**: respetar el estilo, estructura de carpetas y herramientas ya presentes en cada paquete.
+
+Para **crear o ampliar módulos** de aplicación (límites claros, API pública, tests obligatorios en back), aplicar el skill **module-authoring** en el paquete afectado (`<paquete>/.cursor/skills/module-authoring/SKILL.md`).
+
+En **`dittos-army-front/`** y **`dittos-army-store/`**, aplicar la regla **frontend-development** y, para entregas estructuradas, la skill **frontend-spec-driven** (`dittos-army-front/.cursor/skills/` o `dittos-army-store/.cursor/skills/` + `docs/frontend/features/NNN-slug/`). Para **back + panel** en un solo incremento, usar **fullstack-spec-driven** (`dittos-army-back/.cursor/skills/` + `dittos-army-front/.cursor/skills/`).
+
+En **`dittos-army-back/`**, aplicar la regla **backend-development** y la skill **backend-spec-driven** (`dittos-army-back/.cursor/skills/backend-spec-driven/` + `docs/backend/features/NNN-slug/`).
+
+En **`dittos-army-mobile/`**, aplicar la skill **mobile-spec-driven** (`dittos-army-mobile/.cursor/skills/mobile-spec-driven/` + `docs/mobile/features/NNN-slug/`): offline-first, sync explícita, SQLite en transacciones, buenas prácticas Expo/RN.

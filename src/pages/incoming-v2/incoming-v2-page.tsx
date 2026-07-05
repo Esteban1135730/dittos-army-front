@@ -123,14 +123,14 @@ function CandidateRow(props: {
             />
           </Stack>
           <Typography variant="caption" color="text.secondary" display="block">
-            Lote {formatHomologDate(candidate.batchPurchaseDate)} · {candidate.language}
+            Lote {formatHomologDate(candidate.lotPurchaseDate)} · {candidate.language}
             {candidate.rareza ? ` · ${candidate.rareza}` : ''}
           </Typography>
         </Box>
         <PanelItemPrices
           unitCostCop={candidate.unitCostCop}
-          eurUnitPrice={candidate.eurUnitPrice}
-          eurTotalLot={candidate.eurTotalLot}
+          eurUnitPrice={candidate.fxUnitPrice}
+          eurTotalLot={candidate.fxTotalLot}
           currency={candidate.cardsCostCurrency}
         />
         <Button
@@ -208,17 +208,17 @@ export default function IncomingV2Page() {
   const units = session?.units ?? [];
   const { blueprintImages, imagesLoading } = useHomologBlueprintImages(units);
 
-  const panelImageByBatchItemId = useMemo(() => {
+  const panelImageByTransitLineId = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of panelItems) {
       const src = resolvePanelImageSrc(p.image_url);
-      if (src) map.set(p.batch_item_id, src);
+      if (src) map.set(p.transit_line_id, src);
     }
     return map;
   }, [panelItems]);
 
-  const panelItemByBatchItemId = useMemo(() => {
-    return new Map(panelItems.map((p) => [p.batch_item_id, p]));
+  const panelItemByTransitLineId = useMemo(() => {
+    return new Map(panelItems.map((p) => [p.transit_line_id, p]));
   }, [panelItems]);
 
   const summary = session?.summary ?? {
@@ -265,12 +265,12 @@ export default function IncomingV2Page() {
     ? resolveBlueprintImageSrc(selectedUnit.blueprint_id, blueprintImages)
     : undefined;
 
-  const selectedPanelImage = selectedUnit?.batch_item_id
-    ? panelImageByBatchItemId.get(selectedUnit.batch_item_id)
+  const selectedPanelImage = selectedUnit?.transit_line_id
+    ? panelImageByTransitLineId.get(selectedUnit.transit_line_id)
     : undefined;
 
-  const selectedPanelItem = selectedUnit?.batch_item_id
-    ? panelItemByBatchItemId.get(selectedUnit.batch_item_id)
+  const selectedPanelItem = selectedUnit?.transit_line_id
+    ? panelItemByTransitLineId.get(selectedUnit.transit_line_id)
     : undefined;
 
   const selectedUnitDisplayCop = selectedUnit
@@ -288,7 +288,7 @@ export default function IncomingV2Page() {
   const panelSearchHaystackById = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of panelItems) {
-      map.set(p.batch_item_id, buildPanelItemSearchHaystack(p));
+      map.set(p.transit_line_id, buildPanelItemSearchHaystack(p));
     }
     return map;
   }, [panelItems]);
@@ -318,7 +318,7 @@ export default function IncomingV2Page() {
     () =>
       filterByHomologSearch(
         panelItems,
-        (p) => panelSearchHaystackById.get(p.batch_item_id) ?? '',
+        (p) => panelSearchHaystackById.get(p.transit_line_id) ?? '',
         appliedInventorySearch,
       ),
     [panelItems, appliedInventorySearch, panelSearchHaystackById],
@@ -361,7 +361,7 @@ export default function IncomingV2Page() {
       await verifyUnit.mutateAsync({
         sessionId,
         sentUnitKey: selectedUnit.sent_unit_key,
-        batchItemId: candidate.batchItemId,
+        transitLineId: candidate.transitLineId,
         matchScore: candidate.structuralScore,
       });
     } catch (e) {
@@ -371,7 +371,7 @@ export default function IncomingV2Page() {
 
   const handleNovedadSubmit = async (payload: {
     notes: string;
-    batchItemId?: string;
+    transitLineId?: string;
   }) => {
     if (!sessionId || !selectedUnit) return;
     setError(null);
@@ -380,7 +380,7 @@ export default function IncomingV2Page() {
         sessionId,
         sentUnitKey: selectedUnit.sent_unit_key,
         notes: payload.notes,
-        batchItemId: payload.batchItemId,
+        transitLineId: payload.transitLineId,
       });
       setNovedadOpen(false);
     } catch (e) {
@@ -399,7 +399,7 @@ export default function IncomingV2Page() {
       await verifyUnit.mutateAsync({
         sessionId,
         sentUnitKey: selectedUnit.sent_unit_key,
-        batchItemId: item.batch_item_id,
+        transitLineId: item.transit_line_id,
       });
     } catch (e) {
       setError(axiosMessage(e));
@@ -426,7 +426,11 @@ export default function IncomingV2Page() {
         shipping_total_cop: shippingTotalCop,
         cards,
       });
-      navigate(`/incoming/ship-round/${res.round_id}`);
+      if (res.round_id) {
+        navigate(`/incoming/ship-round/${res.round_id}`);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] });
+      }
     } catch (e) {
       setError(axiosMessage(e));
     }
@@ -685,9 +689,9 @@ export default function IncomingV2Page() {
                     {formatHomologDate(u.paid_at)} · {u.order_code}
                     {u.rareza ? ` · ${u.rareza}` : ''}
                   </Typography>
-                  {u.batch_item_card_name ? (
+                  {(u.transit_line_card_name ?? u.batch_item_card_name) ? (
                     <Typography variant="caption" color="success.main" display="block" noWrap>
-                      → {u.batch_item_card_name}
+                      → {u.transit_line_card_name ?? u.batch_item_card_name}
                     </Typography>
                   ) : null}
                 </Box>
@@ -747,7 +751,7 @@ export default function IncomingV2Page() {
                     </Typography>
                     <HomologCardImage
                       src={selectedPanelImage}
-                      alt={selectedUnit.batch_item_card_name ?? 'Panel'}
+                      alt={selectedUnit.transit_line_card_name ?? selectedUnit.batch_item_card_name ?? 'Panel'}
                       variant="detail"
                     />
                   </Box>
@@ -805,7 +809,7 @@ export default function IncomingV2Page() {
 
               {selectedUnit.status === 'verified' ? (
                 <Alert severity="success" sx={{ mt: 2 }}>
-                  Homologada con <strong>{selectedUnit.batch_item_card_name}</strong>
+                  Homologada con <strong>{selectedUnit.transit_line_card_name ?? selectedUnit.batch_item_card_name}</strong>
                   <HomologMetaSection
                     title="Detalle del match"
                     lines={buildVerifiedMatchMetaLines(selectedUnit, selectedPanelItem)}
@@ -871,7 +875,7 @@ export default function IncomingV2Page() {
 
                   {candidates.length === 0 ? (
                     <Alert severity="warning">
-                      Sin candidatos en tu inventario en camino. Marca novedad o revisa el
+                      Sin candidatos en tránsito CardTrader. Marca novedad o revisa el
                       registro del panel.
                     </Alert>
                   ) : (
@@ -883,7 +887,7 @@ export default function IncomingV2Page() {
                           </Typography>
                           {bestCandidates.map((c) => (
                             <CandidateRow
-                              key={c.batchItemId}
+                              key={c.transitLineId}
                               candidate={c}
                               imageSrc={resolvePanelImageSrc(c.imageUrl)}
                               onSelect={() => handleVerify(c)}
@@ -901,7 +905,7 @@ export default function IncomingV2Page() {
                           </Typography>
                           {possibleCandidates.map((c) => (
                             <CandidateRow
-                              key={c.batchItemId}
+                              key={c.transitLineId}
                               candidate={c}
                               imageSrc={resolvePanelImageSrc(c.imageUrl)}
                               onSelect={() => handleVerify(c)}
@@ -922,7 +926,7 @@ export default function IncomingV2Page() {
         <Stack spacing={2}>
           <Paper variant="outlined" sx={{ p: 2, maxHeight: 360, overflow: 'auto' }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-              Cartas en camino ({filteredPanelItems.length}
+              Tránsito CardTrader ({filteredPanelItems.length}
               {appliedInventorySearch.trim() ? ` / ${panelItems.length}` : ''})
             </Typography>
             <HomologSearchField
@@ -948,7 +952,7 @@ export default function IncomingV2Page() {
                     selectedUnit?.status === 'pending' && item.available_in_session > 0;
                   return (
                     <Paper
-                      key={item.batch_item_id}
+                      key={item.transit_line_id}
                       variant="outlined"
                       onClick={() => canPick && handleVerifyPanelItem(item)}
                       sx={{
@@ -967,7 +971,7 @@ export default function IncomingV2Page() {
                           {item.card_name}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" display="block">
-                          {formatHomologDate(item.batch_purchase_date)} · {item.language}
+                          {formatHomologDate(item.lot_purchase_date)} · {item.language}
                           {item.rareza ? ` · ${item.rareza}` : ''}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" display="block">
@@ -976,8 +980,8 @@ export default function IncomingV2Page() {
                       </Box>
                       <PanelItemPriceChip
                         unitCostCop={item.unit_cost_cop}
-                        eurUnitPrice={item.eur_unit_price}
-                        eurTotalLot={item.eur_total_lot}
+                        eurUnitPrice={item.fx_unit_price}
+                        eurTotalLot={item.fx_total_lot}
                         currency={normalizeCardsCostCurrency(item.cards_cost_currency)}
                       />
                     </Paper>
@@ -989,7 +993,7 @@ export default function IncomingV2Page() {
 
           <Paper variant="outlined" sx={{ p: 2, maxHeight: 220, overflow: 'auto' }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-              Lotes en camino ({batchesSummary.length})
+              Lotes tránsito CT ({batchesSummary.length})
             </Typography>
             {batchesSummary.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -998,7 +1002,7 @@ export default function IncomingV2Page() {
             ) : (
               <Stack spacing={1}>
                 {batchesSummary.map((batch) => (
-                  <Paper key={batch.batch_id} variant="outlined" sx={{ p: 1.25 }}>
+                  <Paper key={batch.lot_id} variant="outlined" sx={{ p: 1.25 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
                       <Box>
                         <Typography variant="body2" fontWeight={600}>
@@ -1010,7 +1014,7 @@ export default function IncomingV2Page() {
                       </Box>
                       <HomologPriceChip
                         cop={batch.total_cop_cards_cost}
-                        eur={batch.total_eur_cards_cost}
+                        eur={batch.total_fx_cards_cost}
                       />
                     </Stack>
                   </Paper>
@@ -1035,7 +1039,7 @@ export default function IncomingV2Page() {
             ) : (
               <Stack spacing={1}>
                 {novedades.map((n) => {
-                  const panelImg = panelImageByBatchItemId.get(n.batch_item_id);
+                  const panelImg = panelImageByTransitLineId.get(n.batch_item_id);
                   return (
                   <Paper key={n.novedad_id} variant="outlined" sx={{ p: 1, display: 'flex', gap: 1 }}>
                     {panelImg ? (

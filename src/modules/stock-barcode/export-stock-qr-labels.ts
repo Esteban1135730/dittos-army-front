@@ -15,13 +15,38 @@ export const QR_LABELS_ROWS = ROWS;
 export const QR_LABELS_PER_PAGE = COLS * ROWS;
 
 /** Una línea corta para etiqueta pequeña. */
-function shortCardName(name: string, max = 32): string {
+function shortCardName(name: string, max = 28): string {
   const t = name.trim() || "Sin nombre";
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
+/** Expansión e idioma en una sola línea para la etiqueta. */
+export function formatQrLabelMetaLine(
+  expansion: string,
+  language: string,
+  max = 30,
+): string {
+  const parts: string[] = [];
+  const exp = expansion.trim();
+  const lang = language.trim();
+  if (exp) parts.push(exp);
+  if (lang && lang !== "—") parts.push(lang);
+  if (parts.length === 0) return "";
+  const line = parts.join(" · ");
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
+}
+
+function renderQrLabelMetaHtml(expansion: string, language: string): string {
+  const meta = formatQrLabelMetaLine(expansion, language);
+  if (!meta) return "";
+  const full = [expansion, language]
+    .filter((p) => p.trim() && p.trim() !== "—")
+    .join(" · ");
+  return `<div class="meta" title="${escapeHtml(full)}">${escapeHtml(meta)}</div>`;
+}
+
 /**
- * Hoja carta (letter) 4×12 — QR + nombre + PVP, guías de corte punteadas.
+ * Hoja carta (letter) 4×12 — QR + nombre + expansión/idioma + PVP, guías de corte punteadas.
  */
 export async function openStockQrLabelsPrintWindow(
   rows: StockQrExportRow[],
@@ -122,6 +147,15 @@ export async function openStockQrLabelsPrintWindow(
       text-overflow: ellipsis;
       max-width: 100%;
     }
+    .meta {
+      font-size: 5pt;
+      font-weight: 600;
+      color: #374151;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
     .pvp {
       font-size: 6.5pt;
       font-weight: 800;
@@ -157,6 +191,7 @@ export async function openStockQrLabelsPrintWindow(
           <div class="qr">${c.svg}</div>
           <div class="info">
             <div class="name" title="${escapeHtml(c.card_name || "")}">${escapeHtml(shortCardName(c.card_name || ""))}</div>
+            ${renderQrLabelMetaHtml(c.expansion, c.language)}
             <div class="pvp">COP ${escapeHtml(formatCOP(c.price_cop))}</div>
           </div>
         </div>

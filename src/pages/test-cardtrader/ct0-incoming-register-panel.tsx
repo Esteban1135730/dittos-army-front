@@ -39,38 +39,31 @@ import { unitCostCopFromBatchItemRuleOfThree } from "../../utils/purchase-curren
 import { formatCop } from "../../utils/cardtrader-order-pricing";
 import type { TcgdexResolveResponse } from "../../utils/cardtrader-order-item-map";
 import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
-import { useCt0DraftBlueprintImages } from "../../utils/use-ct0-draft-blueprint-images";
+import { useCt0DraftTcgdexImages } from "../../utils/use-ct0-draft-tcgdex-images";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 
-function statusChip(status: Ct0BatchDraft["status"]) {
-  switch (status) {
-    case "already_registered":
-      return <Chip size="small" color="success" label="Ya registrado" />;
-    case "ready":
-      return <Chip size="small" color="primary" label="Listo para registrar" />;
-    case "homolog_error":
-      return <Chip size="small" color="error" label="Sin homologación TCGdex" />;
-  }
-}
-
 function DraftLineRow(props: {
   line: Ct0BatchDraft["lines"][number];
-  imageSrc?: string;
-  imageLoading?: boolean;
+  tcgdxImageSrc?: string;
+  tcgdxImageLoading?: boolean;
+  tcgdxImageMissing?: boolean;
   fxCurrency?: string;
   legacyRealFxRateCop?: number | null;
   legacyBatchItems?: IncomingBatchBundleForCt0Draft["items"];
 }) {
   const {
     line,
-    imageSrc,
-    imageLoading,
+    tcgdxImageSrc,
+    tcgdxImageLoading,
+    tcgdxImageMissing,
     fxCurrency = "USD",
     legacyRealFxRateCop,
     legacyBatchItems,
   } = props;
-  const hasError = !!line.tcgdexError && !line.tcgdexCardId;
+  const missingTcgdexImage =
+    !!line.tcgdexCardId && (tcgdxImageMissing || (!tcgdxImageLoading && !tcgdxImageSrc));
+  const hasResolveError = !!line.tcgdexError && !line.tcgdexCardId;
   const fxUnit = line.qty > 0 ? line.usdTotalLot / line.qty : 0;
   const matchedLegacyItem = legacyBatchItems?.length
     ? findBatchItemForCardName(line.name, legacyBatchItems)
@@ -88,50 +81,69 @@ function DraftLineRow(props: {
         display: "flex",
         gap: 1.5,
         alignItems: "flex-start",
-        bgcolor: hasError ? "#ffebee" : "#fafafa",
-        borderColor: hasError ? "#c62828" : "#e0e0e0",
+        bgcolor: hasResolveError ? "#ffebee" : missingTcgdexImage ? "#fff8e1" : "#fafafa",
+        borderColor: hasResolveError ? "#c62828" : missingTcgdexImage ? "#ed6c02" : "#e0e0e0",
+        borderWidth: hasResolveError || missingTcgdexImage ? 2 : 1,
       }}
     >
-      <Box
-        sx={{
-          width: 72,
-          minWidth: 72,
-          height: 100,
-          borderRadius: 1,
-          overflow: "hidden",
-          bgcolor: "grey.100",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {imageLoading ? (
-          <Skeleton variant="rounded" width={72} height={100} />
-        ) : imageSrc ? (
-          <Box
-            component="img"
-            src={imageSrc}
-            alt={line.name}
-            loading="lazy"
-            sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-          />
-        ) : (
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: "center" }}>
-            Sin imagen
-          </Typography>
-        )}
+      <Box sx={{ position: "relative", flexShrink: 0 }}>
+        <Box
+          sx={{
+            width: 72,
+            minWidth: 72,
+            height: 100,
+            borderRadius: 1,
+            overflow: "hidden",
+            bgcolor: "grey.100",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px solid",
+            borderColor: missingTcgdexImage ? "warning.main" : "grey.200",
+          }}
+        >
+          {tcgdxImageLoading ? (
+            <Skeleton variant="rounded" width={72} height={100} />
+          ) : tcgdxImageSrc ? (
+            <Box
+              component="img"
+              src={tcgdxImageSrc}
+              alt={line.name}
+              loading="lazy"
+              sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+            />
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: "center", fontSize: 9 }}>
+              {line.tcgdexCardId ? "Sin img TCGdex" : "Sin ID"}
+            </Typography>
+          )}
+        </Box>
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-          {line.qty}× {line.name}
-        </Typography>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" alignItems="center" mb={0.25}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {line.qty}× {line.name}
+          </Typography>
+          {line.tcgdexCardId && tcgdxImageSrc ? (
+            <Chip size="small" label="TCGdex OK" color="success" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+          ) : line.tcgdexCardId && missingTcgdexImage ? (
+            <Chip size="small" label="Sin imagen TCGdex" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+          ) : hasResolveError ? (
+            <Chip size="small" label="Sin ID" color="error" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+          ) : null}
+        </Stack>
         <Typography variant="body2" color="text.secondary">
           {line.language}
           {line.rareza ? ` · ${line.rareza}` : ""} · {line.expansion}
           {line.collectorNumber ? ` · #${line.collectorNumber}` : ""}
         </Typography>
         {line.tcgdexCardId ? (
-          <Typography variant="caption" color="success.dark" display="block">
+          <Typography
+            variant="caption"
+            color={missingTcgdexImage ? "warning.dark" : "success.dark"}
+            display="block"
+            fontWeight={600}
+          >
             TCGdex: {line.tcgdexCardId}
           </Typography>
         ) : line.tcgdexError ? (
@@ -157,14 +169,26 @@ function DraftLineRow(props: {
   );
 }
 
+function statusChip(status: Ct0BatchDraft["status"]) {
+  switch (status) {
+    case "already_registered":
+      return <Chip size="small" color="success" label="Ya registrado" />;
+    case "ready":
+      return <Chip size="small" color="primary" label="Listo para registrar" />;
+    case "homolog_error":
+      return <Chip size="small" color="error" label="Sin homologación TCGdex" />;
+  }
+}
+
 function DraftLotRow(props: {
   draft: Ct0BatchDraft;
   expanded: boolean;
   onToggle: () => void;
   copInput: string;
   onCopChange: (value: string) => void;
-  blueprintImages: Record<number, string>;
-  imagesLoading: boolean;
+  tcgdxImages: Record<string, string>;
+  tcgdxImagesLoading: boolean;
+  tcgdxMissingImageIds: Set<string>;
   legacyIncomingBundles: IncomingBatchBundleForCt0Draft[];
 }) {
   const {
@@ -173,8 +197,9 @@ function DraftLotRow(props: {
     onToggle,
     copInput,
     onCopChange,
-    blueprintImages,
-    imagesLoading,
+    tcgdxImages,
+    tcgdxImagesLoading,
+    tcgdxMissingImageIds,
     legacyIncomingBundles,
   } = props;
   const legacyBatchItems =
@@ -313,9 +338,16 @@ function DraftLotRow(props: {
               fxCurrency={draft.legacyCardsCostCurrency ?? "USD"}
               legacyRealFxRateCop={draft.legacyRealFxRateCop}
               legacyBatchItems={legacyBatchItems}
-              imageSrc={line.blueprintId ? blueprintImages[line.blueprintId] : undefined}
-              imageLoading={
-                imagesLoading && !!line.blueprintId && !blueprintImages[line.blueprintId]
+              tcgdxImageSrc={
+                line.tcgdexCardId ? tcgdxImages[line.tcgdexCardId] : undefined
+              }
+              tcgdxImageLoading={
+                tcgdxImagesLoading &&
+                !!line.tcgdexCardId &&
+                !tcgdxImages[line.tcgdexCardId]
+              }
+              tcgdxImageMissing={
+                !!line.tcgdexCardId && tcgdxMissingImageIds.has(line.tcgdexCardId)
               }
             />
           ))}
@@ -355,18 +387,41 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
     enabled: baseDrafts.some((d) => d.status !== "already_registered") && !loading,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
-      resolveCt0BatchDraftTcgdex(baseDrafts, async ({ expansion, collectorNumber }) => {
-        const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
-          params: {
-            expansion,
-            collector_number: collectorNumber ?? undefined,
-          },
-        });
-        return res.data as TcgdexResolveResponse;
-      }),
+      resolveCt0BatchDraftTcgdex(
+        baseDrafts,
+        async ({ expansion, collectorNumber, language }) => {
+          const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
+            params: {
+              expansion,
+              collector_number: collectorNumber ?? undefined,
+              language: language !== "—" ? language : undefined,
+            },
+          });
+          return res.data as TcgdexResolveResponse;
+        },
+      ),
   });
 
   const drafts = resolveQuery.data ?? baseDrafts;
+
+  const {
+    images: tcgdxImages,
+    missingImageIds: tcgdxMissingImageIds,
+    isLoading: tcgdxImagesLoading,
+  } = useCt0DraftTcgdexImages(drafts);
+
+  const noTcgdexImageCount = useMemo(
+    () =>
+      drafts.reduce(
+        (sum, d) =>
+          sum +
+          d.lines.filter(
+            (l) => l.tcgdexCardId && tcgdxMissingImageIds.has(l.tcgdexCardId),
+          ).length,
+        0,
+      ),
+    [drafts, tcgdxMissingImageIds],
+  );
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [copByPackageKey, setCopByPackageKey] = useState<Record<string, string>>({});
@@ -463,10 +518,7 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
   };
 
   const resolving = resolveQuery.isLoading || resolveQuery.isFetching;
-  const { images: blueprintImages, isLoading: blueprintImagesLoading } = useCt0DraftBlueprintImages(
-    drafts,
-    ct0Items,
-  );
+  const loadingImages = tcgdxImagesLoading && !resolving;
 
   return (
     <Paper sx={{ p: 2, mb: compact ? 0 : 3, borderTop: 4, borderColor: "#6a1b9a" }}>
@@ -476,9 +528,8 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
             Registrar desde CT Zero
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Crea lotes en las tablas nuevas de tránsito CardTrader. El valor COP puede tomarse del
-            lote legacy (compras en camino) como referencia. Sin homologación TCGdex = rojo, no se
-            guarda.
+            Previsualiza la imagen TCGdex de cada carta antes de registrar. Rojo = sin ID; naranja =
+            ID resuelto pero sin imagen en catálogo. Sin homologación TCGdex no se guarda.
           </Typography>
         </>
       ) : null}
@@ -511,15 +562,27 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
           <Typography variant="h6" color="error.main">
             {homologErrors.length}
           </Typography>
-          <Typography variant="caption">Sin TCGdex</Typography>
+          <Typography variant="caption">Sin ID TCGdex</Typography>
         </Paper>
+        {noTcgdexImageCount > 0 ? (
+          <Paper variant="outlined" sx={{ p: 1.5, textAlign: "center" }}>
+            <Typography variant="h6" color="warning.main">
+              {noTcgdexImageCount}
+            </Typography>
+            <Typography variant="caption">Sin imagen TCGdex</Typography>
+          </Paper>
+        ) : null}
       </Box>
 
-      {loading || resolving ? (
+      {loading || resolving || loadingImages ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
           <CircularProgress size={22} />
           <Typography variant="body2">
-            {loading ? "Cargando CT Zero…" : "Homologando IDs CardTrader → TCGdex…"}
+            {loading
+              ? "Cargando CT Zero…"
+              : resolving
+                ? "Homologando IDs CardTrader → TCGdex…"
+                : "Cargando imágenes TCGdex…"}
           </Typography>
         </Box>
       ) : drafts.length === 0 ? (
@@ -560,8 +623,9 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
               onCopChange={(value) =>
                 setCopByPackageKey((prev) => ({ ...prev, [draft.packageKey]: value }))
               }
-              blueprintImages={blueprintImages}
-              imagesLoading={blueprintImagesLoading}
+              tcgdxImages={tcgdxImages}
+              tcgdxImagesLoading={tcgdxImagesLoading}
+              tcgdxMissingImageIds={tcgdxMissingImageIds}
               legacyIncomingBundles={legacyIncomingBundles}
             />
           ))}

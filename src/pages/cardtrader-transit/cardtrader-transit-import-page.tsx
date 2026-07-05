@@ -111,8 +111,8 @@ export default function CardtraderTransitImportPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Importar desde CT Zero</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Registra checkouts CT Zero en las tablas nuevas. Compras en camino (legacy) solo
-            sugieren el COP del lote.
+            Registra checkouts CT Zero con previsualización TCGdex. Revisa que cada carta tenga
+            imagen en catálogo antes de confirmar.
           </p>
         </div>
         <Link to="/cardtrader-transit" className="text-blue-600 hover:underline font-medium">

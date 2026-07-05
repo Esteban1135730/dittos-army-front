@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { PanelHomologItem } from './sent-unit-homolog';
 import {
   rankPanelCandidates,
   scoreWordOverlap,
@@ -6,6 +7,30 @@ import {
   buildCreateTandaCardsPayload,
   resolveNovedadUnitCostCop,
 } from './sent-unit-homolog';
+
+function panelItem(partial: Partial<PanelHomologItem> & Pick<PanelHomologItem, 'transit_line_id'>): PanelHomologItem {
+  return {
+    transit_lot_id: 'lot1',
+    card_id: 'sv1-1',
+    card_name: 'Pikachu',
+    image_url: '',
+    language: 'EN',
+    rareza: null,
+    remaining_quantity: 2,
+    quantity_ordered: 2,
+    fx_unit_price: 1.5,
+    fx_total_lot: 3,
+    unit_cost_cop: 7500,
+    cards_cost_currency: 'EUR',
+    lot_purchase_date: '2026-01-15',
+    lot_total_fx_cards_cost: 30,
+    lot_total_cop_cards_cost: 150000,
+    real_fx_rate_cop: 5000,
+    assigned_in_session: 0,
+    available_in_session: 2,
+    ...partial,
+  };
+}
 
 describe('sent-unit-homolog', () => {
   it('tokeniza nombres ignorando stopwords', () => {
@@ -21,48 +46,18 @@ describe('sent-unit-homolog', () => {
 
   it('rankPanelCandidates prioriza match estructural', () => {
     const panelItems = [
-        {
-          batch_item_id: 'bi1',
-          batch_id: 'b1',
-          card_id: 'sv1-1',
-          card_name: 'Pikachu',
-          image_url: '',
-          language: 'EN',
-          rareza: null,
-          remaining_quantity: 2,
-          quantity_ordered: 2,
-          eur_unit_price: 1.5,
-          eur_total_lot: 3,
-          unit_cost_cop: 7500,
-          cards_cost_currency: 'EUR',
-          batch_purchase_date: '2026-01-15',
-          batch_total_eur_cards_cost: 30,
-          batch_total_cop_cards_cost: 150000,
-          real_euro_rate_cop_per_eur: 5000,
-          assigned_in_session: 0,
-          available_in_session: 2,
-        },
-        {
-          batch_item_id: 'bi2',
-          batch_id: 'b1',
+        panelItem({ transit_line_id: 'tl1', card_name: 'Pikachu' }),
+        panelItem({
+          transit_line_id: 'tl2',
           card_id: 'sv1-2',
           card_name: 'Raichu',
-          image_url: '',
-          language: 'EN',
-          rareza: null,
+          fx_unit_price: 2,
+          fx_total_lot: 2,
+          unit_cost_cop: 10000,
           remaining_quantity: 1,
           quantity_ordered: 1,
-          eur_unit_price: 2,
-          eur_total_lot: 2,
-          unit_cost_cop: 10000,
-          cards_cost_currency: 'EUR',
-          batch_purchase_date: '2026-01-15',
-          batch_total_eur_cards_cost: 30,
-          batch_total_cop_cards_cost: 150000,
-          real_euro_rate_cop_per_eur: 5000,
-          assigned_in_session: 0,
           available_in_session: 1,
-        },
+        }),
     ];
 
     const ranked = rankPanelCandidates({
@@ -71,40 +66,19 @@ describe('sent-unit-homolog', () => {
         expansion: 'Scarlet & Violet',
         language: 'EN',
         unit_price_eur: 1.5,
+        unit_price_fx: 1.5,
         rareza: null,
       },
       panelItems,
       expansionHomolog: {},
     });
 
-    expect(ranked[0]?.batchItemId).toBe('bi1');
+    expect(ranked[0]?.transitLineId).toBe('tl1');
     expect(ranked[0]?.matchTier).toBe('best');
   });
 
   it('rankPanelCandidates matchea precios USD de CardTrader', () => {
-    const panelItems = [
-      {
-        batch_item_id: 'bi1',
-        batch_id: 'b1',
-        card_id: 'sv1-1',
-        card_name: 'Pikachu',
-        image_url: '',
-        language: 'EN',
-        rareza: null,
-        remaining_quantity: 2,
-        quantity_ordered: 2,
-        eur_unit_price: 1.5,
-        eur_total_lot: 3,
-        unit_cost_cop: 7500,
-        cards_cost_currency: 'USD',
-        batch_purchase_date: '2026-01-15',
-        batch_total_eur_cards_cost: 30,
-        batch_total_cop_cards_cost: 150000,
-        real_euro_rate_cop_per_eur: 5000,
-        assigned_in_session: 0,
-        available_in_session: 2,
-      },
-    ];
+    const panelItems = [panelItem({ transit_line_id: 'tl1', cards_cost_currency: 'USD' })];
 
     const ranked = rankPanelCandidates({
       sentUnit: {
@@ -120,7 +94,7 @@ describe('sent-unit-homolog', () => {
       expansionHomolog: {},
     });
 
-    expect(ranked[0]?.batchItemId).toBe('bi1');
+    expect(ranked[0]?.transitLineId).toBe('tl1');
     expect(ranked[0]?.matchTier).toBe('best');
   });
 
@@ -143,10 +117,14 @@ describe('sent-unit-homolog', () => {
           paid_at: null,
           rareza: null,
           status: 'verified',
-          batch_item_id: 'bi1',
-          batch_id: 'b1',
-          batch_item_card_id: 'sv1-1',
-          batch_item_card_name: 'Pikachu',
+          transit_line_id: 'tl1',
+          transit_lot_id: 'lot1',
+          transit_line_card_id: 'sv1-1',
+          transit_line_card_name: 'Pikachu',
+          batch_item_id: null,
+          batch_id: null,
+          batch_item_card_id: null,
+          batch_item_card_name: null,
           unit_cost_cop: 6000,
           purchase_price_eur: 1.2,
           purchase_price_fx: 1.2,
@@ -155,29 +133,7 @@ describe('sent-unit-homolog', () => {
           novedad_notes: '',
         },
       ],
-      [
-        {
-          batch_item_id: 'bi1',
-          batch_id: 'b1',
-          card_id: 'sv1-1',
-          card_name: 'Pikachu',
-          image_url: '',
-          language: 'EN',
-          rareza: null,
-          remaining_quantity: 1,
-          quantity_ordered: 1,
-          eur_unit_price: 1.5,
-          eur_total_lot: 3,
-          unit_cost_cop: 7500,
-          cards_cost_currency: 'EUR',
-          batch_purchase_date: null,
-          batch_total_eur_cards_cost: null,
-          batch_total_cop_cards_cost: null,
-          real_euro_rate_cop_per_eur: 5000,
-          assigned_in_session: 1,
-          available_in_session: 0,
-        },
-      ],
+      [panelItem({ transit_line_id: 'tl1', assigned_in_session: 1, available_in_session: 0 })],
     );
 
     expect(cards[0].purchase_price_eur).toBe(1.2);
@@ -229,6 +185,10 @@ describe('sent-unit-homolog', () => {
           batch_id: null,
           batch_item_card_id: null,
           batch_item_card_name: null,
+          transit_line_id: null,
+          transit_lot_id: null,
+          transit_line_card_id: null,
+          transit_line_card_name: null,
           unit_cost_cop: null,
           purchase_price_eur: null,
           purchase_price_fx: null,
@@ -267,6 +227,10 @@ describe('sent-unit-homolog', () => {
           batch_id: null,
           batch_item_card_id: null,
           batch_item_card_name: null,
+          transit_line_id: null,
+          transit_lot_id: null,
+          transit_line_card_id: null,
+          transit_line_card_name: null,
           unit_cost_cop: null,
           purchase_price_eur: null,
           purchase_price_fx: null,

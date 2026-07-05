@@ -26,20 +26,23 @@ export type HomologSession = {
 export type HomologSessionResponse = {
   session: HomologSession | null;
   panel_items: PanelHomologItem[];
-  batches_summary?: BatchSummaryRow[];
+  batches_summary?: TransitLotSummaryRow[];
   synced_count?: number;
 };
 
-export type BatchSummaryRow = {
-  batch_id: string;
+export type TransitLotSummaryRow = {
+  lot_id: string;
   purchase_date: string;
-  total_eur_cards_cost: number;
+  total_fx_cards_cost: number;
   total_cop_cards_cost: number;
-  real_euro_rate_cop_per_eur: number;
+  real_fx_rate_cop: number;
   cards_cost_currency?: string;
   remaining_total_quantity: number;
   open_items_count: number;
 };
+
+/** @deprecated Alias de compatibilidad en respuestas antiguas. */
+export type BatchSummaryRow = TransitLotSummaryRow;
 
 export type BatchNovedadRow = {
   novedad_id: string;
@@ -136,13 +139,13 @@ export function useHomologMutations() {
     mutationFn: async (args: {
       sessionId: string;
       sentUnitKey: string;
-      batchItemId: string;
+      transitLineId: string;
       matchScore?: number;
     }) => {
       const key = encodeURIComponent(args.sentUnitKey);
       const res = await axios.patch(
         `${API_HOMOLOG}/sessions/${args.sessionId}/units/${key}/verify`,
-        { batch_item_id: args.batchItemId, match_score: args.matchScore },
+        { transit_line_id: args.transitLineId, match_score: args.matchScore },
       );
       return res.data as HomologSessionResponse;
     },
@@ -160,12 +163,12 @@ export function useHomologMutations() {
       sessionId: string;
       sentUnitKey: string;
       notes: string;
-      batchItemId?: string;
+      transitLineId?: string;
     }) => {
       const key = encodeURIComponent(args.sentUnitKey);
       const res = await axios.patch(
         `${API_HOMOLOG}/sessions/${args.sessionId}/units/${key}/novedad`,
-        { notes: args.notes, batch_item_id: args.batchItemId },
+        { notes: args.notes, transit_line_id: args.transitLineId },
       );
       return res.data as HomologSessionResponse;
     },
@@ -201,7 +204,7 @@ export function useHomologMutations() {
       shipping_total_cop: number;
       cards: Array<{
         sent_unit_key: string;
-        batch_item_id: string;
+        transit_line_id: string;
         purchase_price_eur: number;
         unit_cost_cop: number;
         is_novedad?: boolean;
@@ -215,7 +218,7 @@ export function useHomologMutations() {
           cards: args.cards,
         },
       );
-      return res.data as { round_id: string };
+      return res.data as { round_id: string | null; transit_reception?: boolean };
     },
     onSuccess: async (_data, vars) => {
       await invalidate(vars.sessionId);

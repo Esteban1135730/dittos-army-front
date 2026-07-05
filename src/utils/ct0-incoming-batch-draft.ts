@@ -113,6 +113,7 @@ export type ExistingTransitLotRef = {
 export type TcgdexResolveFn = (args: {
   expansion: string;
   collectorNumber: string | null;
+  language: string;
 }) => Promise<TcgdexResolveResponse>;
 
 function formatPaidAtLabel(paidAt: string): string {
@@ -362,12 +363,13 @@ export async function resolveCt0BatchDraftTcgdex(
   const resolveOne = async (
     expansion: string,
     collectorNumber: string | null,
+    language: string,
   ): Promise<TcgdexResolveResponse> => {
-    const cacheKey = `${expansion.toLowerCase()}|${collectorNumber ?? ''}`;
+    const cacheKey = `${language.toLowerCase()}|${expansion.toLowerCase()}|${collectorNumber ?? ''}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const result = await resolveTcgdex({ expansion, collectorNumber });
+    const result = await resolveTcgdex({ expansion, collectorNumber, language });
     cache.set(cacheKey, result);
     return result;
   };
@@ -392,7 +394,11 @@ export async function resolveCt0BatchDraftTcgdex(
     let unresolvedCount = 0;
 
     for (const line of draft.lines) {
-      const resolved = await resolveOne(line.expansion, line.collectorNumber);
+      const resolved = await resolveOne(
+        line.expansion,
+        line.collectorNumber,
+        line.language,
+      );
       if (resolved.tcgdex_card_id) {
         lines.push({
           ...line,

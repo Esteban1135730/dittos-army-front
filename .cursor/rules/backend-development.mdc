@@ -1,0 +1,30 @@
+---
+description: NestJS API, Mongoose, validation, security and test expectations for dittos-army-back
+globs: dittos-army-back/**/*.ts
+alwaysApply: false
+---
+
+# Desarrollo backend (`dittos-army-back`)
+
+Antes de un incremento no trivial: skill **backend-spec-driven** en `dittos-army-back/.cursor/skills/backend-spec-driven/` (carpetas `docs/backend/features/NNN-slug/`, reanudar si hay `IN_PROGRESS` en algún `backlog.md`). Si el cambio incluye panel en la misma entrega, coordinar con **fullstack-spec-driven** (`dittos-army-back/.cursor/skills/fullstack-spec-driven/`).
+
+## Módulos
+
+- Código HTTP bajo `dittos-army-back/src/controller/`, lógica en `service/`, persistencia en `repository/` y `schema/`. API pública de dominio clara; evitar acoplar detalles de Mongoose en respuestas HTTP innecesariamente.
+- **Mongoose**: esquemas en `src/schema/`; migraciones de datos o índices coherentes con el spec técnico. No exponer detalles internos de DB en mensajes de error al cliente en producción.
+
+## Seguridad
+
+- Validar y tipar entradas en el borde (body, query, params); DTOs o validación explícita según patrones del repo.
+- Sin secretos en código; cadena MongoDB y claves solo por variables de entorno.
+- CORS explícito en producción; no asumir API solo en localhost si se despliega públicamente.
+
+## Tests
+
+- **Jest** en `dittos-army-back`; archivos `*.spec.ts`. Ejecutar `npm test` desde `dittos-army-back/` antes de cerrar tareas que toquen lógica o contratos.
+- Cambios de contrato HTTP: actualizar o añadir tests que fallen si el contrato se rompe.
+
+## Coherencia
+
+- **module-authoring** (`dittos-army-back/.cursor/skills/module-authoring/`) y reglas globales **production-standards**.
+- Cambios de esquema documentados en el `spec-tecnico.md` de la feature y probados contra una instancia de desarrollo cuando aplique.
