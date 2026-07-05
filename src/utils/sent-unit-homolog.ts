@@ -22,8 +22,8 @@ const NAME_STOPWORDS = new Set([
 ]);
 
 export type PanelHomologItem = {
-  batch_item_id: string;
-  batch_id: string;
+  transit_line_id: string;
+  transit_lot_id: string;
   card_id: string;
   card_name: string;
   image_url: string;
@@ -31,14 +31,14 @@ export type PanelHomologItem = {
   rareza: string | null;
   remaining_quantity: number;
   quantity_ordered: number;
-  eur_unit_price: number;
-  eur_total_lot: number;
+  fx_unit_price: number;
+  fx_total_lot: number;
   unit_cost_cop: number;
   cards_cost_currency?: CardsCostCurrency | string;
-  batch_purchase_date: string | null;
-  batch_total_eur_cards_cost: number | null;
-  batch_total_cop_cards_cost: number | null;
-  real_euro_rate_cop_per_eur: number | null;
+  lot_purchase_date: string | null;
+  lot_total_fx_cards_cost: number | null;
+  lot_total_cop_cards_cost: number | null;
+  real_fx_rate_cop: number | null;
   assigned_in_session: number;
   available_in_session: number;
 };
@@ -63,6 +63,10 @@ export type SentHomologUnit = {
   batch_id: string | null;
   batch_item_card_id: string | null;
   batch_item_card_name: string | null;
+  transit_line_id: string | null;
+  transit_lot_id: string | null;
+  transit_line_card_id: string | null;
+  transit_line_card_name: string | null;
   unit_cost_cop: number | null;
   purchase_price_eur: number | null;
   purchase_price_fx: number | null;
@@ -73,24 +77,24 @@ export type SentHomologUnit = {
 };
 
 export type PanelMatchCandidate = {
-  batchItemId: string;
-  batchId: string;
+  transitLineId: string;
+  transitLotId: string;
   cardId: string;
   cardName: string;
   imageUrl: string;
   language: string;
   rareza: string | null;
-  eurUnitPrice: number;
-  eurTotalLot: number;
+  fxUnitPrice: number;
+  fxTotalLot: number;
   cardsCostCurrency: CardsCostCurrency;
   unitCostCop: number;
   quantityOrdered: number;
   remainingQuantity: number;
   availableInSession: number;
-  batchPurchaseDate: string | null;
-  batchTotalEurCardsCost: number | null;
-  batchTotalCopCardsCost: number | null;
-  realEuroRateCopPerEur: number | null;
+  lotPurchaseDate: string | null;
+  lotTotalFxCardsCost: number | null;
+  lotTotalCopCardsCost: number | null;
+  realFxRateCop: number | null;
   projectedUnitCostCop: number | null;
   structuralScore: number;
   wordScore: number;
@@ -239,7 +243,7 @@ export function rankPanelCandidates(args: {
       card_name: item.card_name,
       language: item.language,
       rareza: item.rareza,
-      eur_unit_price: item.eur_unit_price,
+      eur_unit_price: item.fx_unit_price,
     });
 
     const structuralScore = scoreTransitCardMatch(panel, external);
@@ -253,31 +257,31 @@ export function rankPanelCandidates(args: {
     if (!hasStructural && !hasWord) continue;
 
     ranked.push({
-      batchItemId: item.batch_item_id,
-      batchId: item.batch_id,
+      transitLineId: item.transit_line_id,
+      transitLotId: item.transit_lot_id,
       cardId: item.card_id,
       cardName: item.card_name,
       imageUrl: item.image_url,
       language: item.language,
       rareza: item.rareza,
-      eurUnitPrice: item.eur_unit_price,
-      eurTotalLot: item.eur_total_lot,
+      fxUnitPrice: item.fx_unit_price,
+      fxTotalLot: item.fx_total_lot,
       cardsCostCurrency: normalizeCardsCostCurrency(item.cards_cost_currency),
       unitCostCop: item.unit_cost_cop,
       quantityOrdered: item.quantity_ordered,
       remainingQuantity: item.remaining_quantity,
       availableInSession: item.available_in_session,
-      batchPurchaseDate: item.batch_purchase_date,
-      batchTotalEurCardsCost: item.batch_total_eur_cards_cost,
-      batchTotalCopCardsCost: item.batch_total_cop_cards_cost,
-      realEuroRateCopPerEur: item.real_euro_rate_cop_per_eur,
+      lotPurchaseDate: item.lot_purchase_date,
+      lotTotalFxCardsCost: item.lot_total_fx_cards_cost,
+      lotTotalCopCardsCost: item.lot_total_cop_cards_cost,
+      realFxRateCop: item.real_fx_rate_cop,
       projectedUnitCostCop:
         sentFx != null &&
         sentFx > 0 &&
         sentCurrency === normalizeCardsCostCurrency(item.cards_cost_currency)
           ? computeUnitCostCop(
               sentFx,
-              item.real_euro_rate_cop_per_eur,
+              item.real_fx_rate_cop,
               item.unit_cost_cop,
             )
           : item.unit_cost_cop,
@@ -311,21 +315,22 @@ export function buildCreateTandaCardsPayload(
   systemTrm: SystemTrmRates = { euroToCop: null, usdToCop: null },
 ): Array<{
   sent_unit_key: string;
-  batch_item_id: string;
+  transit_line_id: string;
   purchase_price_eur: number;
   unit_cost_cop: number;
   is_novedad: boolean;
   novedad_notes: string;
 }> {
-  const panelMap = new Map(panelItems.map((p) => [p.batch_item_id, p]));
+  const panelMap = new Map(panelItems.map((p) => [p.transit_line_id, p]));
 
   return units.map((u) => {
-    const panel = u.batch_item_id ? panelMap.get(u.batch_item_id) : undefined;
+    const lineId = u.transit_line_id ?? u.batch_item_id;
+    const panel = lineId ? panelMap.get(lineId) : undefined;
     const panelCurrency = normalizeCardsCostCurrency(panel?.cards_cost_currency);
     const ctFx = fxUnitPriceFromSentUnit(u);
     let purchaseFx = ctFx.amount;
     if (purchaseFx == null && ctFx.currency === panelCurrency) {
-      purchaseFx = panel?.eur_unit_price ?? null;
+      purchaseFx = panel?.fx_unit_price ?? null;
     }
     if (purchaseFx == null || purchaseFx <= 0) {
       purchaseFx = 0.01;
@@ -338,7 +343,7 @@ export function buildCreateTandaCardsPayload(
           ? (resolveNovedadUnitCostCop(u, systemTrm) ?? FALLBACK_UNIT_COST_COP)
           : computeUnitCostCop(
               purchaseFx,
-              panel?.real_euro_rate_cop_per_eur ?? null,
+              panel?.real_fx_rate_cop ?? null,
               panel?.unit_cost_cop ?? 0,
             );
 
@@ -349,7 +354,7 @@ export function buildCreateTandaCardsPayload(
 
     return {
       sent_unit_key: u.sent_unit_key,
-      batch_item_id: u.batch_item_id ?? '',
+      transit_line_id: lineId ?? '',
       purchase_price_eur: purchaseFx,
       unit_cost_cop: finalUnitCostCop,
       is_novedad: u.status === 'novedad',

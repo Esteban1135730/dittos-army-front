@@ -32,6 +32,7 @@ import {
 } from "../../utils/cardtrader-blueprint-image";
 import { getPedidoBlueprintImageDisplaySrc } from "../../utils/cardtrader-pedido-blueprint-image-cache";
 import { formatCop } from "../../utils/cardtrader-order-pricing";
+import { formatCopRateFx } from "../../utils/purchase-currency";
 import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
 import { readCtLanguage } from "../../utils/cardtrader-order-item-map";
 import type { IncomingHomologItem } from "../../utils/incoming-ct0-homolog";
@@ -42,7 +43,16 @@ import {
 } from "../../utils/order-transit-packages";
 import { fetchExpansionHomologIndex } from "../../utils/transit-card-match";
 import type { Ct0UnregisteredLine, Ct0UnregisteredLot } from "../../utils/ct0-unregistered-inventory";
+import {
+  type IncomingBatchBundleForCt0Draft,
+  pricingFieldsFromOpenIncomingBatch,
+} from "../../utils/ct0-incoming-batch-draft";
 import { API_INCOMING } from "../clientes/cliente-types";
+import Ct0IncomingRegisterPanel from "./ct0-incoming-register-panel";
+import {
+  API_CARDTRADER_TRANSIT_LOTS,
+  type CardtraderTransitLotRow,
+} from "../cardtrader-transit/cardtrader-transit-types";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 
@@ -397,17 +407,39 @@ function BatchPackageCard(props: {
           <Typography variant="h6">{title}</Typography>
           <Typography variant="body2" color="text.secondary">
             {pkg.lines.length} líneas · {pkg.totalUnits} uds
+            {pkg.realFxRateCop != null && pkg.realFxRateCop > 0
+              ? ` · ${formatCopRateFx(pkg.realFxRateCop, pkg.cardsCostCurrency)}`
+              : ""}
             {soloRegistro.length > 0 ? ` · ${soloRegistro.length} solo registro` : ""}
             {conEnvio.length > 0 ? ` · ${conEnvio.length} con envío` : ""}
           </Typography>
         </Box>
         <Box sx={{ textAlign: "right" }}>
-          <Typography variant="caption" color="text.secondary">
-            COP registro
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "success.dark" }}>
-            {formatCop(pkg.realCopTotal)}
-          </Typography>
+          {pkg.totalCopCardsCost != null && pkg.totalCopCardsCost > 0 ? (
+            <>
+              <Typography variant="caption" color="text.secondary">
+                COP lote (registro completo)
+              </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "success.dark" }}>
+                {formatCop(pkg.totalCopCardsCost)}
+              </Typography>
+              {Math.abs(pkg.realCopTotal - pkg.totalCopCardsCost) > 1 ? (
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                  Pendiente visible: {formatCop(pkg.realCopTotal)} ·{" "}
+                  {pkg.lines.length} líneas abiertas
+                </Typography>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Typography variant="caption" color="text.secondary">
+                COP pendiente (líneas visibles)
+              </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "success.dark" }}>
+                {formatCop(pkg.realCopTotal)}
+              </Typography>
+            </>
+          )}
         </Box>
       </Box>
 
@@ -514,6 +546,9 @@ export default function TestCardtraderPage() {
     batchId: string;
     purchaseDate: string;
     totalCopCardsCost?: number;
+    totalFxCardsCost?: number;
+    cardsCostCurrency?: string;
+    realFxRateCop?: number;
     items: IncomingHomologItem[];
   };
 
@@ -532,7 +567,7 @@ export default function TestCardtraderPage() {
           return {
             batchId: batch.batch_id,
             purchaseDate: batch.purchase_date,
-            totalCopCardsCost: batch.total_cop_cards_cost,
+            ...pricingFieldsFromOpenIncomingBatch(batch),
             items: items.map(
               (it: {
                 batch_item_id: string;
@@ -730,6 +765,44 @@ export default function TestCardtraderPage() {
     },
   });
 
+  const incomingBundlesForRegister = useMemo((): IncomingBatchBundleForCt0Draft[] => {
+    return (incomingBundlesQuery.data ?? []).map((bundle) => ({
+      batchId: bundle.batchId,
+      purchaseDate: bundle.purchaseDate,
+      totalCopCardsCost: bundle.totalCopCardsCost,
+      totalFxCardsCost: bundle.totalFxCardsCost,
+      cardsCostCurrency: bundle.cardsCostCurrency,
+      realFxRateCop: bundle.realFxRateCop,
+      items: bundle.items.map((it) => ({
+        card_name: it.card_name,
+        quantity_ordered: it.quantity_ordered,
+        remaining_quantity: it.remaining_quantity,
+        unit_cost_cop: it.unit_cost_cop,
+        eur_unit_price: it.eur_unit_price,
+      })),
+    }));
+  }, [incomingBundlesQuery.data]);
+
+  const transitLotsQuery = useQuery<CardtraderTransitLotRow[]>({
+    queryKey: ["cardtrader-transit-lots-open"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/open`);
+      return Array.isArray(res.data) ? (res.data as CardtraderTransitLotRow[]) : [];
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const existingTransitLots = useMemo(
+    () =>
+      (transitLotsQuery.data ?? [])
+        .filter((lot) => lot.ct0_package_key)
+        .map((lot) => ({
+          ct0_package_key: lot.ct0_package_key as string,
+          lot_id: lot.lot_id,
+        })),
+    [transitLotsQuery.data],
+  );
+
   const loading =
     boxQuery.isLoading ||
     ordersQuery.isLoading ||
@@ -746,7 +819,11 @@ export default function TestCardtraderPage() {
     });
   };
 
-  const totalCop = filtered.packages.reduce((s, p) => s + p.realCopTotal, 0);
+  const totalCopVisible = filtered.packages.reduce((s, p) => s + p.realCopTotal, 0);
+  const totalCopLotes = filtered.packages.reduce(
+    (s, p) => s + (p.totalCopCardsCost != null && p.totalCopCardsCost > 0 ? p.totalCopCardsCost : p.realCopTotal),
+    0,
+  );
 
   return (
     <Box sx={{ p: 2, maxWidth: 960, mx: "auto" }}>
@@ -758,9 +835,17 @@ export default function TestCardtraderPage() {
         nombre y precio · Rojo = solo tu registro · Al final = solo CardTrader.
       </Typography>
 
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Demo: no modifica datos existentes.
-      </Alert>
+      <Ct0IncomingRegisterPanel
+        ct0Items={boxQuery.data ?? []}
+        existingTransitLots={existingTransitLots}
+        legacyIncomingBundles={incomingBundlesForRegister}
+        loading={
+          boxQuery.isLoading ||
+          incomingOpenQuery.isLoading ||
+          incomingBundlesQuery.isLoading ||
+          transitLotsQuery.isLoading
+        }
+      />
 
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
         <Chip label="Tu registro = base del lote" />
@@ -787,8 +872,13 @@ export default function TestCardtraderPage() {
           <Typography variant="caption">Filas CT Zero API</Typography>
         </Paper>
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#ffca28" }}>
-          <Typography variant="h5">{formatCop(totalCop)}</Typography>
-          <Typography variant="caption">COP registro (visible)</Typography>
+          <Typography variant="h5">{formatCop(totalCopLotes)}</Typography>
+          <Typography variant="caption">COP lotes (registro completo)</Typography>
+          {Math.abs(totalCopLotes - totalCopVisible) > 1 ? (
+            <Typography variant="caption" color="text.secondary" display="block">
+              Visible: {formatCop(totalCopVisible)}
+            </Typography>
+          ) : null}
         </Paper>
         <Paper sx={{ p: 2, borderTop: 4, borderColor: "#ff8f00" }}>
           <Typography variant="h5">{ct0UnregisteredUnits}</Typography>

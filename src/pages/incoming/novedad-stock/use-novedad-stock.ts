@@ -34,6 +34,11 @@ export type NovedadStockPreviewItem = {
   card_id: string;
   language: string;
   image_url: string;
+  tcgdx_image_url: string;
+  image_source: 'tcgdex' | 'cardtrader' | 'none';
+  tcgdx_resolved: boolean;
+  has_tcgdex_image: boolean;
+  tcgdx_error: string | null;
   expansion: string;
   quantity: number;
   purchase_price_fx: number | null;
@@ -50,6 +55,8 @@ export type NovedadStockPreviewResponse = {
     total_cop: number;
     error_count: number;
     ok_count: number;
+    no_tcgdex_image_count: number;
+    no_tcgdex_id_count: number;
   };
   items: NovedadStockPreviewItem[];
 };

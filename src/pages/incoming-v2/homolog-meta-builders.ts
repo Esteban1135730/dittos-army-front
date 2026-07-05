@@ -1,6 +1,6 @@
 import type { PanelHomologItem, PanelMatchCandidate, SentHomologUnit } from '../../utils/sent-unit-homolog';
 import { fxUnitPriceFromSentUnit } from '../../utils/purchase-currency';
-import type { BatchSummaryRow } from './use-incoming-homolog';
+import type { TransitLotSummaryRow } from './use-incoming-homolog';
 import type { MetaLine } from './homolog-meta-panel';
 import {
   formatCop,
@@ -59,14 +59,14 @@ export function buildVerifiedMatchMetaLines(
   ];
   if (panel) {
     lines.push(
-      { label: 'Lote compra', value: formatHomologDate(panel.batch_purchase_date) },
+      { label: 'Lote compra', value: formatHomologDate(panel.lot_purchase_date) },
       {
         label: 'Tasa del lote',
-        value: formatCopRateFx(panel.real_euro_rate_cop_per_eur, panelCurrency),
+        value: formatCopRateFx(panel.real_fx_rate_cop, panelCurrency),
       },
       {
         label: 'Tu registro',
-        value: `${formatCop(panel.unit_cost_cop)} · ${formatFx(panel.eur_unit_price, panelCurrency)}/ud · ${formatFx(panel.eur_total_lot, panelCurrency)} lote`,
+        value: `${formatCop(panel.unit_cost_cop)} · ${formatFx(panel.fx_unit_price, panelCurrency)}/ud · ${formatFx(panel.fx_total_lot, panelCurrency)} lote`,
       },
       { label: 'Card ID', value: panel.card_id },
     );
@@ -85,9 +85,9 @@ export function buildCandidateMetaLines(candidate: PanelMatchCandidate): MetaLin
       value: formatCop(candidate.unitCostCop),
       highlight: true,
     },
-    { label: `${currency} / unidad`, value: formatFx(candidate.eurUnitPrice, currency) },
-    { label: `${currency} lote (línea)`, value: formatFx(candidate.eurTotalLot, currency) },
-    { label: 'Lote compra', value: formatHomologDate(candidate.batchPurchaseDate) },
+    { label: `${currency} / unidad`, value: formatFx(candidate.fxUnitPrice, currency) },
+    { label: `${currency} lote (línea)`, value: formatFx(candidate.fxTotalLot, currency) },
+    { label: 'Lote compra', value: formatHomologDate(candidate.lotPurchaseDate) },
     {
       label: 'Disponible',
       value: `${candidate.availableInSession} de ${candidate.remainingQuantity}`,
@@ -96,13 +96,13 @@ export function buildCandidateMetaLines(candidate: PanelMatchCandidate): MetaLin
   ];
 }
 
-export function buildBatchSummaryMeta(batch: BatchSummaryRow): MetaLine[] {
+export function buildBatchSummaryMeta(batch: TransitLotSummaryRow): MetaLine[] {
   const currency = normalizeCardsCostCurrency(batch.cards_cost_currency);
   return [
     { label: 'Fecha compra', value: formatHomologDate(batch.purchase_date), highlight: true },
     { label: 'Total cartas (COP)', value: formatCop(batch.total_cop_cards_cost), highlight: true },
-    { label: `Total cartas (${currency})`, value: formatFx(batch.total_eur_cards_cost, currency) },
-    { label: 'Tasa', value: formatCopRateFx(batch.real_euro_rate_cop_per_eur, currency) },
+    { label: `Total cartas (${currency})`, value: formatFx(batch.total_fx_cards_cost, currency) },
+    { label: 'Tasa', value: formatCopRateFx(batch.real_fx_rate_cop, currency) },
     { label: 'Restante', value: `${batch.remaining_total_quantity} uds · ${batch.open_items_count} líneas` },
   ];
 }

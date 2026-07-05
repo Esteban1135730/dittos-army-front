@@ -187,7 +187,12 @@ export function HomologNovedadStockSection({
 }
 
 export function countOrphanNovedadUnits(
-  units: Array<{ status: string; batch_item_id: string | null }>,
+  units: Array<{ status: string; transit_line_id?: string | null; batch_item_id?: string | null }>,
 ): number {
-  return units.filter((u) => u.status === 'novedad' && !u.batch_item_id).length;
+  return units.filter(
+    (u) =>
+      u.status === 'novedad' &&
+      !u.transit_line_id?.trim() &&
+      !u.batch_item_id?.trim(),
+  ).length;
 }

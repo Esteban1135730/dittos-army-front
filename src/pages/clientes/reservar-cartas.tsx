@@ -26,13 +26,13 @@ import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
 import {
   API_CLIENT,
-  API_INCOMING,
   API_RESERVA,
   API_STOCK,
   type ClientItem,
   type ReservaIncomingItem,
   type ReservaItem,
 } from "./cliente-types";
+import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
 import {
   compareIncomingLinesByOldest,
   incomingVariantGroupKey,
@@ -188,22 +188,39 @@ export default function ReservarCartasPage() {
   const [incomingMutatingId, setIncomingMutatingId] = useState<string | null>(null);
 
   const { data: incomingCatalog = [], isLoading: loadingIncomingCat } = useQuery<IncomingCatalogRow[]>({
-    queryKey: ["incoming-catalog-open"],
+    queryKey: ["transit-catalog-open"],
     queryFn: async () => {
-      const openRes = await axios.get(`${API_INCOMING}/batch/open`);
-      const batches = Array.isArray(openRes.data) ? openRes.data : [];
-      const rows: IncomingCatalogRow[] = [];
-      for (const b of batches as Array<{ batch_id: string; purchase_date?: string }>) {
-        const itemsRes = await axios.get(`${API_INCOMING}/batch/${b.batch_id}/items`);
-        const arr = Array.isArray(itemsRes.data) ? itemsRes.data : [];
-        for (const it of arr as IncomingCatalogRow[]) {
-          rows.push({
-            ...it,
-            batch_purchase_date: b.purchase_date ?? null,
-          });
-        }
-      }
-      return rows;
+      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/open/catalog`);
+      const rows = Array.isArray(res.data) ? res.data : [];
+      return rows
+        .filter((it: { remaining_quantity?: number }) => (it.remaining_quantity ?? 0) > 0)
+        .map(
+          (it: {
+            transit_line_id: string;
+            transit_lot_id: string;
+            card_id: string;
+            card_name: string;
+            image_url: string;
+            language: string;
+            rareza?: string | null;
+            remaining_quantity: number;
+            unit_cost_cop: number;
+            purchase_date: string;
+            created_at?: string;
+          }) => ({
+            batch_item_id: it.transit_line_id,
+            batch_id: it.transit_lot_id,
+            card_id: it.card_id,
+            card_name: it.card_name,
+            image_url: it.image_url ?? "",
+            language: it.language,
+            rareza: it.rareza ?? null,
+            remaining_quantity: it.remaining_quantity,
+            unit_cost_cop: it.unit_cost_cop,
+            batch_purchase_date: it.purchase_date ?? null,
+            created_at: it.created_at ?? null,
+          }),
+        );
     },
   });
 

@@ -31,6 +31,40 @@ const ct0 = (partial: Partial<Ct0BoxItem>): Ct0BoxItem => ({
 });
 
 describe('batch-consolidated-package', () => {
+  it('usa regla de tres por carta (COP÷FX del ítem), no tasa global del lote', () => {
+    const { packages } = buildBatchConsolidatedPackages(
+      withHomolog({
+        bundles: [
+          {
+            batchId: 'batch-rate',
+            purchaseDate: '2026-04-09',
+            totalCopCardsCost: 400000,
+            totalFxCardsCost: 100,
+            realFxRateCop: 4000,
+            cardsCostCurrency: 'USD',
+            items: [
+              {
+                batch_item_id: 'i1',
+                card_id: 'c1',
+                card_name: 'Petrel',
+                language: 'en',
+                quantity_ordered: 5,
+                remaining_quantity: 1,
+                unit_cost_cop: 2231,
+                eur_unit_price: 0.89,
+              },
+            ],
+          },
+        ],
+        ct0Items: [],
+        orderPackages: [],
+      }),
+    );
+
+    expect(packages[0].lines[0].unitCostCop).toBe(2231);
+    expect(packages[0].realCopTotal).toBe(2231);
+  });
+
   it('arma lote desde panel, cruza CT Zero y pedidos en camino', () => {
     const { packages, soloCardtrader } = buildBatchConsolidatedPackages(withHomolog({
       bundles: [

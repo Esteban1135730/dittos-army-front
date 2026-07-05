@@ -57,7 +57,12 @@ export function readCollectorNumber(props: Record<string, unknown> | undefined):
   const raw = props?.collector_number;
   if (raw == null) return null;
   const s = String(raw).trim();
-  return s || null;
+  if (!s) return null;
+  const slashMatch = /^(\d+)\s*\/\s*\d+$/.exec(s);
+  if (slashMatch) return slashMatch[1];
+  const gemPackMatch = /^(\d{2}-\d{2})\/(\d{2})$/.exec(s);
+  if (gemPackMatch) return `${gemPackMatch[1]}_${gemPackMatch[2]}`;
+  return s;
 }
 
 export function readCtRarityLabel(props: Record<string, unknown> | undefined): string {

@@ -12,7 +12,7 @@ import type { PanelHomologItem } from '../../utils/sent-unit-homolog';
 
 export type NovedadDialogSubmit = {
   notes: string;
-  batchItemId?: string;
+  transitLineId?: string;
 };
 
 type NovedadDialogProps = {
@@ -32,13 +32,13 @@ export function NovedadDialog({
   isSubmitting = false,
 }: NovedadDialogProps) {
   const notesRef = useRef<HTMLTextAreaElement>(null);
-  const [batchItemId, setBatchItemId] = useState('');
+  const [transitLineId, setTransitLineId] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       if (notesRef.current) notesRef.current.value = '';
-      setBatchItemId('');
+      setTransitLineId('');
       setLocalError(null);
     }
   }, [open]);
@@ -52,7 +52,7 @@ export function NovedadDialog({
     setLocalError(null);
     await onSubmit({
       notes: notes.trim(),
-      batchItemId: batchItemId || undefined,
+      transitLineId: transitLineId || undefined,
     });
   };
 
@@ -77,14 +77,14 @@ export function NovedadDialog({
         <TextField
           fullWidth
           select
-          label="Ítem panel relacionado (opcional)"
-          value={batchItemId}
-          onChange={(e) => setBatchItemId(e.target.value)}
+          label="Línea tránsito relacionada (opcional)"
+          value={transitLineId}
+          onChange={(e) => setTransitLineId(e.target.value)}
           SelectProps={{ native: true }}
         >
-          <option value="">— Ninguno —</option>
+          <option value="">— Ninguna —</option>
           {panelItems.map((p) => (
-            <option key={p.batch_item_id} value={p.batch_item_id}>
+            <option key={p.transit_line_id} value={p.transit_line_id}>
               {p.card_name} (disp. {p.available_in_session})
             </option>
           ))}

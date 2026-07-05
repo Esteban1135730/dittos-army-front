@@ -1,7 +1,11 @@
 import type { IncomingHomologItem, IncomingPanelLine } from './incoming-ct0-homolog';
 import { findBatchItemForCtLineName, findBatchItemForTransitLine, panelLinesForBatch } from './incoming-ct0-homolog';
 import type { PackageMatchResult } from './incoming-ct0-package-match';
-import { matchesForBatch } from './incoming-ct0-package-match';
+import {
+  ctPackageLinesCoveredByBatchItems,
+  matchesForBatch,
+  type IncomingBatchItemForMatch,
+} from './incoming-ct0-package-match';
 import type { OrderTransitPackage } from './order-transit-packages';
 import type { PurchasePackage } from './purchase-package-consolidated';
 
@@ -82,12 +86,18 @@ export function mergeCtPackagesForBatch(
   if (batchItems.length === 0) return byPackageMatch;
 
   const byKey = new Map(byPackageMatch.map((p) => [p.packageKey, p]));
+  const batchItemsForMatch: IncomingBatchItemForMatch[] = batchItems.map((it) => ({
+    card_name: it.card_name,
+    quantity_ordered: it.quantity_ordered,
+    remaining_quantity: it.remaining_quantity,
+  }));
+
   for (const pkg of allPackages) {
     if (byKey.has(pkg.packageKey)) continue;
-    const touchesBatch = pkg.lines.some((line) =>
-      findBatchItemForCtLineName(line.name, line.language, batchItems),
-    );
-    if (touchesBatch) byKey.set(pkg.packageKey, pkg);
+    const lines = pkg.lines.map((line) => ({ name: line.name, qty: line.qty }));
+    if (ctPackageLinesCoveredByBatchItems(lines, batchItemsForMatch)) {
+      byKey.set(pkg.packageKey, pkg);
+    }
   }
   return [...byKey.values()];
 }

@@ -1,0 +1,44 @@
+---
+description: Vite + React patterns for dittos-army-front (panel) and dittos-army-store (shop): security, tests, UX, errors, and alignment with project skills
+globs: dittos-army-front/**/*.{ts,tsx},dittos-army-store/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Desarrollo frontend (`dittos-army-front`, `dittos-army-store`)
+
+Antes de un incremento no trivial: skill **frontend-spec-driven** en `dittos-army-front/.cursor/skills/` o `dittos-army-store/.cursor/skills/` (carpetas `docs/frontend/features/NNN-slug/`, **paso 0**: confirmar si el trabajo es **panel** (`dittos-army-front`), **store** (`dittos-army-store`) o ambos; reanudar si hay `IN_PROGRESS` en `backlog.md`). Si el cambio es **API + panel** a la vez, usar **fullstack-spec-driven** (`dittos-army-front/.cursor/skills/fullstack-spec-driven/`) junto con las specs de back.
+
+## Panel (`dittos-army-front`)
+
+- Rutas en `src/app.route.tsx`; páginas bajo `src/pages/`; layout en `src/components/`.
+- **Datos**: Axios hacia `dittos-army-back`; conviene centralizar base URL (`import.meta.env.VITE_API_BASE_URL` u homólogo) en lugar de repetir `localhost:3000`.
+- **MUI + TanStack Query/Table**: mantener componentes de página delgados; hooks para lógica reutilizable.
+- **Cohesión**: seguir **module-authoring** (`dittos-army-front/.cursor/skills/module-authoring/` o `dittos-army-store/.cursor/skills/module-authoring/`) para límites claros al añadir módulos o capas nuevas.
+
+## Tienda (`dittos-army-store`)
+
+- Rutas en `src/App.tsx`; catálogo desde `public/inventory.json` y `public/upcoming.json` salvo que el spec defina otro origen.
+- **Tailwind 4**: estilos coherentes con el diseño existente; componentes reutilizables en `src/components/`.
+
+## Seguridad (ambos)
+
+- **Nunca** `VITE_*` para secretos, claves API ni tokens de sesión.
+- **Entrada de usuario**: validar en servidor cuando haya backend involucrado; en cliente, validación para UX sin sustituir al API.
+- **XSS**: React escapa por defecto; evitar `dangerouslySetInnerHTML` sin sanitización explícita y revisión; cuidado con URLs dinámicas en `href`.
+- **Sesiones / tokens** (si se añaden): valorar cookies httpOnly desde backend frente a almacenamiento largo en `localStorage`.
+
+## Tests y calidad
+
+- Cumplir **eslint** y tipos estrictos del paquete. Evitar `any` salvo justificación breve.
+- **Tests**: en **`dittos-army-store`** y **`dittos-army-front`**, añadir Vitest/Jest u otro runner cuando el equipo lo defina; toda funcionalidad nueva debería tener cobertura acordada con el proyecto.
+- **Accesibilidad (a11y)**: formularios con etiquetas, foco en modales, interacción por teclado en controles críticos.
+- **Rendimiento**: listados grandes con paginación o virtualización cuando ya exista el patrón; imágenes con dimensiones razonables (tienda / TCGdex).
+- **Errores y estados**: mensajes útiles al usuario en fallos de red o datos vacíos; detalle técnico en consola solo en desarrollo.
+
+## Dependencias
+
+- Preferir paquetes mantenidos; justificar dependencias nuevas en PR. Revisar `npm audit` cuando se añadan librerías sensibles (auth, parseo de archivos, PDF).
+
+## Idioma
+
+- UI orientada a **español** por defecto del producto; textos visibles centralizados o consistentes con el código existente.
