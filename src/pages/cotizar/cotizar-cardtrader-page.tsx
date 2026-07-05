@@ -1214,6 +1214,7 @@ export default function CotizarCardtraderPage() {
 
   const cartCopTotals = useMemo(() => {
     let purchaseCop = 0;
+    let purchasePlusShippingCop = 0;
     let ivaPlusShippingCop = 0;
     let realCostCop = 0;
     let pvpApproxCop = 0;
@@ -1224,12 +1225,14 @@ export default function CotizarCardtraderPage() {
       hasAny = true;
       const q = Math.max(1, ln.qty);
       purchaseCop += unit.purchaseCop * q;
+      purchasePlusShippingCop += unit.subtotalBeforeIva * q;
       ivaPlusShippingCop += unit.ivaPlusShippingCop * q;
       realCostCop += unit.realCostCop * q;
       pvpApproxCop += unit.pvpApproxCop * q;
     }
     return {
       purchaseCop: hasAny ? purchaseCop : null,
+      purchasePlusShippingCop: hasAny ? purchasePlusShippingCop : null,
       ivaPlusShippingCop: hasAny ? ivaPlusShippingCop : null,
       realCostCop: hasAny ? realCostCop : null,
       pvpApproxCop: hasAny ? pvpApproxCop : null,
@@ -2472,13 +2475,17 @@ export default function CotizarCardtraderPage() {
                         </Typography>
                         <CopPriceRow label="Precio retail COP / u." value={unitCost.purchaseCop} />
                         <CopPriceRow
+                          label="Precio con solo envío / u."
+                          value={unitCost.subtotalBeforeIva}
+                          emphasized="primary"
+                        />
+                        <CopPriceRow
                           label="IVA + envío aprox. / u."
                           value={unitCost.ivaPlusShippingCop}
                         />
                         <CopPriceRow
                           label="Costo real (aprox.) / u."
                           value={unitCost.realCostCop}
-                          emphasized="primary"
                         />
                         <CopPriceRow
                           label="PVP aprox. (+30%) / u."
@@ -2602,13 +2609,17 @@ export default function CotizarCardtraderPage() {
                       value={cartCopTotals.purchaseCop ?? 0}
                     />
                     <CopPriceRow
+                      label="Precio con solo envío (suma unidades)"
+                      value={cartCopTotals.purchasePlusShippingCop ?? 0}
+                      emphasized="primary"
+                    />
+                    <CopPriceRow
                       label="IVA + envío aprox. (suma unidades)"
                       value={cartCopTotals.ivaPlusShippingCop ?? 0}
                     />
                     <CopPriceRow
                       label="Costo real (aprox., suma unidades)"
                       value={cartCopTotals.realCostCop}
-                      emphasized="primary"
                     />
                     <CopPriceRow
                       label="PVP aprox. (+30%, suma unidades)"
