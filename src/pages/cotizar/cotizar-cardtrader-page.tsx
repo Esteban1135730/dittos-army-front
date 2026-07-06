@@ -31,6 +31,7 @@ import {
   productOfferExtraLabels,
 } from "../../utils/cardtrader-offer-extras";
 import { formatCOP } from "../../utils/convert";
+import { parseCopInput } from "../../utils/ct0-incoming-batch-draft";
 import { resolveCartItemPricing } from "../../utils/cardtrader-cart-pricing";
 import {
   blueprintMatchesPriceFilter,
@@ -611,6 +612,8 @@ export default function CotizarCardtraderPage() {
     loadCardtraderCartMetaCache(),
   );
   const [exportingCartPdf, setExportingCartPdf] = useState(false);
+  const [exportingCartPvpPropioPdf, setExportingCartPvpPropioPdf] = useState(false);
+  const [pvpPropioDraftById, setPvpPropioDraftById] = useState<Record<number, string>>({});
   const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
   const expansionsQuery = useQuery({
@@ -1239,6 +1242,98 @@ export default function CotizarCardtraderPage() {
     };
   }, [lines, lineUnitCosts]);
 
+  const hasAnyPvpPropio = useMemo(
+    () =>
+      lines.some((ln) => {
+        const v = ln.meta?.pvpPropioCop;
+        return typeof v === "number" && v > 0;
+      }),
+    [lines],
+  );
+
+  const cartPvpPropioTotal = useMemo(() => {
+    if (!hasAnyPvpPropio) return null;
+    let total = 0;
+    let hasAny = false;
+    for (const ln of lines) {
+      const custom = ln.meta?.pvpPropioCop;
+      if (typeof custom !== "number" || custom <= 0) continue;
+      hasAny = true;
+      total += custom * Math.max(1, ln.qty);
+    }
+    return hasAny ? total : null;
+  }, [lines, hasAnyPvpPropio]);
+
+  const commitPvpPropio = useCallback(
+    (productId: number, raw: string) => {
+      setPvpPropioDraftById((prev) => {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      });
+      if (!raw.trim()) {
+        persistCartMeta(productId, { pvpPropioCop: undefined });
+        return;
+      }
+      const parsed = parseCopInput(raw);
+      if (parsed !== null) {
+        persistCartMeta(productId, { pvpPropioCop: Math.round(parsed) });
+      }
+    },
+    [persistCartMeta],
+  );
+
+  const buildCartPdfLines = useCallback(
+    async (
+      resolveUnitPvpCop: (
+        unit: NonNullable<ReturnType<typeof computeCardtraderUnitCostCop>>,
+        meta: CartItemMeta,
+      ) => number | null,
+    ): Promise<CotizarCartPdfLine[]> => {
+      const pdfLines: CotizarCartPdfLine[] = [];
+      for (const ln of lines) {
+        const unit = lineUnitCosts.get(ln.key);
+        if (!unit) continue;
+        const meta = mergeCartItemMeta(productMetaById[ln.productId], ln.meta ?? {});
+        const pvpUnitCop = resolveUnitPvpCop(unit, meta);
+        if (pvpUnitCop === null || pvpUnitCop <= 0) continue;
+
+        const qty = Math.max(1, ln.qty);
+        const imageUrl =
+          meta.imageUrl ??
+          resolveCartLineImageUrl(ln.productId, meta, productMetaById, blueprintImageById);
+
+        let imageDataUrl = meta.imageDataUrl;
+        if (!imageDataUrl?.startsWith("data:") && imageUrl) {
+          imageDataUrl =
+            (await fetchCartImageDataUrl(imageUrl, API_BASE)) ?? undefined;
+          if (imageDataUrl) {
+            persistCartMeta(ln.productId, { imageDataUrl });
+          }
+        }
+
+        pdfLines.push({
+          productId: ln.productId,
+          name: meta.name?.trim() || ln.name,
+          imageUrl,
+          imageDataUrl,
+          qty,
+          pvpUnitCop,
+          pvpLineCop: pvpUnitCop * qty,
+          meta: {
+            expansion: meta.expansion,
+            condition: meta.condition,
+            language: meta.language,
+            collectorNumber: meta.collectorNumber,
+            rarity: meta.rarity,
+          },
+        });
+      }
+      return pdfLines;
+    },
+    [lines, lineUnitCosts, productMetaById, blueprintImageById, persistCartMeta],
+  );
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -1265,42 +1360,7 @@ export default function CotizarCardtraderPage() {
       return;
     }
 
-    const pdfLines: CotizarCartPdfLine[] = [];
-    for (const ln of lines) {
-      const unit = lineUnitCosts.get(ln.key);
-      if (!unit) continue;
-      const meta = mergeCartItemMeta(productMetaById[ln.productId], ln.meta ?? {});
-      const qty = Math.max(1, ln.qty);
-      const imageUrl =
-        meta.imageUrl ??
-        resolveCartLineImageUrl(ln.productId, meta, productMetaById, blueprintImageById);
-
-      let imageDataUrl = meta.imageDataUrl;
-      if (!imageDataUrl?.startsWith("data:") && imageUrl) {
-        imageDataUrl =
-          (await fetchCartImageDataUrl(imageUrl, API_BASE)) ?? undefined;
-        if (imageDataUrl) {
-          persistCartMeta(ln.productId, { imageDataUrl });
-        }
-      }
-
-      pdfLines.push({
-        productId: ln.productId,
-        name: meta.name?.trim() || ln.name,
-        imageUrl,
-        imageDataUrl,
-        qty,
-        pvpUnitCop: unit.pvpApproxCop,
-        pvpLineCop: unit.pvpApproxCop * qty,
-        meta: {
-          expansion: meta.expansion,
-          condition: meta.condition,
-          language: meta.language,
-          collectorNumber: meta.collectorNumber,
-          rarity: meta.rarity,
-        },
-      });
-    }
+    const pdfLines = await buildCartPdfLines((unit) => unit.pvpApproxCop);
 
     if (pdfLines.length === 0) {
       setSnack({
@@ -1315,12 +1375,14 @@ export default function CotizarCardtraderPage() {
       const { imageFailures } = await downloadCardtraderCartClientePdf({
         lines: pdfLines,
         apiBase: API_BASE,
+        title: "Cotización (PVP propuesto)",
+        totalLabel: "PVP total (propuesto):",
       });
       setSnack({
         msg:
           imageFailures > 0
             ? `PDF generado (${imageFailures} imagen${imageFailures === 1 ? "" : "es"} sin cargar).`
-            : "PDF del carrito exportado.",
+            : "PDF con PVP propuesto exportado.",
         severity: "success",
       });
     } catch (e: unknown) {
@@ -1329,7 +1391,53 @@ export default function CotizarCardtraderPage() {
     } finally {
       setExportingCartPdf(false);
     }
-  }, [lines, lineUnitCosts, copPerUsd, productMetaById, blueprintImageById, persistCartMeta]);
+  }, [buildCartPdfLines, copPerUsd]);
+
+  const handleExportCartPvpPropioPdf = useCallback(async () => {
+    if (!hasAnyPvpPropio) {
+      setSnack({
+        msg: "Ingresa al menos un PVP propio en el carrito para exportar precios especiales.",
+        severity: "error",
+      });
+      return;
+    }
+
+    const pdfLines = await buildCartPdfLines((_unit, meta) => {
+      const custom = meta.pvpPropioCop;
+      return typeof custom === "number" && custom > 0 ? custom : null;
+    });
+
+    if (pdfLines.length === 0) {
+      setSnack({
+        msg: "No hay líneas con PVP propio válido para exportar.",
+        severity: "error",
+      });
+      return;
+    }
+
+    setExportingCartPvpPropioPdf(true);
+    try {
+      const { imageFailures } = await downloadCardtraderCartClientePdf({
+        lines: pdfLines,
+        apiBase: API_BASE,
+        title: "Cotización (precios especiales)",
+        totalLabel: "PVP total (propio):",
+        filenameSuffix: "pvp-propio",
+      });
+      setSnack({
+        msg:
+          imageFailures > 0
+            ? `PDF generado (${imageFailures} imagen${imageFailures === 1 ? "" : "es"} sin cargar).`
+            : "PDF con PVP propio exportado.",
+        severity: "success",
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "No se pudo generar el PDF.";
+      setSnack({ msg, severity: "error" });
+    } finally {
+      setExportingCartPvpPropioPdf(false);
+    }
+  }, [buildCartPdfLines, hasAnyPvpPropio]);
 
   const configError =
     axios.isAxiosError(expansionsQuery.error) && expansionsQuery.error.response?.status === 503;
@@ -2293,16 +2401,31 @@ export default function CotizarCardtraderPage() {
               </Typography>
             )}
             {lines.length > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                fullWidth
-                sx={{ mt: 1.25 }}
-                disabled={exportingCartPdf || cartCopTotals.pvpApproxCop === null}
-                onClick={() => void handleExportCartClientePdf()}
-              >
-                {exportingCartPdf ? "Generando PDF…" : "Exportar carrito para cliente"}
-              </Button>
+              <Stack spacing={0.75} sx={{ mt: 1.25 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  disabled={exportingCartPdf || cartCopTotals.pvpApproxCop === null}
+                  onClick={() => void handleExportCartClientePdf()}
+                >
+                  {exportingCartPdf ? "Generando PDF…" : "Exportar PDF (PVP propuesto)"}
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
+                  fullWidth
+                  disabled={
+                    exportingCartPvpPropioPdf || !hasAnyPvpPropio || cartCopTotals.pvpApproxCop === null
+                  }
+                  onClick={() => void handleExportCartPvpPropioPdf()}
+                >
+                  {exportingCartPvpPropioPdf
+                    ? "Generando PDF…"
+                    : "Exportar PDF (PVP propio)"}
+                </Button>
+              </Stack>
             )}
           </Box>
 
@@ -2492,6 +2615,31 @@ export default function CotizarCardtraderPage() {
                           value={unitCost.pvpApproxCop}
                           emphasized="default"
                         />
+                        <TextField
+                          size="small"
+                          fullWidth
+                          label="PVP propio (COP, opcional)"
+                          placeholder={
+                            unitCost.pvpApproxCop > 0
+                              ? `Ej. ${Math.round(unitCost.pvpApproxCop).toLocaleString("es-CO")}`
+                              : undefined
+                          }
+                          value={
+                            pvpPropioDraftById[ln.productId] ??
+                            (ln.meta?.pvpPropioCop != null
+                              ? String(ln.meta.pvpPropioCop)
+                              : "")
+                          }
+                          onChange={(e) =>
+                            setPvpPropioDraftById((prev) => ({
+                              ...prev,
+                              [ln.productId]: e.target.value,
+                            }))
+                          }
+                          onBlur={(e) => commitPvpPropio(ln.productId, e.target.value)}
+                          inputProps={{ inputMode: "decimal" }}
+                          sx={{ mt: 0.75 }}
+                        />
                       </Box>
                     )}
                     <Stack
@@ -2626,6 +2774,13 @@ export default function CotizarCardtraderPage() {
                       value={cartCopTotals.pvpApproxCop ?? 0}
                       emphasized="default"
                     />
+                    {cartPvpPropioTotal !== null && (
+                      <CopPriceRow
+                        label="PVP propio (suma unidades con precio especial)"
+                        value={cartPvpPropioTotal}
+                        emphasized="primary"
+                      />
+                    )}
                   </Box>
                 )}
               </Box>

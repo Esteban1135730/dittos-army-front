@@ -65,4 +65,10 @@ describe("buildCardtraderCartPdfFilename", () => {
       "cotizacion-20260526.pdf",
     );
   });
+
+  it("acepta sufijo opcional", () => {
+    expect(
+      buildCardtraderCartPdfFilename(new Date("2026-05-26T12:00:00"), "pvp-propio"),
+    ).toBe("cotizacion-pvp-propio-20260526.pdf");
+  });
 });

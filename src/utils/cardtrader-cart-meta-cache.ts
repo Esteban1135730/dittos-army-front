@@ -16,6 +16,8 @@ export type CardtraderCartItemMeta = {
   /** JPEG/PNG en base64 para PDF sin CORS. */
   imageDataUrl?: string;
   rarity?: string;
+  /** PVP manual en COP (precio especial para exportar al cliente). */
+  pvpPropioCop?: number;
 };
 
 type StoredItem = {
@@ -91,6 +93,8 @@ export function mergeCartItemMeta(
     imageUrl: pick(patch.imageUrl, base?.imageUrl),
     imageDataUrl: pick(patch.imageDataUrl, base?.imageDataUrl),
     rarity: pick(patch.rarity, base?.rarity),
+    pvpPropioCop:
+      patch.pvpPropioCop !== undefined ? patch.pvpPropioCop : base?.pvpPropioCop,
   };
 }
 

@@ -47,11 +47,14 @@ export function totalPvpCopFromLines(lines: CotizarCartPdfLine[]): number {
   return lines.reduce((sum, row) => sum + row.pvpLineCop, 0);
 }
 
-export function buildCardtraderCartPdfFilename(now = new Date()): string {
+export function buildCardtraderCartPdfFilename(now = new Date(), suffix?: string): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  return `cotizacion-${year}${month}${day}.pdf`;
+  const datePart = `${year}${month}${day}`;
+  return suffix?.trim()
+    ? `cotizacion-${suffix.trim()}-${datePart}.pdf`
+    : `cotizacion-${datePart}.pdf`;
 }
 
 function pdfImageFormat(dataUrl: string): "JPEG" | "PNG" | "WEBP" {
@@ -68,6 +71,9 @@ function drawPlaceholder(doc: jsPDF, x: number, y: number, width: number, height
 export async function downloadCardtraderCartClientePdf(opts: {
   lines: CotizarCartPdfLine[];
   apiBase: string;
+  title?: string;
+  totalLabel?: string;
+  filenameSuffix?: string;
 }): Promise<{ imageFailures: number }> {
   const lines = [...opts.lines].sort(compareCotizarCartPdfLines);
   if (lines.length === 0) {
@@ -96,7 +102,7 @@ export async function downloadCardtraderCartClientePdf(opts: {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("Cotización", margin, y);
+  doc.text(opts.title?.trim() || "Cotización", margin, y);
   y += 7;
 
   doc.setFont("helvetica", "normal");
@@ -166,8 +172,9 @@ export async function downloadCardtraderCartClientePdf(opts: {
   const totalY = (doc.lastAutoTable?.finalY ?? y) + 8;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(`PVP total (aprox.): ${formatCOP(total)}`, margin, totalY);
+  const totalLabel = opts.totalLabel?.trim() || "PVP total (aprox.):";
+  doc.text(`${totalLabel} ${formatCOP(total)}`, margin, totalY);
 
-  doc.save(buildCardtraderCartPdfFilename());
+  doc.save(buildCardtraderCartPdfFilename(new Date(), opts.filenameSuffix));
   return { imageFailures };
 }
