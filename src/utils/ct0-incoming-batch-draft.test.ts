@@ -51,6 +51,7 @@ describe('ct0-incoming-batch-draft', () => {
 
   it('usa legacy batch solo como hint de COP, no como registrado', () => {
     const paidAt = '2026-05-29T15:33:34.000Z';
+    const normalizedKey = '2026-05-29T15:33:00.000Z';
     const drafts = buildCt0IncomingBatchDrafts({
       ct0Items: [
         ct0Item({
@@ -87,7 +88,7 @@ describe('ct0-incoming-batch-draft', () => {
     expect(drafts[0].legacyTotalFxCardsCost).toBe(50);
     expect(drafts[0].legacyRealFxRateCop).toBe(2400);
     expect(suggestedCopForDraft(drafts[0], {})).toBe(120000);
-    expect(buildInitialCopByPackageKey(drafts)[paidAt]).toBe('120000');
+    expect(buildInitialCopByPackageKey(drafts)[normalizedKey]).toBe('120000');
   });
 
   it('toma COP legacy por fecha e ítems aunque falle el match de paquete', () => {

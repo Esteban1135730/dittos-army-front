@@ -122,6 +122,14 @@ function formatPaidAtLabel(paidAt: string): string {
   return d.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' });
 }
 
+/** Normaliza un paid_at (o ct0_package_key almacenado) a precisión de minuto. */
+export function normalizePaidAtToMinute(paidAt: string): string {
+  const d = new Date(paidAt);
+  if (Number.isNaN(d.getTime())) return paidAt;
+  d.setSeconds(0, 0);
+  return d.toISOString();
+}
+
 export function purchaseDateFromPaidAt(paidAt: string): string {
   const d = new Date(paidAt);
   const yyyy = d.getFullYear();
@@ -293,8 +301,13 @@ export function buildCt0IncomingBatchDrafts(args: {
       operationalRarezaLabel(inferOperationalRarezaFromCtProperties(props)),
   });
 
+  // Normalize stored keys to minute precision so they match pkg.packageKey
+  // regardless of whether they were saved before or after the normalization change.
   const transitByPackageKey = new Map(
-    (args.existingTransitLots ?? []).map((lot) => [lot.ct0_package_key, lot.lot_id]),
+    (args.existingTransitLots ?? []).map((lot) => [
+      normalizePaidAtToMinute(lot.ct0_package_key),
+      lot.lot_id,
+    ]),
   );
 
   const legacyBundles = args.legacyIncomingBundles ?? [];

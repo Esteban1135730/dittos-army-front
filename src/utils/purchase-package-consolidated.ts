@@ -57,6 +57,14 @@ function formatPaidAtLabel(paidAt: string): string {
   return d.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+/** Returns an ISO string truncated to the minute (seconds and ms zeroed out). */
+function normalizePaidAtToMinute(paidAt: string): string {
+  const d = new Date(paidAt);
+  if (Number.isNaN(d.getTime())) return paidAt;
+  d.setSeconds(0, 0);
+  return d.toISOString();
+}
+
 function ct0LineUsd(item: Ct0BoxItem, location: CardLocation): number {
   const qty = ct0ItemQtyForState(item, location === 'ct0-ready' ? 'ok' : 'pending');
   return qty * moneyToUnits(item.buyer_price);
@@ -141,10 +149,14 @@ export function buildPurchasePackages(args: {
     const paidAt = item.paid_at;
     if (!paidAt) continue;
 
-    let pkg = packageMap.get(paidAt);
+    // Normalize to minute precision so items from the same checkout with
+    // slightly different seconds still group together (the label only shows hh:mm).
+    const groupKey = normalizePaidAtToMinute(paidAt);
+
+    let pkg = packageMap.get(groupKey);
     if (!pkg) {
       pkg = {
-        packageKey: paidAt,
+        packageKey: groupKey,
         paidAt,
         paidAtLabel: formatPaidAtLabel(paidAt),
         ctSubtotalUsd: 0,
@@ -153,7 +165,7 @@ export function buildPurchasePackages(args: {
         locations: [],
         lines: [],
       };
-      packageMap.set(paidAt, pkg);
+      packageMap.set(groupKey, pkg);
     }
 
     const addLine = (location: CardLocation) => {

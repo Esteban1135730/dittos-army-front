@@ -20,6 +20,7 @@ const ct0Item = (partial: Partial<Ct0BoxItem> & Pick<Ct0BoxItem, 'id'>): Ct0BoxI
 describe('purchase-package-consolidated', () => {
   it('agrupa CT Zero por paid_at con hub y listas', () => {
     const paidAt = '2026-05-29T15:33:34.000Z';
+    const normalizedKey = '2026-05-29T15:33:00.000Z'; // segundos truncados a 0
     const { packages } = buildPurchasePackages({
       ct0Items: [
         ct0Item({
@@ -44,14 +45,32 @@ describe('purchase-package-consolidated', () => {
     });
 
     expect(packages).toHaveLength(2);
-    expect(packages[0].packageKey).toBe(paidAt);
+    expect(packages[0].packageKey).toBe(normalizedKey);
     expect(packages[0].lines).toHaveLength(2);
     expect(packages[0].locations).toContain('ct0-hub');
     expect(packages[0].locations).toContain('ct0-ready');
   });
 
+  it('agrupa ítems del mismo checkout con segundos distintos en un solo paquete', () => {
+    const { packages } = buildPurchasePackages({
+      ct0Items: [
+        ct0Item({ id: 1, paid_at: '2026-07-05T22:57:30.000Z', quantity: { pending: 1 } }),
+        ct0Item({ id: 2, paid_at: '2026-07-05T22:57:45.000Z', quantity: { pending: 1 } }),
+      ],
+      copByPackageKey: {},
+      parseCop: () => null,
+      readCondition: () => 'NM',
+      readLanguage: () => 'en',
+      variantLabel: () => '—',
+    });
+
+    expect(packages).toHaveLength(1);
+    expect(packages[0].lines).toHaveLength(2);
+  });
+
   it('reparte COP proporcional al precio CT', () => {
     const paidAt = '2026-05-29T15:33:34.000Z';
+    const normalizedKey = '2026-05-29T15:33:00.000Z';
     const { packages } = buildPurchasePackages({
       ct0Items: [
         ct0Item({
@@ -67,7 +86,7 @@ describe('purchase-package-consolidated', () => {
           buyer_price: { cents: 300, currency: 'USD' },
         }),
       ],
-      copByPackageKey: { [paidAt]: '400000' },
+      copByPackageKey: { [normalizedKey]: '400000' },
       parseCop: (raw) => Number(raw),
       readCondition: () => 'NM',
       readLanguage: () => 'en',
@@ -81,6 +100,7 @@ describe('purchase-package-consolidated', () => {
 
   it('usa unit_cost_cop del lote panel cuando hay match por nombre', () => {
     const paidAt = '2026-05-29T15:33:34.000Z';
+    const normalizedKey = '2026-05-29T15:33:00.000Z';
     const { packages } = buildPurchasePackages({
       ct0Items: [
         ct0Item({
@@ -93,7 +113,7 @@ describe('purchase-package-consolidated', () => {
       ],
       copByPackageKey: {},
       batchItemsByPackageKey: {
-        [paidAt]: [
+        [normalizedKey]: [
           {
             batch_item_id: 'a',
             card_id: 'x',

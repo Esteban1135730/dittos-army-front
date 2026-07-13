@@ -12,16 +12,35 @@ import {
 } from "./cardtrader-blueprint-market";
 
 describe("minPricesByBlueprintFromMarketplace", () => {
-  it("toma el primer producto (más barato) de cada blueprint", () => {
+  it("toma el primer producto (más barato) de cada blueprint usando price.{cents,currency}", () => {
     const map = minPricesByBlueprintFromMarketplace({
-      "10": [{ price: { cents: 50, currency: "USD", formatted: "$0.50" } }],
+      "10": [{ price: { cents: 50, currency: "USD" } }],
       "20": [
-        { price_cents: 120, price_currency: "EUR" },
-        { price_cents: 200, price_currency: "EUR" },
+        { price: { cents: 120, currency: "USD" } },
+        { price: { cents: 200, currency: "USD" } },
       ],
     });
     expect(map.get(10)).toMatchObject({ cents: 50, currency: "USD" });
-    expect(map.get(20)).toMatchObject({ cents: 120, currency: "EUR" });
+    expect(map.get(20)).toMatchObject({ cents: 120, currency: "USD" });
+  });
+
+  it("ignora price_cents/price_currency (moneda del vendedor) y solo usa price", () => {
+    // Simula producto donde solo existe price_cents en BRL pero no price.cents
+    const map = minPricesByBlueprintFromMarketplace({
+      "30": [{ price_cents: 999, price_currency: "BRL" }],
+    });
+    // Sin price.cents válido, no hay precio disponible → no se agrega al mapa
+    expect(map.has(30)).toBe(false);
+  });
+
+  it("usa price.currency incluso si price_currency es diferente", () => {
+    // CardTrader devuelve price en moneda del comprador y price_currency del vendedor
+    const map = minPricesByBlueprintFromMarketplace({
+      "10": [
+        { price: { cents: 40, currency: "USD" }, price_cents: 36, price_currency: "EUR" },
+      ],
+    });
+    expect(map.get(10)).toMatchObject({ cents: 40, currency: "USD" });
   });
 });
 
@@ -37,10 +56,18 @@ describe("extractBlueprintListPrice", () => {
 });
 
 describe("formatBlueprintMarketPrice", () => {
-  it("prefiere formatted", () => {
+  it("usa código ISO en lugar del campo formatted de CardTrader", () => {
     expect(
       formatBlueprintMarketPrice({ cents: 40, currency: "USD", formatted: "$0.40" }),
-    ).toBe("$0.40");
+    ).toBe("0.40 USD");
+  });
+  it("muestra código ZAR en lugar del símbolo R", () => {
+    expect(
+      formatBlueprintMarketPrice({ cents: 150, currency: "ZAR", formatted: "R 1.50" }),
+    ).toBe("1.50 ZAR");
+  });
+  it("formatea sin campo formatted", () => {
+    expect(formatBlueprintMarketPrice({ cents: 99, currency: "EUR" })).toBe("0.99 EUR");
   });
 });
 

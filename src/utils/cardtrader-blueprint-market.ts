@@ -47,28 +47,19 @@ export function extractBlueprintListPrice(blueprint: unknown): BlueprintMarketPr
 
 type MarketplaceProductLike = {
   price?: PriceLike;
-  price_cents?: number;
-  price_currency?: string;
+  // price_cents / price_currency son la moneda del VENDEDOR (puede ser BRL, ZAR, etc.).
+  // price.cents / price.currency son el precio en la moneda de la CUENTA compradora (ej. USD).
+  // Solo usamos price para evitar mostrar monedas locales de vendedores.
 };
 
 function readProductPrice(product: MarketplaceProductLike): BlueprintMarketPrice | null {
-  const fromPrice = readPriceLike(product.price);
-  if (fromPrice) return fromPrice;
-  if (typeof product.price_cents === "number" && Number.isFinite(product.price_cents)) {
-    return {
-      cents: Math.round(product.price_cents),
-      currency:
-        typeof product.price_currency === "string" && product.price_currency.trim()
-          ? product.price_currency.trim()
-          : "USD",
-    };
-  }
-  return null;
+  return readPriceLike(product.price);
 }
 
 /**
  * Precio más bajo por blueprint desde `GET marketplace/products` (clave = blueprint id).
  * Cada array de productos viene ordenado por precio ascendente; usamos el primero.
+ * Usa únicamente price.{cents,currency} (moneda de la cuenta compradora según CardTrader API).
  */
 export function minPricesByBlueprintFromMarketplace(
   data: unknown,
@@ -89,7 +80,6 @@ export function minPricesByBlueprintFromMarketplace(
 }
 
 export function formatBlueprintMarketPrice(price: BlueprintMarketPrice): string {
-  if (price.formatted?.trim()) return price.formatted.trim();
   const amount = price.cents / 100;
   const cur = price.currency.trim().toUpperCase() || "USD";
   return `${amount.toFixed(2)} ${cur}`;

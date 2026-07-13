@@ -48,7 +48,9 @@ import {
   type BlueprintPriceSort,
 } from "../../utils/cardtrader-blueprint-market";
 import {
+  CARDTRADER_CARD_FEE_RATE,
   CARDTRADER_SHIPPING_COP_PER_UNIT,
+  CARDTRADER_SHIPPING_ONLY_COP,
   computeCardtraderUnitCostCop,
 } from "../../utils/cardtrader-cotizar-pricing";
 import { resolveUsdCopRate } from "../incoming/simulate-real-card-price";
@@ -1228,7 +1230,7 @@ export default function CotizarCardtraderPage() {
       hasAny = true;
       const q = Math.max(1, ln.qty);
       purchaseCop += unit.purchaseCop * q;
-      purchasePlusShippingCop += unit.subtotalBeforeIva * q;
+      purchasePlusShippingCop += unit.priceShippingOnlyCop * q;
       ivaPlusShippingCop += unit.ivaPlusShippingCop * q;
       realCostCop += unit.realCostCop * q;
       pvpApproxCop += unit.pvpApproxCop * q;
@@ -2477,8 +2479,9 @@ export default function CotizarCardtraderPage() {
 
           {copPerUsd !== null && lines.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ px: 2, pb: 0.5, display: "block" }}>
-              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · envío{" "}
-              {CARDTRADER_SHIPPING_COP_PER_UNIT} COP/carta · IVA 19%
+              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · solo envío{" "}
+              {CARDTRADER_SHIPPING_ONLY_COP} COP + {CARDTRADER_CARD_FEE_RATE * 100}% comisión carta
+              · envío estimado {CARDTRADER_SHIPPING_COP_PER_UNIT} COP/carta · IVA 19%
             </Typography>
           )}
 
@@ -2598,8 +2601,8 @@ export default function CotizarCardtraderPage() {
                         </Typography>
                         <CopPriceRow label="Precio retail COP / u." value={unitCost.purchaseCop} />
                         <CopPriceRow
-                          label="Precio con solo envío / u."
-                          value={unitCost.subtotalBeforeIva}
+                          label="Precio solo con envío / u."
+                          value={unitCost.priceShippingOnlyCop}
                           emphasized="primary"
                         />
                         <CopPriceRow
@@ -2757,7 +2760,7 @@ export default function CotizarCardtraderPage() {
                       value={cartCopTotals.purchaseCop ?? 0}
                     />
                     <CopPriceRow
-                      label="Precio con solo envío (suma unidades)"
+                      label="Precio solo con envío (suma unidades)"
                       value={cartCopTotals.purchasePlusShippingCop ?? 0}
                       emphasized="primary"
                     />
