@@ -37,6 +37,8 @@ export function buildPanelItemSearchHaystack(item: PanelHomologItem): string {
     item.card_id,
     item.language,
     item.rareza,
+    item.blueprint_id,
+    item.product_id,
     item.transit_lot_id,
     item.lot_purchase_date,
     item.fx_unit_price,

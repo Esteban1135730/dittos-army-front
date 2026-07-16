@@ -33,6 +33,7 @@ const pkg = (paidAt: string, lines: { name: string; qty: number }[]): PurchasePa
     lineCostCop: null,
     expansion: 'Set',
     ct0ItemId: i,
+    productId: i,
     blueprintId: i,
   })),
 });

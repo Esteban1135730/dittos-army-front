@@ -27,6 +27,7 @@ import TestCardtraderPage from "./pages/test-cardtrader/test-cardtrader-page";
 import CardtraderTransitListPage from "./pages/cardtrader-transit/cardtrader-transit-list-page";
 import CardtraderTransitLotDetailPage from "./pages/cardtrader-transit/cardtrader-transit-lot-detail-page";
 import CardtraderTransitImportPage from "./pages/cardtrader-transit/cardtrader-transit-import-page";
+import CardtraderReceiptPage from "./pages/cardtrader-receipt/cardtrader-receipt-page";
 import StockReviewStartPage from "./pages/stock/revision/start-page";
 import StockReviewVerifyPage from "./pages/stock/revision/verify-page";
 import StockReviewResolvePage from "./pages/stock/revision/resolve-page";
@@ -218,6 +219,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <CardtraderTransitLotDetailPage />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/cardtrader-receipt"
+        element={
+          <SideLayout>
+            <CardtraderReceiptPage />
           </SideLayout>
         }
       />

@@ -77,6 +77,125 @@ describe('sent-unit-homolog', () => {
     expect(ranked[0]?.matchTier).toBe('best');
   });
 
+  it('rankPanelCandidates prioriza blueprint_id exacto', () => {
+    const panelItems = [
+      panelItem({
+        transit_line_id: 'tl-name',
+        card_name: 'Pikachu',
+        blueprint_id: 999,
+        fx_unit_price: 1.5,
+      }),
+      panelItem({
+        transit_line_id: 'tl-bp',
+        card_name: 'Otro nombre',
+        blueprint_id: 42,
+        fx_unit_price: 9,
+        available_in_session: 1,
+        remaining_quantity: 1,
+      }),
+    ];
+
+    const ranked = rankPanelCandidates({
+      sentUnit: {
+        name: 'Pikachu',
+        expansion: 'Scarlet & Violet',
+        language: 'EN',
+        unit_price_eur: 1.5,
+        unit_price_fx: 1.5,
+        rareza: null,
+        blueprint_id: 42,
+      },
+      panelItems,
+      expansionHomolog: {},
+    });
+
+    expect(ranked[0]?.transitLineId).toBe('tl-bp');
+    expect(ranked[0]?.matchTier).toBe('exact');
+    expect(ranked[0]?.blueprintMatch).toBe(true);
+  });
+
+  it('rankPanelCandidates prioriza product_id sobre blueprint', () => {
+    const panelItems = [
+      panelItem({
+        transit_line_id: 'tl-bp',
+        card_name: 'Pikachu',
+        blueprint_id: 42,
+        product_id: 100,
+        fx_unit_price: 1.5,
+      }),
+      panelItem({
+        transit_line_id: 'tl-product',
+        card_name: 'Cualquiera',
+        blueprint_id: 99,
+        product_id: 777,
+        fx_unit_price: 9,
+        available_in_session: 1,
+        remaining_quantity: 1,
+      }),
+    ];
+
+    const ranked = rankPanelCandidates({
+      sentUnit: {
+        name: 'Pikachu',
+        expansion: 'Scarlet & Violet',
+        language: 'EN',
+        unit_price_eur: 1.5,
+        unit_price_fx: 1.5,
+        rareza: null,
+        blueprint_id: 42,
+        product_id: 777,
+      },
+      panelItems,
+      expansionHomolog: {},
+    });
+
+    expect(ranked[0]?.transitLineId).toBe('tl-product');
+    expect(ranked[0]?.matchTier).toBe('product');
+    expect(ranked[0]?.productMatch).toBe(true);
+  });
+
+  it('rankPanelCandidates dentro de blueprint prioriza precio exacto', () => {
+    const panelItems = [
+      panelItem({
+        transit_line_id: 'tl-far',
+        card_name: 'Pikachu',
+        blueprint_id: 42,
+        fx_unit_price: 2.5,
+        cards_cost_currency: 'EUR',
+        available_in_session: 1,
+        remaining_quantity: 1,
+      }),
+      panelItem({
+        transit_line_id: 'tl-exact',
+        card_name: 'Pikachu',
+        blueprint_id: 42,
+        fx_unit_price: 1.5,
+        cards_cost_currency: 'EUR',
+        available_in_session: 1,
+        remaining_quantity: 1,
+      }),
+    ];
+
+    const ranked = rankPanelCandidates({
+      sentUnit: {
+        name: 'Pikachu',
+        expansion: 'Scarlet & Violet',
+        language: 'EN',
+        unit_price_eur: 1.5,
+        unit_price_fx: 1.5,
+        price_currency: 'EUR',
+        rareza: null,
+        blueprint_id: 42,
+      },
+      panelItems,
+      expansionHomolog: {},
+    });
+
+    expect(ranked[0]?.transitLineId).toBe('tl-exact');
+    expect(ranked[0]?.matchTier).toBe('exact');
+    expect(ranked[0]?.priceDelta).toBe(0);
+  });
+
   it('rankPanelCandidates matchea precios USD de CardTrader', () => {
     const panelItems = [panelItem({ transit_line_id: 'tl1', cards_cost_currency: 'USD' })];
 

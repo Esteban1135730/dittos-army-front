@@ -84,6 +84,13 @@ function homologUnitDisplayCop(
   return null;
 }
 
+function candidateTierLabel(tier: PanelMatchCandidate['matchTier']): string {
+  if (tier === 'product') return 'Product ID';
+  if (tier === 'exact') return 'Blueprint exacto';
+  if (tier === 'best') return 'Match completo';
+  return 'Posible';
+}
+
 function CandidateRow(props: {
   candidate: PanelMatchCandidate;
   onSelect: () => void;
@@ -91,13 +98,28 @@ function CandidateRow(props: {
   imageSrc?: string;
 }) {
   const { candidate, onSelect, disabled, imageSrc } = props;
+  const isProduct = candidate.matchTier === 'product';
+  const isExact = candidate.matchTier === 'exact';
+  const isBest = candidate.matchTier === 'best';
   return (
     <Paper
       variant="outlined"
       sx={{
         p: 1.25,
-        borderColor: candidate.matchTier === 'best' ? '#1565c0' : '#e0e0e0',
-        bgcolor: candidate.matchTier === 'best' ? '#e3f2fd' : '#fff',
+        borderColor: isProduct
+          ? '#1b5e20'
+          : isExact
+            ? '#2e7d32'
+            : isBest
+              ? '#1565c0'
+              : '#e0e0e0',
+        bgcolor: isProduct
+          ? '#c8e6c9'
+          : isExact
+            ? '#e8f5e9'
+            : isBest
+              ? '#e3f2fd'
+              : '#fff',
       }}
     >
       <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'stretch' }}>
@@ -113,8 +135,14 @@ function CandidateRow(props: {
             </Typography>
             <Chip
               size="small"
-              label={candidate.matchTier === 'best' ? 'Match completo' : 'Posible'}
-              color={candidate.matchTier === 'best' ? 'primary' : 'default'}
+              label={candidateTierLabel(candidate.matchTier)}
+              color={
+                isProduct || isExact
+                  ? 'success'
+                  : isBest
+                    ? 'primary'
+                    : 'default'
+              }
             />
             <Chip
               size="small"
@@ -125,6 +153,11 @@ function CandidateRow(props: {
           <Typography variant="caption" color="text.secondary" display="block">
             Lote {formatHomologDate(candidate.lotPurchaseDate)} · {candidate.language}
             {candidate.rareza ? ` · ${candidate.rareza}` : ''}
+            {candidate.productId ? ` · P#${candidate.productId}` : ''}
+            {candidate.blueprintId ? ` · BP#${candidate.blueprintId}` : ''}
+            {candidate.priceDelta != null
+              ? ` · Δ precio ${candidate.priceDelta.toFixed(2)}`
+              : ''}
           </Typography>
         </Box>
         <PanelItemPrices
@@ -258,6 +291,8 @@ export default function IncomingV2Page() {
     });
   }, [selectedUnit, panelItems, expansionHomolog]);
 
+  const productCandidates = candidates.filter((c) => c.matchTier === 'product');
+  const exactCandidates = candidates.filter((c) => c.matchTier === 'exact');
   const bestCandidates = candidates.filter((c) => c.matchTier === 'best');
   const possibleCandidates = candidates.filter((c) => c.matchTier === 'possible');
 
@@ -880,10 +915,48 @@ export default function IncomingV2Page() {
                     </Alert>
                   ) : (
                     <Stack spacing={1.5}>
-                      {bestCandidates.length > 0 ? (
+                      {productCandidates.length > 0 ? (
                         <>
                           <Typography variant="subtitle2" fontWeight={600}>
-                            Match completo
+                            Product ID exacto
+                          </Typography>
+                          {productCandidates.map((c) => (
+                            <CandidateRow
+                              key={c.transitLineId}
+                              candidate={c}
+                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
+                              onSelect={() => handleVerify(c)}
+                              disabled={verifyUnit.isPending}
+                            />
+                          ))}
+                        </>
+                      ) : null}
+
+                      {exactCandidates.length > 0 ? (
+                        <>
+                          {productCandidates.length > 0 ? <Divider sx={{ my: 1 }} /> : null}
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            Blueprint exacto
+                          </Typography>
+                          {exactCandidates.map((c) => (
+                            <CandidateRow
+                              key={c.transitLineId}
+                              candidate={c}
+                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
+                              onSelect={() => handleVerify(c)}
+                              disabled={verifyUnit.isPending}
+                            />
+                          ))}
+                        </>
+                      ) : null}
+
+                      {bestCandidates.length > 0 ? (
+                        <>
+                          {productCandidates.length > 0 || exactCandidates.length > 0 ? (
+                            <Divider sx={{ my: 1 }} />
+                          ) : null}
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            Match completo (nombre / precio / expansión)
                           </Typography>
                           {bestCandidates.map((c) => (
                             <CandidateRow

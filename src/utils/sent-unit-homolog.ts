@@ -29,6 +29,8 @@ export type PanelHomologItem = {
   image_url: string;
   language: string;
   rareza: string | null;
+  blueprint_id?: number | null;
+  product_id?: number | null;
   remaining_quantity: number;
   quantity_ordered: number;
   fx_unit_price: number;
@@ -53,6 +55,7 @@ export type SentHomologUnit = {
   expansion: string;
   language: string;
   blueprint_id: number;
+  product_id?: number | null;
   unit_price_eur: number | null;
   unit_price_fx: number | null;
   price_currency?: string | null;
@@ -84,6 +87,8 @@ export type PanelMatchCandidate = {
   imageUrl: string;
   language: string;
   rareza: string | null;
+  blueprintId: number | null;
+  productId: number | null;
   fxUnitPrice: number;
   fxTotalLot: number;
   cardsCostCurrency: CardsCostCurrency;
@@ -98,7 +103,10 @@ export type PanelMatchCandidate = {
   projectedUnitCostCop: number | null;
   structuralScore: number;
   wordScore: number;
-  matchTier: 'best' | 'possible';
+  priceDelta: number | null;
+  productMatch: boolean;
+  blueprintMatch: boolean;
+  matchTier: 'product' | 'exact' | 'best' | 'possible';
   matchedWords: string[];
 };
 
@@ -205,6 +213,13 @@ export function computeUnitCostCop(
   return fallbackUnitCostCop;
 }
 
+const MATCH_TIER_ORDER: Record<PanelMatchCandidate['matchTier'], number> = {
+  product: 0,
+  exact: 1,
+  best: 2,
+  possible: 3,
+};
+
 export function rankPanelCandidates(args: {
   sentUnit: Pick<
     SentHomologUnit,
@@ -215,12 +230,20 @@ export function rankPanelCandidates(args: {
     | 'unit_price_fx'
     | 'price_currency'
     | 'rareza'
-  >;
+  > & { blueprint_id?: number | null; product_id?: number | null };
   panelItems: PanelHomologItem[];
   expansionHomolog: ExpansionHomologIndex;
 }): PanelMatchCandidate[] {
   const sentCurrency = normalizeCardsCostCurrency(args.sentUnit.price_currency);
   const sentFx = fxUnitPriceFromSentUnit(args.sentUnit).amount;
+  const sentProductId =
+    typeof args.sentUnit.product_id === 'number' && args.sentUnit.product_id > 0
+      ? args.sentUnit.product_id
+      : null;
+  const sentBlueprintId =
+    typeof args.sentUnit.blueprint_id === 'number' && args.sentUnit.blueprint_id > 0
+      ? args.sentUnit.blueprint_id
+      : null;
 
   const external = buildExternalTransitProfile({
     name: args.sentUnit.name,
@@ -238,6 +261,23 @@ export function rankPanelCandidates(args: {
   for (const item of args.panelItems) {
     if (item.available_in_session <= 0) continue;
 
+    const itemProductId =
+      typeof item.product_id === 'number' && item.product_id > 0
+        ? item.product_id
+        : null;
+    const itemBlueprintId =
+      typeof item.blueprint_id === 'number' && item.blueprint_id > 0
+        ? item.blueprint_id
+        : null;
+    const productMatch =
+      sentProductId != null &&
+      itemProductId != null &&
+      sentProductId === itemProductId;
+    const blueprintMatch =
+      sentBlueprintId != null &&
+      itemBlueprintId != null &&
+      sentBlueprintId === itemBlueprintId;
+
     const panel = buildPanelTransitProfile({
       card_id: item.card_id,
       card_name: item.card_name,
@@ -252,9 +292,26 @@ export function rankPanelCandidates(args: {
       item.card_name,
     );
 
+    const itemCurrency = normalizeCardsCostCurrency(item.cards_cost_currency);
+    const priceDelta =
+      sentFx != null &&
+      sentFx > 0 &&
+      item.fx_unit_price > 0 &&
+      sentCurrency === itemCurrency
+        ? Math.abs(sentFx - item.fx_unit_price)
+        : null;
+
     const hasStructural = Number.isFinite(structuralScore);
     const hasWord = wordScore > 0 && matchedWords.length > 0;
-    if (!hasStructural && !hasWord) continue;
+    if (!productMatch && !blueprintMatch && !hasStructural && !hasWord) continue;
+
+    const matchTier: PanelMatchCandidate['matchTier'] = productMatch
+      ? 'product'
+      : blueprintMatch
+        ? 'exact'
+        : hasStructural && structuralScore < Number.POSITIVE_INFINITY
+          ? 'best'
+          : 'possible';
 
     ranked.push({
       transitLineId: item.transit_line_id,
@@ -264,9 +321,11 @@ export function rankPanelCandidates(args: {
       imageUrl: item.image_url,
       language: item.language,
       rareza: item.rareza,
+      blueprintId: itemBlueprintId,
+      productId: itemProductId,
       fxUnitPrice: item.fx_unit_price,
       fxTotalLot: item.fx_total_lot,
-      cardsCostCurrency: normalizeCardsCostCurrency(item.cards_cost_currency),
+      cardsCostCurrency: itemCurrency,
       unitCostCop: item.unit_cost_cop,
       quantityOrdered: item.quantity_ordered,
       remainingQuantity: item.remaining_quantity,
@@ -278,7 +337,7 @@ export function rankPanelCandidates(args: {
       projectedUnitCostCop:
         sentFx != null &&
         sentFx > 0 &&
-        sentCurrency === normalizeCardsCostCurrency(item.cards_cost_currency)
+        sentCurrency === itemCurrency
           ? computeUnitCostCop(
               sentFx,
               item.real_fx_rate_cop,
@@ -287,21 +346,34 @@ export function rankPanelCandidates(args: {
           : item.unit_cost_cop,
       structuralScore: hasStructural ? structuralScore : Number.POSITIVE_INFINITY,
       wordScore,
-      matchTier:
-        hasStructural && structuralScore < Number.POSITIVE_INFINITY
-          ? 'best'
-          : 'possible',
+      priceDelta,
+      productMatch,
+      blueprintMatch,
+      matchTier,
       matchedWords,
     });
   }
 
   ranked.sort((a, b) => {
-    if (a.matchTier !== b.matchTier) {
-      return a.matchTier === 'best' ? -1 : 1;
+    const tierDiff = MATCH_TIER_ORDER[a.matchTier] - MATCH_TIER_ORDER[b.matchTier];
+    if (tierDiff !== 0) return tierDiff;
+
+    // product_id / blueprint: precio exacto primero, luego más cercano
+    if (a.matchTier === 'product' || a.matchTier === 'exact') {
+      const exactA = a.priceDelta != null && a.priceDelta < 0.0001 ? 0 : 1;
+      const exactB = b.priceDelta != null && b.priceDelta < 0.0001 ? 0 : 1;
+      if (exactA !== exactB) return exactA - exactB;
+      const priceA = a.priceDelta ?? Number.POSITIVE_INFINITY;
+      const priceB = b.priceDelta ?? Number.POSITIVE_INFINITY;
+      if (priceA !== priceB) return priceA - priceB;
     }
+
     if (a.structuralScore !== b.structuralScore) {
       return a.structuralScore - b.structuralScore;
     }
+    const priceA = a.priceDelta ?? Number.POSITIVE_INFINITY;
+    const priceB = b.priceDelta ?? Number.POSITIVE_INFINITY;
+    if (priceA !== priceB) return priceA - priceB;
     if (b.wordScore !== a.wordScore) return b.wordScore - a.wordScore;
     return a.cardName.localeCompare(b.cardName, 'es');
   });

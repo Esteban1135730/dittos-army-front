@@ -29,6 +29,7 @@ export type PurchasePackageLine = {
   lineCostCop: number | null;
   expansion: string;
   ct0ItemId: number;
+  productId: number;
   blueprintId: number;
 };
 
@@ -186,6 +187,7 @@ export function buildPurchasePackages(args: {
         lineCostCop: null,
         expansion: item.expansion,
         ct0ItemId: item.id,
+        productId: item.product_id,
         blueprintId: item.blueprint_id,
       });
       pushLocation(pkg!, location);

@@ -48,6 +48,7 @@ export type CardtraderTransitLineRow = {
   unit_cost_cop: number;
   rareza: string | null;
   ct0_item_id: number | null;
+  product_id: number | null;
   blueprint_id: number | null;
   expansion: string | null;
   collector_number: string | null;

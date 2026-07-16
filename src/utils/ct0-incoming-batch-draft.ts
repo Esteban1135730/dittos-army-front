@@ -27,6 +27,7 @@ import { operationalRarezaLabel } from '../constants/item-rareza';
 export type Ct0BatchDraftLine = {
   lineKey: string;
   ct0ItemId: number;
+  productId: number;
   name: string;
   expansion: string;
   collectorNumber: string | null;
@@ -164,6 +165,7 @@ function aggregatePackageLines(
     merged.set(mergeKey, {
       lineKey: mergeKey,
       ct0ItemId: line.ct0ItemId,
+      productId: line.productId,
       name: line.name,
       expansion: line.expansion,
       collectorNumber,
@@ -452,6 +454,7 @@ export type CreateTransitLotPayload = {
     fx_total_lot: number;
     rareza: string | null;
     ct0_item_id?: number;
+    product_id?: number;
     blueprint_id?: number;
     expansion?: string;
     collector_number?: string | null;
@@ -487,6 +490,7 @@ export function buildTransitLotPayloadFromDraft(
       fx_total_lot: line.usdTotalLot,
       rareza: line.rareza,
       ct0_item_id: line.ct0ItemId,
+      product_id: line.productId > 0 ? line.productId : undefined,
       blueprint_id: line.blueprintId,
       expansion: line.expansion,
       collector_number: line.collectorNumber,

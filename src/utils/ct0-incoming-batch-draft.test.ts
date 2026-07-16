@@ -231,6 +231,7 @@ describe('ct0-incoming-batch-draft', () => {
         {
           lineKey: 'a',
           ct0ItemId: 1,
+          productId: 9001,
           name: 'Switch',
           expansion: 'Set',
           collectorNumber: '194',
@@ -246,6 +247,7 @@ describe('ct0-incoming-batch-draft', () => {
     };
 
     const payload = buildTransitLotPayloadFromDraft(draft, 50000);
+    expect(payload.items[0].product_id).toBe(9001);
     expect(payload.cards_cost_currency).toBe('USD');
     expect(payload.ct0_package_key).toBe(draft.packageKey);
     expect(payload.legacy_incoming_batch_id).toBe('legacy-1');
@@ -279,6 +281,7 @@ describe('ct0-incoming-batch-draft', () => {
         {
           lineKey: 'a',
           ct0ItemId: 1,
+          productId: 1,
           name: 'Card',
           expansion: 'Set',
           collectorNumber: '1',

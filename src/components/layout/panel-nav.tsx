@@ -61,6 +61,9 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
         <NavLink to="/cardtrader-transit/import" className={subLinkClass} onNavigate={onNavigate}>
           Importar CT Zero
         </NavLink>
+        <NavLink to="/cardtrader-receipt" className={subLinkClass} onNavigate={onNavigate}>
+          Recepción CT
+        </NavLink>
         <NavLink to="/test-cardtrader" className={subLinkClass} onNavigate={onNavigate}>
           Consolidado tránsito
         </NavLink>
