@@ -1,5 +1,5 @@
 import type { Ct0BoxItem } from './cardtrader-ct0-box';
-import { filterCt0ItemsInTransit } from './cardtrader-ct0-box';
+import { ct0ItemUnitsInTransit, filterCt0ItemsInTransit } from './cardtrader-ct0-box';
 import { mapCardTraderLangForStorage } from './cardtrader-json-import';
 import {
   buildCt0PackageProfile,
@@ -445,6 +445,109 @@ export function draftsEligibleForRegistration(drafts: Ct0BatchDraft[]): Ct0Batch
   return drafts.filter((d) => d.status === 'ready');
 }
 
+export type ComplementosDraftLine = {
+  lineKey: string;
+  ct0ItemId: number;
+  productId: number;
+  blueprintId: number;
+  name: string;
+  expansion: string;
+  collectorNumber: string | null;
+  language: string;
+  qty: number;
+  rareza: string | null;
+  tcgdexCardId: string | null;
+  tcgdexError: string | null;
+};
+
+export function buildComplementosDraftLines(
+  items: Ct0BoxItem[],
+): Omit<ComplementosDraftLine, 'tcgdexCardId' | 'tcgdexError'>[] {
+  const lines: Omit<ComplementosDraftLine, 'tcgdexCardId' | 'tcgdexError'>[] = [];
+  for (const item of items) {
+    const qty = ct0ItemUnitsInTransit(item);
+    if (qty <= 0) continue;
+    const language = mapCardTraderLangForStorage(readCtLanguage(item.properties));
+    const rareza = inferOperationalRarezaFromCtProperties(item.properties);
+    lines.push({
+      lineKey: `comp-${item.id}`,
+      ct0ItemId: item.id,
+      productId: item.product_id,
+      blueprintId: item.blueprint_id,
+      name: item.name,
+      expansion: item.expansion,
+      collectorNumber: readCollectorNumber(item.properties),
+      language,
+      qty,
+      rareza,
+    });
+  }
+  return lines.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+}
+
+export async function resolveComplementosDraftTcgdex(
+  lines: Omit<ComplementosDraftLine, 'tcgdexCardId' | 'tcgdexError'>[],
+  resolveTcgdex: TcgdexResolveFn,
+): Promise<ComplementosDraftLine[]> {
+  const cache = new Map<string, TcgdexResolveResponse>();
+  const out: ComplementosDraftLine[] = [];
+
+  for (const line of lines) {
+    const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${line.collectorNumber ?? ''}`;
+    let resolved = cache.get(cacheKey);
+    if (!resolved) {
+      resolved = await resolveTcgdex({
+        expansion: line.expansion,
+        collectorNumber: line.collectorNumber,
+        language: line.language,
+      });
+      cache.set(cacheKey, resolved);
+    }
+    if (resolved.tcgdex_card_id) {
+      out.push({
+        ...line,
+        tcgdexCardId: resolved.tcgdex_card_id,
+        tcgdexError: null,
+      });
+    } else {
+      out.push({
+        ...line,
+        tcgdexCardId: null,
+        tcgdexError: resolved.error ?? 'sin homologación TCGdex',
+      });
+    }
+  }
+  return out;
+}
+
+export function buildComplementosTransitLotPayload(
+  lines: ComplementosDraftLine[],
+  purchaseDate: string,
+  packageKey: string,
+): CreateTransitLotPayload {
+  const ready = lines.filter((l) => l.tcgdexCardId);
+  return {
+    items: ready.map((line) => ({
+      card_id: line.tcgdexCardId!,
+      card_name: line.name,
+      language: line.language,
+      quantity: line.qty,
+      fx_total_lot: 0,
+      rareza: line.rareza,
+      ct0_item_id: line.ct0ItemId,
+      product_id: line.productId > 0 ? line.productId : undefined,
+      blueprint_id: line.blueprintId,
+      expansion: line.expansion,
+      collector_number: line.collectorNumber,
+    })),
+    total_cop_cards_cost: 0,
+    purchase_date: purchaseDate,
+    cards_cost_currency: 'USD',
+    source: 'complementos',
+    ct0_package_key: packageKey,
+  };
+}
+
 export type CreateTransitLotPayload = {
   items: Array<{
     card_id: string;
@@ -462,7 +565,7 @@ export type CreateTransitLotPayload = {
   total_cop_cards_cost: number;
   purchase_date: string;
   cards_cost_currency: string;
-  source: 'ct0';
+  source: 'ct0' | 'manual' | 'complementos';
   ct0_package_key: string;
   legacy_incoming_batch_id?: string;
   legacy_incoming_cop_hint?: number;

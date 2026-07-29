@@ -3,6 +3,7 @@ import {
   allocateCt0CopInTransit,
   ct0ItemQtyForState,
   filterCt0ItemsInTransit,
+  isCt0ComplementItem,
 } from './cardtrader-ct0-box';
 import type { IncomingHomologItem } from './incoming-ct0-homolog';
 import { findBatchItemForCtLineName } from './incoming-ct0-homolog';
@@ -147,6 +148,7 @@ export function buildPurchasePackages(args: {
   const packageMap = new Map<string, PurchasePackage>();
 
   for (const item of filterCt0ItemsInTransit(args.ct0Items, pokemonOnly)) {
+    if (isCt0ComplementItem(item)) continue;
     const paidAt = item.paid_at;
     if (!paidAt) continue;
 

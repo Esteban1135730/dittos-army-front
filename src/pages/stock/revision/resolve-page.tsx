@@ -20,6 +20,7 @@ import {
 } from "./use-stock-review";
 import { ResolutionItemRow } from "./resolution-item-row";
 import type { StockReviewItem, StockReviewOutcome } from "./types";
+import { sessionScopeLabel } from "./types";
 
 export default function StockReviewResolvePage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -175,11 +176,11 @@ export default function StockReviewResolvePage() {
   return (
     <div className="w-full max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">
-        Resolución — {session.tag}
+        Resolución — {sessionScopeLabel(session)}
       </h1>
       <p className="text-sm text-gray-600 mb-4">
         Solo aparecen las cartas que <strong>no</strong> marcaste como existentes
-        en stock. Clasifica cada una: <strong>Stock</strong> no altera el
+        en stock. Clasifica cada una: <strong>Aún en stock</strong> no altera el
         sistema; el resto aplica el cambio correspondiente.
       </p>
       <p className="text-sm text-gray-600 mb-6">

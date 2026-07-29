@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   allocateCt0CopToItems,
+  buildComplementosPackageKey,
   ct0ItemQtyForState,
   filterCt0BoxItems,
+  filterCt0MissingItems,
   groupCt0ItemsIntoLots,
+  isCt0ComplementItem,
+  isCt0MissingItem,
+  matchMissingToTransitLines,
   summarizeCt0BoxItems,
   type Ct0BoxItem,
 } from './cardtrader-ct0-box';
@@ -70,5 +75,66 @@ describe('cardtrader-ct0-box', () => {
   it('ct0ItemQtyForState lee quantity del estado', () => {
     expect(ct0ItemQtyForState(item({ id: 1, quantity: { pending: 2 } }), 'pending')).toBe(2);
     expect(ct0ItemQtyForState(item({ id: 1, quantity: { pending: 2 } }), 'ok')).toBe(0);
+  });
+
+  it('detecta complementos por cents 0 e in-transit', () => {
+    expect(
+      isCt0ComplementItem(
+        item({ id: 1, buyer_price: { cents: 0, currency: 'USD' }, quantity: { ok: 1 } }),
+      ),
+    ).toBe(true);
+    expect(
+      isCt0ComplementItem(
+        item({
+          id: 2,
+          buyer_price: { cents: 0, currency: 'USD' },
+          quantity: { missing: 1 },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isCt0ComplementItem(
+        item({ id: 3, buyer_price: { cents: 50, currency: 'USD' }, quantity: { ok: 1 } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('buildComplementosPackageKey ordena ids', () => {
+    expect(buildComplementosPackageKey([3, 1, 2])).toBe('complementos:1-2-3');
+  });
+
+  it('detecta missing y empareja solo por ct0_item_id', () => {
+    expect(
+      isCt0MissingItem(item({ id: 1, quantity: { missing: 1 } })),
+    ).toBe(true);
+    expect(isCt0MissingItem(item({ id: 2, quantity: { ok: 1 } }))).toBe(false);
+
+    const missing = filterCt0MissingItems([
+      item({ id: 10, quantity: { missing: 1 }, name: 'A' }),
+      item({ id: 11, quantity: { missing: 1 }, name: 'B' }),
+      item({ id: 12, quantity: { ok: 1 }, name: 'C' }),
+    ]);
+    expect(missing.map((i) => i.id)).toEqual([10, 11]);
+
+    const matched = matchMissingToTransitLines(missing, [
+      {
+        line_id: 'L1',
+        ct0_item_id: 10,
+        not_arrived_at: null,
+      },
+      {
+        line_id: 'L2',
+        ct0_item_id: 99,
+        not_arrived_at: '2026-07-01',
+      },
+    ]);
+    expect(matched[0]).toMatchObject({
+      transit_line_id: 'L1',
+      already_marked: false,
+    });
+    expect(matched[1]).toMatchObject({
+      transit_line_id: null,
+      already_marked: false,
+    });
   });
 });

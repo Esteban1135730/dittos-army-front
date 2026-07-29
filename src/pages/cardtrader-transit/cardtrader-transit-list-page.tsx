@@ -118,20 +118,35 @@ export default function CardtraderTransitListPage() {
                   <p className="text-[10px] text-gray-400 mt-0.5">CT0 checkout</p>
                 ) : null}
               </div>
-              <div className="col-span-2 text-sm text-gray-700 uppercase">{lot.source}</div>
+              <div className="col-span-2 text-sm text-gray-700">
+                {lot.source === "complementos" ? (
+                  <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-semibold">
+                    Complementos
+                  </span>
+                ) : (
+                  <span className="uppercase">{lot.source}</span>
+                )}
+              </div>
               <div className="col-span-2 text-sm text-gray-700">
                 {lot.remaining_total_quantity}
               </div>
               <div className="col-span-3 text-sm text-gray-700">
-                {lot.cards_cost_currency} {lot.total_fx_cards_cost.toFixed(2)} lote
-                {lot.registered_items_fx_subtotal != null &&
-                Math.abs(lot.registered_items_fx_subtotal - lot.total_fx_cards_cost) > 0.01 ? (
-                  <span className="text-gray-500">
-                    {" "}
-                    · CT0 {lot.registered_items_fx_subtotal.toFixed(2)}
-                  </span>
-                ) : null}{" "}
-                / COP {Math.round(lot.total_cop_cards_cost).toLocaleString("es-CO")}
+                {lot.source === "complementos" ? (
+                  <span className="text-green-800 font-medium">Cartas gratis (COP 0)</span>
+                ) : (
+                  <>
+                    {lot.cards_cost_currency} {lot.total_fx_cards_cost.toFixed(2)} lote
+                    {lot.registered_items_fx_subtotal != null &&
+                    Math.abs(lot.registered_items_fx_subtotal - lot.total_fx_cards_cost) >
+                      0.01 ? (
+                      <span className="text-gray-500">
+                        {" "}
+                        · CT0 {lot.registered_items_fx_subtotal.toFixed(2)}
+                      </span>
+                    ) : null}{" "}
+                    / COP {Math.round(lot.total_cop_cards_cost).toLocaleString("es-CO")}
+                  </>
+                )}
                 {lot.legacy_incoming_batch_id ? (
                   <span className="block text-[10px] text-amber-700 mt-0.5">
                     Ref. legacy

@@ -220,6 +220,11 @@ export default function CardtraderTransitLotDetailPage() {
                   </div>
                   <div className="text-xs text-gray-700 mt-1">
                     Pedido: {line.quantity_ordered} · Pendiente: {line.remaining_quantity}
+                    {line.not_arrived_at ? (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-orange-100 text-orange-900 px-2 py-0.5 text-[10px] font-semibold">
+                        No llegada
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-xs text-gray-700 mt-1">
                     {lotMeta?.cards_cost_currency ?? "USD"}{" "}

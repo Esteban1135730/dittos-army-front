@@ -8,7 +8,9 @@ import axios from "axios";
 import { apiUrl } from "../../../config/api";
 import type {
   StockReviewOutcome,
+  StockReviewScanResponse,
   StockReviewSession,
+  CreateStockReviewSessionBody,
 } from "./types";
 
 export function stockReviewSessionQueryKey(sessionId: string) {
@@ -130,10 +132,10 @@ export function useStockReviewMutations() {
   };
 
   const createSession = useMutation({
-    mutationFn: async (tag: string) => {
+    mutationFn: async (body: CreateStockReviewSessionBody) => {
       const res = await axios.post<{ session: StockReviewSession }>(
         apiUrl("/stock-review/sessions"),
-        { tag }
+        body,
       );
       return res.data.session;
     },
@@ -163,6 +165,33 @@ export function useStockReviewMutations() {
       return res.data.session;
     },
     onSuccess: (session, { sessionId }) => setSessionCache(session, sessionId),
+  });
+
+  /**
+   * El servidor decide qué unidad del grupo carta+idioma se verifica, así que
+   * no hay optimismo local: se refresca la sesión con su respuesta.
+   */
+  const scanItem = useMutation({
+    mutationFn: async ({
+      sessionId,
+      stockId,
+    }: {
+      sessionId: string;
+      stockId: string;
+    }) => {
+      const res = await axios.post<StockReviewScanResponse>(
+        apiUrl(`/stock-review/sessions/${sessionId}/scan`),
+        { stock_id: stockId },
+        { validateStatus: isHttpSuccess },
+      );
+      return res.data;
+    },
+    onSuccess: (data, { sessionId }) => {
+      setSessionCache(data.session, sessionId);
+      void queryClient.invalidateQueries({
+        queryKey: stockReviewSessionQueryKey(sessionId),
+      });
+    },
   });
 
   const invalidateStockSideEffects = () => {
@@ -236,16 +265,31 @@ export function useStockReviewMutations() {
     },
   });
 
+  /**
+   * La sesión cancelada deja de existir: se limpian sus cachés en vez de
+   * esperar refetches pesados, que retrasaban el cierre de la pantalla.
+   */
   const cancelSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      await axios.delete(apiUrl(`/stock-review/sessions/${sessionId}`));
+      await axios.delete(apiUrl(`/stock-review/sessions/${sessionId}`), {
+        validateStatus: isHttpSuccess,
+      });
     },
-    onSuccess: () => invalidate(),
+    onSuccess: (_data, sessionId) => {
+      queryClient.removeQueries({
+        queryKey: stockReviewSessionQueryKey(sessionId),
+      });
+      queryClient.setQueryData(["stock-review", "active"], { session: null });
+      void queryClient.invalidateQueries({
+        queryKey: ["stock-review", "active"],
+      });
+    },
   });
 
   return {
     createSession,
     verifyItem,
+    scanItem,
     finalizeVerification,
     resolveItem,
     cancelSession,

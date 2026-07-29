@@ -52,5 +52,6 @@ export type CardtraderTransitLineRow = {
   blueprint_id: number | null;
   expansion: string | null;
   collector_number: string | null;
+  not_arrived_at: string | null;
   created_at: string;
 };

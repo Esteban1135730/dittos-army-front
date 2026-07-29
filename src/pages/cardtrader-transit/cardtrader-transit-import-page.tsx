@@ -9,6 +9,8 @@ import {
   pricingFieldsFromOpenIncomingBatch,
 } from "../../utils/ct0-incoming-batch-draft";
 import Ct0IncomingRegisterPanel from "../test-cardtrader/ct0-incoming-register-panel";
+import Ct0ComplementosRegisterPanel from "./ct0-complementos-register-panel";
+import Ct0NoLlegadasRegisterPanel from "./ct0-no-llegadas-register-panel";
 import { API_INCOMING } from "../clientes/cliente-types";
 import {
   API_CARDTRADER_TRANSIT_LOTS,
@@ -88,6 +90,15 @@ export default function CardtraderTransitImportPage() {
     },
   });
 
+  const registeredKeysQuery = useQuery<string[]>({
+    queryKey: ["cardtrader-transit-registered-keys"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/registered-package-keys`);
+      return Array.isArray(res.data) ? (res.data as string[]) : [];
+    },
+    staleTime: 30 * 1000,
+  });
+
   const existingTransitLots = useMemo(
     () =>
       (transitLotsQuery.data ?? [])
@@ -102,6 +113,7 @@ export default function CardtraderTransitImportPage() {
   const loading =
     boxQuery.isLoading ||
     transitLotsQuery.isLoading ||
+    registeredKeysQuery.isLoading ||
     legacyOpenQuery.isLoading ||
     ((legacyOpenQuery.data?.length ?? 0) > 0 && legacyBundlesQuery.isLoading);
 
@@ -112,13 +124,26 @@ export default function CardtraderTransitImportPage() {
           <h1 className="text-2xl font-bold text-gray-800">Importar desde CT Zero</h1>
           <p className="text-sm text-gray-600 mt-1">
             Registra checkouts CT Zero con previsualización TCGdex. Revisa que cada carta tenga
-            imagen en catálogo antes de confirmar.
+            imagen en catálogo antes de confirmar. Los ítems a $0 van en Complementos; los{" "}
+            <code>missing</code> en Cartas no llegadas.
           </p>
         </div>
         <Link to="/cardtrader-transit" className="text-blue-600 hover:underline font-medium">
           ← Lotes en tránsito
         </Link>
       </div>
+
+      <Ct0ComplementosRegisterPanel
+        ct0Items={boxQuery.data ?? []}
+        registeredPackageKeys={registeredKeysQuery.data ?? []}
+        loading={boxQuery.isLoading || registeredKeysQuery.isLoading}
+      />
+
+      <Ct0NoLlegadasRegisterPanel
+        ct0Items={boxQuery.data ?? []}
+        openLots={transitLotsQuery.data ?? []}
+        loading={boxQuery.isLoading || transitLotsQuery.isLoading}
+      />
 
       <Ct0IncomingRegisterPanel
         compact

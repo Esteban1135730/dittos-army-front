@@ -3,7 +3,7 @@ import { ReviewItemMeta } from "./review-item-meta";
 import type { StockReviewItem, StockReviewOutcome } from "./types";
 
 const OUTCOME_LABELS: Record<StockReviewOutcome, string> = {
-  en_stock: "Dejada en stock",
+  en_stock: "Aún en stock",
   perdida: "Perdida",
   propiedad: "Propiedad",
   vendida: "Vendida",
@@ -99,7 +99,7 @@ export function ResolutionItemRow({
               disabled={busy}
               onClick={() => onResolve("en_stock")}
             >
-              Stock
+              Aún en stock
             </Button>
             <Button
               size="small"

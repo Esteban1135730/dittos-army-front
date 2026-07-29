@@ -82,6 +82,73 @@ export function ct0ItemUnitsInTransit(item: Ct0BoxItem): number {
   return ct0ItemQtyForState(item, 'ok') + ct0ItemQtyForState(item, 'pending');
 }
 
+/** Carta CT0 a precio $0 con unidades en tránsito (regalo / reemplazo). */
+export function isCt0ComplementItem(item: Ct0BoxItem): boolean {
+  const cents = item.buyer_price?.cents;
+  if (cents !== 0) return false;
+  return ct0ItemUnitsInTransit(item) > 0;
+}
+
+export function filterCt0ComplementItems(
+  items: Ct0BoxItem[],
+  pokemonOnly = true,
+): Ct0BoxItem[] {
+  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
+  return rows.filter(isCt0ComplementItem);
+}
+
+/** Ítem CT0 marcado como no disponible / no llegará. */
+export function isCt0MissingItem(item: Ct0BoxItem): boolean {
+  return ct0ItemQtyForState(item, 'missing') > 0;
+}
+
+export function filterCt0MissingItems(
+  items: Ct0BoxItem[],
+  pokemonOnly = true,
+): Ct0BoxItem[] {
+  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
+  return rows.filter(isCt0MissingItem);
+}
+
+export type TransitLineCt0Ref = {
+  line_id: string;
+  ct0_item_id: number | null;
+  not_arrived_at?: string | Date | null;
+};
+
+/** Cruza missing CT0 con líneas de tránsito solo por ct0_item_id. */
+export function matchMissingToTransitLines(
+  missingItems: Ct0BoxItem[],
+  transitLines: TransitLineCt0Ref[],
+): Array<{
+  item: Ct0BoxItem;
+  transit_line_id: string | null;
+  already_marked: boolean;
+}> {
+  const byCt0 = new Map<number, TransitLineCt0Ref>();
+  for (const line of transitLines) {
+    const id = line.ct0_item_id;
+    if (id == null || !Number.isInteger(id) || id <= 0) continue;
+    if (!byCt0.has(id)) byCt0.set(id, line);
+  }
+  return missingItems.map((item) => {
+    const line = byCt0.get(item.id);
+    return {
+      item,
+      transit_line_id: line?.line_id ?? null,
+      already_marked: Boolean(line?.not_arrived_at),
+    };
+  });
+}
+
+/** Clave anti-duplicado estable para un lote de complementos. */
+export function buildComplementosPackageKey(ct0ItemIds: number[]): string {
+  const ids = [...new Set(ct0ItemIds.filter((id) => Number.isInteger(id) && id > 0))].sort(
+    (a, b) => a - b,
+  );
+  return `complementos:${ids.join('-') || 'empty'}`;
+}
+
 /** Todas las unidades en CT Zero (ok + pending + missing). */
 export function ct0ItemUnitsAll(item: Ct0BoxItem): number {
   return (

@@ -1,3 +1,6 @@
+import type { StockTagId } from "../../../constants/stock-tags";
+import { STOCK_TAG_LABEL } from "../../../constants/stock-tags";
+
 export type StockReviewOutcome =
   | "perdida"
   | "propiedad"
@@ -10,6 +13,8 @@ export type StockReviewSessionStatus =
   | "completada"
   | "cancelada";
 
+export type StockReviewScope = "all" | "tag";
+
 export type StockReviewItem = {
   stock_id: string;
   card_id: string;
@@ -19,13 +24,15 @@ export type StockReviewItem = {
   language?: string;
   rareza?: string | null;
   verified: boolean;
+  verified_at?: string;
   outcome?: StockReviewOutcome | null;
   obsolete?: boolean;
 };
 
 export type StockReviewSession = {
   id: string;
-  tag: "vintage" | "bulk" | "jugable";
+  scope: StockReviewScope;
+  tag: StockTagId | null;
   status: StockReviewSessionStatus;
   items: StockReviewItem[];
   summary: {
@@ -40,6 +47,22 @@ export type StockReviewSession = {
   completed_at?: string;
 };
 
+/** Respuesta de `POST /stock-review/sessions/:sessionId/scan`. */
+export type StockReviewScanResponse = {
+  session: StockReviewSession;
+  scan: {
+    verified_stock_id: string;
+    card_id: string;
+    card_name: string;
+    language?: string;
+    group_pending_after: number;
+  };
+};
+
+export type CreateStockReviewSessionBody =
+  | { scope: "all" }
+  | { scope: "tag"; tag: StockTagId };
+
 export type StockLostRow = {
   stock_id: string;
   card_id: string;
@@ -49,3 +72,11 @@ export type StockLostRow = {
   rareza?: string | null;
   card_state: string;
 };
+
+export function sessionScopeLabel(session: StockReviewSession): string {
+  if (session.scope === "all") return "Todo el stock";
+  if (session.tag && session.tag in STOCK_TAG_LABEL) {
+    return STOCK_TAG_LABEL[session.tag];
+  }
+  return session.tag ?? "Tag";
+}
