@@ -154,7 +154,7 @@ export default function ImprimirEtiquetasQrPage() {
       }
 
       await openStockQrLabelsPrintWindow(rows, {
-        subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · hoja carta 4×12`,
+        subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · hoja A4 5×12`,
       });
     } catch (err: unknown) {
       const msg =
@@ -184,7 +184,7 @@ export default function ImprimirEtiquetasQrPage() {
       </div>
       <p className="text-sm md:text-base text-gray-600 mb-4">
         Busca líneas de inventario, arma una cola con cantidad y imprime
-        etiquetas QR (misma plantilla 4×12 que Exportar QR en Stock).
+        etiquetas QR (misma plantilla A4 5×12 que Exportar QR en Stock).
       </p>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 flex-1 min-h-0">
@@ -284,7 +284,7 @@ export default function ImprimirEtiquetasQrPage() {
                         title={
                           elegible
                             ? "Añadir a la cola"
-                            : "Sin PVP o estado no vendible"
+                            : "Sin PVP o estado no imprimible (p. ej. vendida)"
                         }
                       >
                         <span>

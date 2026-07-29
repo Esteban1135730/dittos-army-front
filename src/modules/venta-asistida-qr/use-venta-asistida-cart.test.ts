@@ -39,4 +39,11 @@ describe("cart-helpers", () => {
     const updated = updateCartLinePrice(lines, line.stock_id, 60000);
     expect(cartTotalProfitCop(updated)).toBe(30000);
   });
+
+  it("conserva la marca reserved de una línea reservada", () => {
+    const { lines, status } = addCartLine([], { ...line, reserved: true });
+    expect(status).toBe("ok");
+    expect(lines[0].reserved).toBe(true);
+    expect(cartTotalCop(lines)).toBe(50000);
+  });
 });

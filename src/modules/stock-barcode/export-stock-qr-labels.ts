@@ -7,7 +7,8 @@ export type QrLabelsPrintOptions = {
   subtitle?: string;
 };
 
-const COLS = 4;
+/** Hoja A4: 5×12 (60) — equilibrio entre densidad y legibilidad del QR. */
+const COLS = 5;
 const ROWS = 12;
 
 export const QR_LABELS_COLS = COLS;
@@ -15,7 +16,7 @@ export const QR_LABELS_ROWS = ROWS;
 export const QR_LABELS_PER_PAGE = COLS * ROWS;
 
 /** Una línea corta para etiqueta pequeña. */
-function shortCardName(name: string, max = 28): string {
+function shortCardName(name: string, max = 24): string {
   const t = name.trim() || "Sin nombre";
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
@@ -24,7 +25,7 @@ function shortCardName(name: string, max = 28): string {
 export function formatQrLabelMetaLine(
   expansion: string,
   language: string,
-  max = 30,
+  max = 26,
 ): string {
   const parts: string[] = [];
   const exp = expansion.trim();
@@ -46,7 +47,7 @@ function renderQrLabelMetaHtml(expansion: string, language: string): string {
 }
 
 /**
- * Hoja carta (letter) 4×12 — QR + nombre + expansión/idioma + PVP, guías de corte punteadas.
+ * Hoja A4 5×12 — QR + nombre + expansión/idioma + PVP, guías de corte punteadas.
  */
 export async function openStockQrLabelsPrintWindow(
   rows: StockQrExportRow[],
@@ -70,7 +71,7 @@ export async function openStockQrLabelsPrintWindow(
 
   const subtitle =
     options?.subtitle ??
-    `${cards.length} etiquetas · hoja carta adhesiva (${COLS}×${ROWS})`;
+    `${cards.length} etiquetas · hoja A4 adhesiva (${COLS}×${ROWS})`;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -95,19 +96,19 @@ export async function openStockQrLabelsPrintWindow(
     .no-print ul { margin: 8px 0 0 18px; font-size: 12px; opacity: 0.85; }
     .sheet-wrap { padding: 8px; display: flex; justify-content: center; }
     .sheet {
-      width: 8.5in;
-      min-height: 11in;
+      width: 210mm;
+      min-height: 297mm;
       background: #fff;
-      padding: 0.12in 0.08in;
+      padding: 4mm 3mm;
       display: grid;
-      grid-template-columns: repeat(${COLS}, 2.08in);
-      grid-auto-rows: 0.86in;
+      grid-template-columns: repeat(${COLS}, 40.8mm);
+      grid-auto-rows: 24.08mm;
       gap: 0;
       align-content: start;
     }
     .label {
-      width: 2.08in;
-      height: 0.86in;
+      width: 40.8mm;
+      height: 24.08mm;
       border: 1px dashed #94a3b8;
       position: relative;
       overflow: hidden;
@@ -121,14 +122,14 @@ export async function openStockQrLabelsPrintWindow(
       justify-content: center;
       height: 100%;
       /* Zona segura: aleja QR y texto del borde de corte */
-      padding: 0.06in 0.08in;
-      gap: 1px;
+      padding: 1.2mm 1.5mm;
+      gap: 0.5px;
       text-align: center;
     }
     .qr {
       flex: 0 0 auto;
-      width: 0.5in;
-      height: 0.5in;
+      width: 12.5mm;
+      height: 12.5mm;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -137,10 +138,10 @@ export async function openStockQrLabelsPrintWindow(
     .info {
       width: 100%;
       min-width: 0;
-      line-height: 1.1;
+      line-height: 1.05;
     }
     .name {
-      font-size: 5.5pt;
+      font-size: 5pt;
       font-weight: 700;
       white-space: nowrap;
       overflow: hidden;
@@ -148,7 +149,7 @@ export async function openStockQrLabelsPrintWindow(
       max-width: 100%;
     }
     .meta {
-      font-size: 5pt;
+      font-size: 4.5pt;
       font-weight: 600;
       color: #374151;
       white-space: nowrap;
@@ -157,17 +158,17 @@ export async function openStockQrLabelsPrintWindow(
       max-width: 100%;
     }
     .pvp {
-      font-size: 6.5pt;
+      font-size: 6pt;
       font-weight: 800;
       color: #0d47a1;
       white-space: nowrap;
     }
     @media print {
-      @page { size: letter; margin: 0; }
+      @page { size: A4; margin: 0; }
       body { background: #fff; }
       .no-print { display: none !important; }
       .sheet-wrap { padding: 0; }
-      .sheet { padding: 0.12in 0.08in; }
+      .sheet { padding: 4mm 3mm; }
       .label { border-color: #aaa; }
     }
   </style>
@@ -177,7 +178,8 @@ export async function openStockQrLabelsPrintWindow(
     <h1>Etiquetas QR — stock</h1>
     <p>${escapeHtml(subtitle)}</p>
     <ul>
-      <li>Hoja carta: ${COLS} columnas × ${ROWS} filas (hasta ${COLS * ROWS} por página).</li>
+      <li>Hoja A4: ${COLS} columnas × ${ROWS} filas (hasta ${COLS * ROWS} por página).</li>
+      <li>En el diálogo de impresión elige papel <strong>A4</strong> y márgenes ninguno / mínimo.</li>
       <li>QR centrado con margen interno (zona segura) lejos del borde de corte.</li>
     </ul>
   </div>

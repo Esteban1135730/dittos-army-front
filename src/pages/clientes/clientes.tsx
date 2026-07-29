@@ -12,6 +12,7 @@ import {
   Snackbar,
   Stack,
   Switch,
+  TextField,
   Typography,
 } from "@mui/material";
 import type { StockListItem } from "../../types/stock";
@@ -51,6 +52,7 @@ export default function ClientesPage() {
   };
 
   const [soloConPedido, setSoloConPedido] = useState(false);
+  const [busquedaNombre, setBusquedaNombre] = useState("");
   const [contactoLoadingId, setContactoLoadingId] = useState<string | null>(null);
 
   const { data: clientes = [], isLoading } = useQuery<ClientItem[]>({
@@ -130,6 +132,10 @@ export default function ClientesPage() {
 
   const sortedClientes = useMemo(() => {
     let list = [...clientes];
+    const termino = busquedaNombre.trim().toLowerCase();
+    if (termino) {
+      list = list.filter((c) => (c.nombre ?? "").toLowerCase().includes(termino));
+    }
     if (soloConPedido) {
       list = list.filter(
         (c) =>
@@ -146,7 +152,7 @@ export default function ClientesPage() {
       return oa - ob;
     });
     return list;
-  }, [clientes, soloConPedido, statsPorCliente]);
+  }, [clientes, busquedaNombre, soloConPedido, statsPorCliente, incomingUnitsPorCliente]);
 
   const getRowClassName = useCallback(
     (params: { id: string | number }) => {
@@ -333,6 +339,20 @@ export default function ClientesPage() {
       <Typography variant="body2" color="text.secondary">
         Pulsa una fila para abrir el <strong>detalle</strong> (pedido, historial, notas, finalizar venta).
       </Typography>
+
+      <TextField
+        fullWidth
+        size="small"
+        label="Buscar por nombre"
+        placeholder="Nombre del cliente…"
+        value={busquedaNombre}
+        onChange={(e) => setBusquedaNombre(e.target.value)}
+        sx={{ maxWidth: 420 }}
+      />
+
+      {busquedaNombre.trim() && sortedClientes.length === 0 ? (
+        <Alert severity="info">Ningún cliente coincide con la búsqueda.</Alert>
+      ) : null}
 
       <Stack
         direction={{ xs: "column", sm: "row" }}

@@ -30,8 +30,10 @@ import { apiUrl } from "../../config/api";
 import { parseStockQrPayload } from "../../modules/stock-barcode";
 import {
   rejectReasonMessage,
+  reservedScanNotice,
   useVentaAsistidaCart,
   lineProfitCop,
+  type ReservedScanNotice,
   type SellBatchResult,
   type StockScanView,
 } from "../../modules/venta-asistida-qr";
@@ -92,6 +94,7 @@ function VentaAsistidaQrContent() {
   const [mode, setMode] = useState<ScanMode>("laser");
   const [cameraOn, setCameraOn] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanNotice, setScanNotice] = useState<ReservedScanNotice | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [selling, setSelling] = useState(false);
   const [sellMessage, setSellMessage] = useState<string | null>(null);
@@ -103,6 +106,7 @@ function VentaAsistidaQrContent() {
     async (raw: string) => {
       const trimmed = raw.trim();
       setScanError(null);
+      setScanNotice(null);
 
       const stockId = parseStockQrPayload(trimmed);
       if (!stockId) {
@@ -115,7 +119,16 @@ function VentaAsistidaQrContent() {
 
       setScanLoading(true);
       try {
-        const res = await axios.get<StockScanView>(apiUrl(`/stock/${stockId}/scan`));
+        // Excluir líneas ya en carrito para que el back no proponga dos veces
+        // la misma copia equivalente de una reservada.
+        const excludeIds = cart.lines.map((l) => l.stock_id);
+        const excludeQuery =
+          excludeIds.length > 0
+            ? `?exclude=${encodeURIComponent(excludeIds.join(","))}`
+            : "";
+        const res = await axios.get<StockScanView>(
+          apiUrl(`/stock/${stockId}/scan${excludeQuery}`),
+        );
         const view = res.data;
 
         if (!view.sellable) {
@@ -134,12 +147,14 @@ function VentaAsistidaQrContent() {
           expansion: view.expansion ?? "",
           rareza: view.rareza ?? null,
           language: view.language ?? "",
+          reserved: view.reserved_fallback === true,
         });
 
         if (addResult === "duplicate") {
           setScanError("Esta carta ya está en el carrito.");
         } else {
           setScanError(null);
+          setScanNotice(reservedScanNotice(view));
         }
       } catch (e) {
         const msg = axios.isAxiosError(e)
@@ -402,6 +417,12 @@ function VentaAsistidaQrContent() {
               {scanError}
             </Alert>
           )}
+
+          {scanNotice && (
+            <Alert severity={scanNotice.severity} sx={{ mt: 2 }} variant="outlined">
+              {scanNotice.message}
+            </Alert>
+          )}
         </Paper>
 
         {/* Carrito */}
@@ -508,6 +529,9 @@ function VentaAsistidaQrContent() {
                                 ) : null}
                                 {line.language ? (
                                   <Chip label={line.language} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+                                ) : null}
+                                {line.reserved ? (
+                                  <Chip label="Reservada" size="small" color="warning" sx={{ height: 20, fontSize: 10 }} />
                                 ) : null}
                               </Stack>
                             </Box>

@@ -455,7 +455,7 @@ export default function AsignarPVP() {
               <strong>ID:</strong> {id}
             </p>
             <p>
-              <strong>En stock:</strong>{" "}
+              <strong>Disponible:</strong>{" "}
               {stockData?.quantity ?? "No disponible"}
             </p>
             <p>

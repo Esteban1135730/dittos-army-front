@@ -5,9 +5,17 @@ import { apiUrl } from "../../config/api";
 
 const API_TCG = apiUrl("/tcg-dex/card/find");
 
-type TcgCardLite = { set?: string; name?: string };
+type TcgCardLite = {
+  set?: string;
+  name?: string;
+  /** Nombre EN del set (homólogo / cards-database) cuando el set localizado no es inglés. */
+  setEnglishName?: string;
+};
 
-function expansionFromCardDto(card: TcgCardLite | null | undefined): string | undefined {
+/** Expone la lógica de expansión para tests y para el mensaje WhatsApp. */
+export function expansionFromCardDto(card: TcgCardLite | null | undefined): string | undefined {
+  const english = card?.setEnglishName?.trim();
+  if (english) return english;
   if (!card?.set) return undefined;
   const s = String(card.set);
   const m = s.match(/\(([^)]+)\)\s*$/);

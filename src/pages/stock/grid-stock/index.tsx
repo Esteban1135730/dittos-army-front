@@ -802,7 +802,7 @@ export default function StockGrid() {
         hayFiltrosVisibles
           ? `filtro activo (${stockFiltrado.length} visibles en grilla)`
           : "todo el stock con PVP",
-        "hoja carta 4×12",
+        "hoja A4 5×12",
       ];
 
       await openStockQrLabelsPrintWindow(rows, {

@@ -40,6 +40,7 @@ import {
 } from "../incoming/incoming-variant-group";
 import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
+import { operationalRarezaLabel } from "../../constants/item-rareza";
 
 type StockItem = StockListItem;
 
@@ -354,12 +355,19 @@ export default function ReservarCartasPage() {
               card_name: stock.card_name,
               image_url: stock.image_url,
               card_id: stock.card_id,
+              rareza: stock.rareza ?? null,
             }
           : null;
       })
       .filter(
-        (r): r is ReservaItem & { card_name: string; image_url: string; card_id: string } =>
-          r !== null,
+        (
+          r,
+        ): r is ReservaItem & {
+          card_name: string;
+          image_url: string;
+          card_id: string;
+          rareza: string | null;
+        } => r !== null,
       );
   }, [reservasRaw, stockRaw]);
 
@@ -594,11 +602,14 @@ export default function ReservarCartasPage() {
       headerName: "Rareza",
       width: 104,
       sortable: false,
-      renderCell: (p) => (
-        <Typography variant="body2" color="text.secondary">
-          {p.row.rareza?.trim() || "—"}
-        </Typography>
-      ),
+      renderCell: (p) => {
+        const rz = p.row.rareza?.trim();
+        return (
+          <Typography variant="body2" color="text.secondary">
+            {rz ? operationalRarezaLabel(rz) : "—"}
+          </Typography>
+        );
+      },
     },
     {
       field: "unit_cost_cop_ref",
@@ -679,8 +690,34 @@ export default function ReservarCartasPage() {
         />
       ),
     },
-    { field: "card_name", headerName: "Carta", flex: 1, minWidth: 180 },
+    {
+      field: "card_name",
+      headerName: "Carta",
+      flex: 1,
+      minWidth: 160,
+    },
     { field: "card_id", headerName: "ID", width: 110 },
+    {
+      field: "rareza",
+      headerName: "Rareza",
+      width: 120,
+      sortable: false,
+      renderCell: (params) => {
+        const rz = (params.row as StockItem).rareza?.trim();
+        if (!rz) {
+          return (
+            <Typography variant="body2" color="text.disabled">
+              —
+            </Typography>
+          );
+        }
+        return (
+          <Typography variant="body2" color="text.secondary">
+            {operationalRarezaLabel(rz)}
+          </Typography>
+        );
+      },
+    },
     {
       field: "pvp",
       headerName: "PVP ref.",
@@ -934,6 +971,13 @@ export default function ReservarCartasPage() {
                       <Typography fontWeight={600} noWrap title={r.card_name}>
                         {r.card_name}
                       </Typography>
+                      {r.rareza?.trim() ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={operationalRarezaLabel(r.rareza.trim())}
+                        />
+                      ) : null}
                       <Chip
                         size="small"
                         variant="outlined"
@@ -1103,7 +1147,9 @@ export default function ReservarCartasPage() {
                   <Typography variant="caption" color="text.secondary" display="block">
                     {head?.card_id} · Cant.: {qtyTotal}
                     {head?.language ? ` · ${head.language}` : ""}
-                    {head?.rareza ? ` · ${head.rareza}` : ""}
+                    {head?.rareza?.trim()
+                      ? ` · ${operationalRarezaLabel(head.rareza.trim())}`
+                      : ""}
                   </Typography>
                 </Box>
                 <Button

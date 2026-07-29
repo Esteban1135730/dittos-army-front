@@ -1,5 +1,9 @@
 export { useVentaAsistidaCart } from "./use-venta-asistida-cart";
-export { rejectReasonMessage } from "./reject-reason-message";
+export {
+  rejectReasonMessage,
+  reservedScanNotice,
+  type ReservedScanNotice,
+} from "./reject-reason-message";
 export { lineProfitCop } from "./cart-helpers";
 export type {
   CartLine,
