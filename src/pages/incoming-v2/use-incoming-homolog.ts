@@ -218,7 +218,12 @@ export function useHomologMutations() {
           cards: args.cards,
         },
       );
-      return res.data as { round_id: string | null; transit_reception?: boolean };
+      return res.data as {
+        round_id: string | null;
+        transit_reception?: boolean;
+        stock_created?: number;
+        stock_ids?: string[];
+      };
     },
     onSuccess: async (_data, vars) => {
       await invalidate(vars.sessionId);

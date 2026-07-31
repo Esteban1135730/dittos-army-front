@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Divider,
@@ -47,7 +48,10 @@ import { HomologSearchField } from '../incoming-v2/homolog-search-field';
 import { NovedadDialog } from '../incoming-v2/novedad-dialog';
 import { HomologCreateTandaPanel } from '../incoming-v2/homolog-create-tanda-panel';
 import { useAutoVerifyByBlueprint } from './use-cardtrader-receipt-session';
+import { useArrivalTracking } from './use-arrival-tracking';
 import { exportSentUnitsByBlueprintToPdf } from './export-sent-units-pdf';
+
+type ArrivalFilter = 'all' | 'arrived' | 'not_arrived';
 
 const API_CARDTRADER = apiUrl('/cardtrader');
 
@@ -204,6 +208,11 @@ export default function CardtraderReceiptPage() {
   const sessionId = session?.session_id;
 
   const autoVerify = useAutoVerifyByBlueprint(sessionId);
+  const {
+    isArrived,
+    toggleArrived,
+    markMany,
+  } = useArrivalTracking(sessionId);
 
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -215,6 +224,7 @@ export default function CardtraderReceiptPage() {
   const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'pending' | 'novedad'>(
     'pending',
   );
+  const [arrivalFilter, setArrivalFilter] = useState<ArrivalFilter>('all');
 
   const units = session?.units ?? [];
   const summary = session?.summary ?? { total: 0, pending: 0, verified: 0, novedad: 0 };
@@ -295,12 +305,31 @@ export default function CardtraderReceiptPage() {
       sentStatusFilter === 'all'
         ? units
         : units.filter((u) => u.status === sentStatusFilter);
-    return filterByHomologSearch(
+    const bySearch = filterByHomologSearch(
       base,
       (u) => sentSearchHaystackByKey.get(u.sent_unit_key) ?? '',
       appliedSentSearch,
     );
-  }, [units, appliedSentSearch, sentSearchHaystackByKey, sentStatusFilter]);
+    if (arrivalFilter === 'arrived') {
+      return bySearch.filter((u) => isArrived(u.sent_unit_key));
+    }
+    if (arrivalFilter === 'not_arrived') {
+      return bySearch.filter((u) => !isArrived(u.sent_unit_key));
+    }
+    return bySearch;
+  }, [
+    units,
+    appliedSentSearch,
+    sentSearchHaystackByKey,
+    sentStatusFilter,
+    arrivalFilter,
+    isArrived,
+  ]);
+
+  const arrivedInSessionCount = useMemo(
+    () => units.filter((u) => isArrived(u.sent_unit_key)).length,
+    [units, isArrived],
+  );
 
   /** Búsqueda manual en tránsito: con sent pendiente, blueprint primero y precio exacto arriba. */
   const rankedTransitBrowse = useMemo(() => {
@@ -524,7 +553,14 @@ export default function CardtraderReceiptPage() {
       if (res.round_id) {
         navigate(`/incoming/ship-round/${res.round_id}`);
       } else {
-        await queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] });
+        const n = res.stock_created ?? 0;
+        setInfo(
+          `Tanda creada: ${n} carta(s) pasaron a stock disponible.`,
+        );
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] }),
+          queryClient.invalidateQueries({ queryKey: ['stock'] }),
+        ]);
       }
     } catch (e) {
       setError(axiosMsg(e));
@@ -745,9 +781,23 @@ export default function CardtraderReceiptPage() {
       >
         {/* Columna 1: sent units */}
         <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 680, overflow: 'auto' }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            Enviadas (sent) ({filteredSentUnits.length})
-          </Typography>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            spacing={1}
+            sx={{ mb: 0.5 }}
+          >
+            <Typography variant="subtitle2" fontWeight={600}>
+              Enviadas (sent) ({filteredSentUnits.length})
+            </Typography>
+            <Chip
+              size="small"
+              color={arrivedInSessionCount > 0 ? 'success' : 'default'}
+              variant={arrivedInSessionCount > 0 ? 'filled' : 'outlined'}
+              label={`${arrivedInSessionCount}/${units.length} llegadas`}
+            />
+          </Stack>
           <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1 }}>
             <Chip
               label="Todas"
@@ -773,17 +823,53 @@ export default function CardtraderReceiptPage() {
               variant={sentStatusFilter === 'novedad' ? 'filled' : 'outlined'}
               onClick={() => setSentStatusFilter('novedad')}
             />
+            <Chip
+              label="Sin llegar"
+              size="small"
+              clickable
+              color={arrivalFilter === 'not_arrived' ? 'primary' : 'default'}
+              variant={arrivalFilter === 'not_arrived' ? 'filled' : 'outlined'}
+              onClick={() =>
+                setArrivalFilter((prev) =>
+                  prev === 'not_arrived' ? 'all' : 'not_arrived',
+                )
+              }
+            />
+            <Chip
+              label="Llegadas"
+              size="small"
+              clickable
+              color={arrivalFilter === 'arrived' ? 'success' : 'default'}
+              variant={arrivalFilter === 'arrived' ? 'filled' : 'outlined'}
+              onClick={() =>
+                setArrivalFilter((prev) => (prev === 'arrived' ? 'all' : 'arrived'))
+              }
+            />
           </Stack>
-          <HomologSearchField
-            placeholder="Buscar nombre, pedido… (Enter)"
-            onApply={setAppliedSentSearch}
-            sx={{ mb: 1.5 }}
-          />
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <HomologSearchField
+              placeholder="Buscar nombre, pedido… (Enter)"
+              onApply={setAppliedSentSearch}
+              sx={{ flex: 1, mb: 0 }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={filteredSentUnits.every((u) => isArrived(u.sent_unit_key))}
+              onClick={() =>
+                markMany(filteredSentUnits.map((u) => u.sent_unit_key))
+              }
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Marcar visibles
+            </Button>
+          </Stack>
           <Stack spacing={1}>
             {filteredSentUnits.map((u) => {
               const thumbSrc = resolveBlueprintImageSrc(u.blueprint_id, blueprintImages);
               const hasPerfect = perfectMatchBySentKey.get(u.sent_unit_key) === true;
               const isSelected = selectedKey === u.sent_unit_key;
+              const arrived = isArrived(u.sent_unit_key);
               return (
                 <Paper
                   key={u.sent_unit_key}
@@ -800,14 +886,26 @@ export default function CardtraderReceiptPage() {
                       ? '#1565c0'
                       : hasPerfect
                         ? '#1b5e20'
-                        : '#e0e0e0',
+                        : arrived
+                          ? '#a5d6a7'
+                          : '#e0e0e0',
                     bgcolor: isSelected
                       ? '#e3f2fd'
-                      : hasPerfect
-                        ? '#e8f5e9'
-                        : 'transparent',
+                      : arrived
+                        ? '#f1f8e9'
+                        : hasPerfect
+                          ? '#e8f5e9'
+                          : 'transparent',
                   }}
                 >
+                  <Checkbox
+                    size="small"
+                    checked={arrived}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleArrived(u.sent_unit_key)}
+                    inputProps={{ 'aria-label': 'Marcar como llegada' }}
+                    sx={{ p: 0.5, flexShrink: 0 }}
+                  />
                   <HomologCardImage
                     src={thumbSrc}
                     alt={u.name}
@@ -816,7 +914,15 @@ export default function CardtraderReceiptPage() {
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Stack direction="row" justifyContent="space-between" gap={0.5} alignItems="center">
-                      <Typography variant="body2" fontWeight={600} noWrap>
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        noWrap
+                        sx={{
+                          textDecoration: arrived ? 'line-through' : undefined,
+                          color: arrived ? 'text.secondary' : undefined,
+                        }}
+                      >
                         {u.name}
                       </Typography>
                       {hasPerfect && u.status === 'pending' ? (
