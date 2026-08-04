@@ -22,6 +22,7 @@ import {
 } from "./use-stock-review";
 import { ReviewItemMeta } from "./review-item-meta";
 import { sessionScopeLabel, type StockReviewItem } from "./types";
+import { CardThumb } from "../../../components/card-thumb";
 
 type DisplayItem = StockReviewItem & {
   pendingSync: boolean;
@@ -515,15 +516,12 @@ export default function StockReviewVerifyPage() {
                   : "bg-white border-gray-200"
             }`}
           >
-            {item.image_url ? (
-              <img
-                src={item.image_url}
-                alt=""
-                className="w-12 h-auto rounded"
-              />
-            ) : (
-              <div className="w-12 h-16 bg-gray-200 rounded" />
-            )}
+            <CardThumb
+              src={item.image_url}
+              alt={item.card_name || item.card_id}
+              size="md"
+              enlargeOnHover
+            />
             <div className="flex-1 min-w-[180px]">
               <p className="font-medium text-gray-900">
                 {item.card_name || item.card_id}

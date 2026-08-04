@@ -5,6 +5,7 @@ import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
 import { API_BASE, apiUrl } from "../../../config/api";
+import { CardThumb } from "../../../components/card-thumb";
 
 type SaleHistoryItem = {
   _id: string;
@@ -88,18 +89,19 @@ export default function SalesHistory() {
       field: "image_url",
       headerName: "Imagen",
       renderCell: (params) => {
-        if (!params?.row?.stock_info?.image_url) return <span>-</span>;
+        const src = params?.row?.stock_info?.image_url;
         return (
-          <img
-            src={params.row.stock_info.image_url}
-            alt="carta"
-            className="object-contain w-12 h-16"
+          <CardThumb
+            src={src}
+            alt={params?.row?.stock_info?.card_name || "carta"}
+            size="md"
+            enlargeOnHover
           />
         );
       },
       sortable: false,
       filterable: false,
-      width: 80,
+      width: 100,
     },
     {
       field: "card_name",
@@ -377,6 +379,7 @@ export default function SalesHistory() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pagination
+            rowHeight={104}
             disableRowSelectionOnClick
           />
         )}

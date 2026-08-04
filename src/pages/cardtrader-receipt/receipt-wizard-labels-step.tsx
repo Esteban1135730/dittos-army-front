@@ -65,7 +65,7 @@ export function ReceiptWizardLabelsStep({
   const handleRevert = async () => {
     if (!onRevert) return;
     const ok = window.confirm(
-      '¿Deshacer la finalización?\n\nSe eliminará el stock creado y la sesión volverá a abierta.',
+      '¿Deshacer la creación de stock?\n\nSe eliminará el inventario creado y la sesión de homologación volverá a abierta.',
     );
     if (!ok) return;
     setReverting(true);

@@ -10,6 +10,8 @@ export type HomologSession = {
   status: string;
   shipping_total_cop: number | null;
   ship_round_id: string | null;
+  /** Stock creado en create-tanda CT; útil para recuperar pasos PVP/etiquetas. */
+  created_stock_ids?: string[];
   units: SentHomologUnit[];
   summary: {
     total: number;

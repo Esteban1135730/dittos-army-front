@@ -18,6 +18,8 @@ export type ReceiptLine = {
   rareza: string | null;
   collector_number: string | null;
   expansion: string | null;
+  /** CT blueprint; opcional (sesiones antiguas pueden no traerlo). */
+  blueprint_id: number | null;
   quantity_expected: number;
   fx_unit_price: number;
   unit_cost_cop: number;
@@ -147,6 +149,10 @@ function normalizeRawSession(raw: unknown): ReceiptSession | null {
       rareza: (ld['rareza'] as string | null) ?? null,
       collector_number: (ld['collector_number'] as string | null) ?? null,
       expansion: (ld['expansion'] as string | null) ?? null,
+      blueprint_id:
+        ld['blueprint_id'] != null && Number(ld['blueprint_id']) > 0
+          ? Number(ld['blueprint_id'])
+          : null,
       quantity_expected: Number(ld['quantity_expected'] ?? 0),
       fx_unit_price: Number(ld['fx_unit_price'] ?? 0),
       unit_cost_cop: Number(ld['unit_cost_cop'] ?? 0),

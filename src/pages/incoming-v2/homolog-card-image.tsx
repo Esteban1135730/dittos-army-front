@@ -1,4 +1,9 @@
 import { Box, Skeleton, Typography } from '@mui/material';
+import {
+  CARD_THUMB_SIZES,
+  CardThumb,
+  type CardThumbSize,
+} from '../../components/card-thumb';
 
 type HomologCardImageProps = {
   src?: string;
@@ -9,12 +14,20 @@ type HomologCardImageProps = {
   variant?: 'list' | 'detail' | 'candidate';
 };
 
-const VARIANT_SIZES = {
-  list: { width: 44, height: 62 },
-  detail: { width: 180, height: 252 },
-  candidate: { width: 56, height: 78 },
-} as const;
+/** Map legacy homolog variants → shared CardThumb sizes (larger / readable). */
+const VARIANT_TO_SIZE: Record<
+  NonNullable<HomologCardImageProps['variant']>,
+  CardThumbSize
+> = {
+  list: 'md',
+  candidate: 'lg',
+  detail: 'xl',
+};
 
+/**
+ * @deprecated Prefer `CardThumb` from `components/card-thumb`.
+ * Kept for existing incoming/receipt imports; sizes now match CardThumb.
+ */
 export function HomologCardImage(props: HomologCardImageProps) {
   const {
     src,
@@ -25,52 +38,60 @@ export function HomologCardImage(props: HomologCardImageProps) {
     height: heightProp,
   } = props;
 
-  const { width, height } = VARIANT_SIZES[variant];
-  const w = widthProp ?? width;
-  const h = heightProp ?? height;
+  const size = VARIANT_TO_SIZE[variant];
+  const preset = CARD_THUMB_SIZES[size];
+  const w = widthProp ?? preset.width;
+  const h = heightProp ?? preset.height;
 
-  return (
-    <Box
-      sx={{
-        width: w,
-        minWidth: w,
-        height: h,
-        borderRadius: 1,
-        overflow: 'hidden',
-        bgcolor: 'grey.100',
-        border: '1px solid',
-        borderColor: 'grey.200',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}
-    >
-      {loading ? (
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          width: w,
+          minWidth: w,
+          height: h,
+          borderRadius: 1,
+          overflow: 'hidden',
+          flexShrink: 0,
+        }}
+      >
         <Skeleton variant="rounded" width={w} height={h} />
-      ) : src ? (
-        <Box
-          component="img"
-          src={src}
-          alt={alt}
-          loading="lazy"
-          sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            display: 'block',
-            bgcolor: '#fff',
-          }}
-        />
-      ) : (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ px: 0.5, textAlign: 'center', fontSize: variant === 'list' ? 9 : 11 }}
-        >
+      </Box>
+    );
+  }
+
+  if (!src && variant === 'detail') {
+    return (
+      <Box
+        sx={{
+          width: w,
+          minWidth: w,
+          height: h,
+          borderRadius: 1,
+          bgcolor: 'grey.100',
+          border: '1px solid',
+          borderColor: 'grey.200',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, textAlign: 'center' }}>
           Sin imagen
         </Typography>
-      )}
-    </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <CardThumb
+      src={src}
+      alt={alt}
+      size={size}
+      width={widthProp}
+      height={heightProp}
+      enlargeOnHover={variant === 'list' || variant === 'candidate'}
+    />
   );
 }

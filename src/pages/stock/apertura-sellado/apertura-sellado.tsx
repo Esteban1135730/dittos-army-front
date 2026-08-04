@@ -7,6 +7,7 @@ import {
 } from "../../../constants/item-rareza";
 
 import { API_BASE as API } from "../../../config/api";
+import { CardThumb } from "../../../components/card-thumb";
 
 export type CartaBusquedaDirecta = {
   id: string;
@@ -333,15 +334,12 @@ export default function AperturaSelladoPage() {
               className="flex items-center gap-3 p-3 text-sm"
             >
               <span className="text-gray-400 w-6">{idx + 1}</span>
-              {line.image_url ? (
-                <img
-                  src={line.image_url}
-                  alt=""
-                  className="w-10 h-14 object-contain"
-                />
-              ) : (
-                <div className="w-10 h-14 bg-gray-100 rounded shrink-0" />
-              )}
+              <CardThumb
+                src={line.image_url}
+                alt={line.card_name}
+                size="md"
+                enlargeOnHover
+              />
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">
                   {line.card_name}

@@ -8,6 +8,9 @@ type HomologCreateTandaPanelProps = {
   novedadStockPending?: number;
   verifiedCount?: number;
   onCreate: (shippingTotalCop: number) => void | Promise<void>;
+  title?: string;
+  description?: string;
+  createButtonLabel?: string;
 };
 
 /** Bloque crear tanda con input de envío local. */
@@ -18,6 +21,9 @@ export function HomologCreateTandaPanel({
   novedadStockPending = 0,
   verifiedCount = 0,
   onCreate,
+  title = 'Paso 2 · Crear tanda (solo verificadas)',
+  description = 'Las cartas homologadas con inventario en camino entran en la tanda de llegada. Las novedades sin inventario ya deben estar en stock (paso 1).',
+  createButtonLabel,
 }: HomologCreateTandaPanelProps) {
   const [shippingInput, setShippingInput] = useState('');
   const [shippingError, setShippingError] = useState<string | null>(null);
@@ -41,11 +47,10 @@ export function HomologCreateTandaPanel({
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Paso 2 · Crear tanda (solo verificadas)
+        {title}
       </Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-        Las cartas homologadas con inventario en camino entran en la tanda de llegada. Las
-        novedades sin inventario ya deben estar en stock (paso 1).
+        {description}
       </Typography>
       <TextField
         fullWidth
@@ -79,7 +84,7 @@ export function HomologCreateTandaPanel({
               ? `Pasa ${novedadStockPending} novedad(es) a stock`
               : verifiedCount === 0
                 ? 'Sin cartas verificadas'
-                : 'Crear tanda'}
+                : (createButtonLabel ?? 'Crear tanda')}
       </Button>
       {pendingCount > 0 ? (
         <Typography variant="caption" color="text.secondary" display="block" mt={1}>

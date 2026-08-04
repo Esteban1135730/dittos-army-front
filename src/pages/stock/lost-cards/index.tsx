@@ -3,6 +3,7 @@ import axios from "axios";
 import { apiUrl } from "../../../config/api";
 import type { StockLostRow } from "../revision/types";
 import { operationalRarezaLabel } from "../../../constants/item-rareza";
+import { CardThumb } from "../../../components/card-thumb";
 
 export default function StockLostCardsPage() {
   const { data, isLoading, error } = useQuery<{ items: StockLostRow[] }>({
@@ -50,15 +51,12 @@ export default function StockLostCardsPage() {
               key={item.stock_id}
               className="flex flex-wrap items-center gap-3 p-3 rounded-lg border bg-white border-gray-200"
             >
-              {item.image_url ? (
-                <img
-                  src={item.image_url}
-                  alt=""
-                  className="w-12 h-auto rounded"
-                />
-              ) : (
-                <div className="w-12 h-16 bg-gray-200 rounded" />
-              )}
+              <CardThumb
+                src={item.image_url}
+                alt={item.card_name || item.card_id}
+                size="md"
+                enlargeOnHover
+              />
               <div className="flex-1 min-w-[180px]">
                 <p className="font-medium text-gray-900">
                   {item.card_name || item.card_id}

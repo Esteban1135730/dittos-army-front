@@ -55,6 +55,7 @@ export type ArrivalTracking = {
   toggleArrived: (key: string) => void;
   markArrived: (key: string) => void;
   markMany: (keys: readonly string[]) => void;
+  unmarkMany: (keys: readonly string[]) => void;
   clearArrived: () => void;
 };
 
@@ -130,6 +131,22 @@ export function useArrivalTracking(sessionId: string | undefined): ArrivalTracki
     [arrivedKeys, persist],
   );
 
+  const unmarkMany = useCallback(
+    (keys: readonly string[]) => {
+      if (keys.length === 0) return;
+      const next = new Set(arrivedKeys);
+      let changed = false;
+      for (const key of keys) {
+        if (next.has(key)) {
+          next.delete(key);
+          changed = true;
+        }
+      }
+      if (changed) persist(next);
+    },
+    [arrivedKeys, persist],
+  );
+
   const clearArrived = useCallback(() => {
     persist(new Set());
   }, [persist]);
@@ -142,6 +159,7 @@ export function useArrivalTracking(sessionId: string | undefined): ArrivalTracki
       toggleArrived,
       markArrived,
       markMany,
+      unmarkMany,
       clearArrived,
     }),
     [
@@ -150,6 +168,7 @@ export function useArrivalTracking(sessionId: string | undefined): ArrivalTracki
       toggleArrived,
       markArrived,
       markMany,
+      unmarkMany,
       clearArrived,
     ],
   );

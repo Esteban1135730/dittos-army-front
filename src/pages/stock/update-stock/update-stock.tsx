@@ -293,18 +293,33 @@ export default function ModificarStock() {
 
           <div>
             <label className="block text-sm font-medium">Estado</label>
-            <select
-              name="card_state"
-              value={form.card_state}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border rounded"
-            >
-              <option value="mint">Mint</option>
-              <option value="near_mint">Near Mint</option>
-              <option value="played">Played</option>
-              <option value="good">Good</option>
-              <option value="poor">Poor</option>
-            </select>
+            {form.card_state === "propiedad" ? (
+              <>
+                <input
+                  type="text"
+                  readOnly
+                  value="Propiedad"
+                  className="w-full px-3 py-2 border rounded bg-gray-100 text-gray-700"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Esta carta está en propiedad. No cambies el estado aquí; usa
+                  «Devolver a stock» o «Eliminar» desde /propiedad.
+                </p>
+              </>
+            ) : (
+              <select
+                name="card_state"
+                value={form.card_state}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border rounded"
+              >
+                <option value="mint">Mint</option>
+                <option value="near_mint">Near Mint</option>
+                <option value="played">Played</option>
+                <option value="good">Good</option>
+                <option value="poor">Poor</option>
+              </select>
+            )}
           </div>
 
           <div>

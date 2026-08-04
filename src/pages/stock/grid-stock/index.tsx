@@ -28,6 +28,7 @@ import {
   isQuantityProduct,
   resolveStockImageUrl,
 } from "../../../constants/bulk-product";
+import { CardThumb } from "../../../components/card-thumb";
 import { ensureBulkProduct } from "../../../api/ensure-bulk";
 import { PvpInlineCell } from "./pvp-inline-cell";
 import { API_BASE, apiUrl } from "../../../config/api";
@@ -508,19 +509,18 @@ export default function StockGrid() {
       renderCell: (params) => {
         const row = params.row as StockItem;
         const src = resolveStockImageUrl(row.card_id, params.value as string);
-        return src ? (
-          <img
+        return (
+          <CardThumb
             src={src}
-            alt="carta"
-            className="object-contain w-12 h-16"
+            alt={row.card_name || "carta"}
+            size="md"
+            enlargeOnHover
           />
-        ) : (
-          <span className="text-gray-400 text-xs">—</span>
         );
       },
       sortable: false,
       filterable: false,
-      width: 80,
+      width: 100,
     },
     {
       field: "card_name",
@@ -1363,6 +1363,7 @@ export default function StockGrid() {
               columns={columns}
               getRowId={(row) => row._id}
               pageSizeOptions={[20, 30, 40]}
+              rowHeight={104}
               initialState={{
                 pagination: {
                   paginationModel: { pageSize: 20, page: 0 },

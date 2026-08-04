@@ -30,6 +30,7 @@ import { ScannerErrorBoundary } from "../../components/barcode-scanner/scanner-e
 import { apiUrl } from "../../config/api";
 import { ensureBulkProduct } from "../../api/ensure-bulk";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
+import { CardThumb } from "../../components/card-thumb";
 import { parseStockQrPayloadMulti } from "../../modules/stock-barcode";
 import {
   rejectReasonMessage,
@@ -559,23 +560,12 @@ function VentaAsistidaQrContent() {
                       >
                         <TableCell>
                           <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                            {img ? (
-                              <Box
-                                component="img"
-                                src={img}
-                                alt=""
-                                sx={{
-                                  width: 44,
-                                  height: 62,
-                                  objectFit: "contain",
-                                  bgcolor: "grey.100",
-                                  borderRadius: 1,
-                                  border: "1px solid",
-                                  borderColor: "grey.200",
-                                  flexShrink: 0,
-                                }}
-                              />
-                            ) : null}
+                            <CardThumb
+                              src={img}
+                              alt={line.card_name || "carta"}
+                              size="lg"
+                              enlargeOnHover
+                            />
                             <Box minWidth={0}>
                               <Typography variant="body2" fontWeight={700} noWrap>
                                 {line.card_name || "Sin nombre"}

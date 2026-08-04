@@ -4,6 +4,7 @@ import { formatCOP } from "../../../utils/convert";
 import { useState } from "react";
 import { useExchangeRates } from "../../../utils/tasa";
 import { apiUrl } from "../../../config/api";
+import { CardThumb } from "../../../components/card-thumb";
 
 type OnlyInStockRow = {
   _id: string;
@@ -238,15 +239,12 @@ export default function SalesConsistency() {
                   {onlyInStock.map((row) => (
                     <tr key={row._id} className="border-b border-gray-100 align-middle">
                       <td className="p-2">
-                        {row.image_url ? (
-                          <img
-                            src={row.image_url}
-                            alt={row.card_name ?? row.card_id}
-                            className="w-12 h-16 object-contain rounded border"
-                          />
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
+                        <CardThumb
+                          src={row.image_url}
+                          alt={row.card_name ?? row.card_id ?? "carta"}
+                          size="md"
+                          enlargeOnHover
+                        />
                       </td>
                       <td className="p-2 font-medium text-gray-800">
                         {row.card_name || row.card_id || "—"}
@@ -392,13 +390,11 @@ export default function SalesConsistency() {
               registrar la venta en la tabla Sales.
             </p>
             <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-              {modalPrecioManual.image_url && (
-                <img
-                  src={modalPrecioManual.image_url}
-                  alt={modalPrecioManual.card_name ?? modalPrecioManual.card_id}
-                  className="w-12 h-16 object-contain rounded border"
-                />
-              )}
+              <CardThumb
+                src={modalPrecioManual.image_url}
+                alt={modalPrecioManual.card_name ?? modalPrecioManual.card_id}
+                size="lg"
+              />
               <div>
                 <p className="font-medium text-gray-800">
                   {modalPrecioManual.card_name || modalPrecioManual.card_id}

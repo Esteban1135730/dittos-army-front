@@ -38,6 +38,7 @@ import {
   incomingVariantGroupKey,
   weightedAverageUnitCostCop,
 } from "../incoming/incoming-variant-group";
+import { CardThumb } from "../../components/card-thumb";
 import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
@@ -561,14 +562,14 @@ export default function ReservarCartasPage() {
     {
       field: "image_url",
       headerName: "",
-      width: 72,
+      width: 100,
       sortable: false,
       renderCell: (params) => (
-        <Box
-          component="img"
+        <CardThumb
           src={params.value as string}
           alt=""
-          sx={{ width: 44, height: 60, objectFit: "contain", borderRadius: 1, bgcolor: "grey.100" }}
+          size="md"
+          enlargeOnHover
         />
       ),
     },
@@ -679,14 +680,14 @@ export default function ReservarCartasPage() {
     {
       field: "image_url",
       headerName: "",
-      width: 72,
+      width: 100,
       sortable: false,
       renderCell: (params) => (
-        <Box
-          component="img"
+        <CardThumb
           src={params.value as string}
           alt=""
-          sx={{ width: 44, height: 60, objectFit: "contain", borderRadius: 1, bgcolor: "grey.100" }}
+          size="md"
+          enlargeOnHover
         />
       ),
     },
@@ -1101,7 +1102,7 @@ export default function ReservarCartasPage() {
                   initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
                   disableRowSelectionOnClick
                   autoHeight
-                  rowHeight={68}
+                  rowHeight={104}
                   sx={{ border: 0 }}
                 />
               </Box>
@@ -1134,11 +1135,11 @@ export default function ReservarCartasPage() {
                 alignItems={{ sm: "center" }}
                 sx={{ py: 1, borderBottom: 1, borderColor: "divider" }}
               >
-                <Box
-                  component="img"
+                <CardThumb
                   src={head?.image_url || undefined}
-                  alt=""
-                  sx={{ width: 44, height: 60, objectFit: "contain", borderRadius: 1, bgcolor: "background.paper" }}
+                  alt={head?.card_name ?? "Carta"}
+                  size="md"
+                  enlargeOnHover
                 />
                 <Box flex={1} minWidth={0}>
                   <Typography fontWeight={600} noWrap title={head?.card_name}>
@@ -1209,7 +1210,7 @@ export default function ReservarCartasPage() {
                   initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
                   disableRowSelectionOnClick
                   autoHeight
-                  rowHeight={68}
+                  rowHeight={104}
                   sx={{ border: 0 }}
                 />
               </Box>

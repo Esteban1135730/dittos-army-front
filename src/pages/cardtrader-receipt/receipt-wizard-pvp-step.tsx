@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -16,12 +16,13 @@ import axios from 'axios';
 import { apiUrl } from '../../config/api';
 import type { StockListItem } from '../../types/stock';
 import { useExchangeRates } from '../../utils/tasa';
-import type { ReceiptLine } from './use-receipt-session';
+import { CardThumb } from '../../components/card-thumb';
+import { resolvePanelImageSrc } from '../incoming-v2/use-homolog-blueprint-images';
 
-function rarezaFromLine(line: ReceiptLine): string | null {
+function rarezaFromStock(item: StockListItem): string | null {
   const rz =
-    line.rareza != null && String(line.rareza).trim() !== ''
-      ? String(line.rareza).trim()
+    item.rareza != null && String(item.rareza).trim() !== ''
+      ? String(item.rareza).trim()
       : '';
   return rz === '' ? null : rz;
 }
@@ -38,27 +39,27 @@ function pvpStoredCop(
 }
 
 type PvpRowProps = {
-  line: ReceiptLine;
-  stockItem: StockListItem | undefined;
+  item: StockListItem;
   sessionId: string;
   onOutcome: (message: string, severity: 'success' | 'error') => void;
 };
 
-function ReceiptPvpRow({ line, stockItem, sessionId, onOutcome }: PvpRowProps) {
+function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
   const { convert } = useExchangeRates();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const storedCop = Math.round(pvpStoredCop(stockItem, convert));
+  const storedCop = Math.round(pvpStoredCop(item, convert));
   const [draft, setDraft] = useState(storedCop > 0 ? String(storedCop) : '');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (busy) return;
     setDraft(storedCop > 0 ? String(storedCop) : '');
-  }, [storedCop, busy, line.stock_id]);
+  }, [storedCop, busy, item._id]);
 
   const hasPvp = storedCop > 0;
   const returnPath = `/cardtrader-receipt?step=3&session=${encodeURIComponent(sessionId)}`;
+  const imageSrc = resolvePanelImageSrc(item.image_url) || item.image_url;
 
   const savePvp = async () => {
     if (busy) return;
@@ -80,10 +81,10 @@ function ReceiptPvpRow({ line, stockItem, sessionId, onOutcome }: PvpRowProps) {
     setBusy(true);
     try {
       await axios.post(apiUrl('/pvp'), {
-        card_id: line.card_id,
+        card_id: item.card_id,
         pvp: nextCop,
         currency: 'COP',
-        rareza: rarezaFromLine(line),
+        rareza: rarezaFromStock(item),
       });
       onOutcome('PVP actualizado.', 'success');
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
@@ -113,34 +114,22 @@ function ReceiptPvpRow({ line, stockItem, sessionId, onOutcome }: PvpRowProps) {
         borderColor: 'divider',
       }}
     >
-      <Box
-        sx={{
-          width: 48,
-          height: 68,
-          bgcolor: 'grey.100',
-          borderRadius: 0.5,
-          overflow: 'hidden',
-          flexShrink: 0,
-        }}
-      >
-        {line.image_url ? (
-          <img
-            src={line.image_url}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : null}
-      </Box>
+      <CardThumb
+        src={imageSrc}
+        alt={item.card_name}
+        size="lg"
+        enlargeOnHover
+      />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" noWrap>
-          {line.card_name}
+          {item.card_name}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block">
-          {[line.rareza, line.language].filter(Boolean).join(' · ')}
+          {[item.rareza, item.language].filter(Boolean).join(' · ')}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Costo unitario: COP{' '}
-          {Math.round(line.unit_cost_cop).toLocaleString('es-CO')}
+          {Math.round(item.unity_cost ?? 0).toLocaleString('es-CO')}
         </Typography>
       </Box>
       <Stack direction="row" spacing={1} alignItems="center" flexShrink={0}>
@@ -171,7 +160,7 @@ function ReceiptPvpRow({ line, stockItem, sessionId, onOutcome }: PvpRowProps) {
           variant="text"
           onClick={() =>
             navigate(
-              `/add-pvp/${line.card_id}?return=${encodeURIComponent(returnPath)}`,
+              `/add-pvp/${item.card_id}?return=${encodeURIComponent(returnPath)}`,
             )
           }
         >
@@ -184,7 +173,7 @@ function ReceiptPvpRow({ line, stockItem, sessionId, onOutcome }: PvpRowProps) {
 
 type ReceiptWizardPvpStepProps = {
   sessionId: string;
-  lines: ReceiptLine[];
+  stockIds: string[];
   onContinue: () => void;
   onSkip: () => void;
   onRevert?: () => Promise<void>;
@@ -192,7 +181,7 @@ type ReceiptWizardPvpStepProps = {
 
 export function ReceiptWizardPvpStep({
   sessionId,
-  lines,
+  stockIds,
   onContinue,
   onSkip,
   onRevert,
@@ -205,9 +194,7 @@ export function ReceiptWizardPvpStep({
   }>({ open: false, message: '', severity: 'success' });
   const [reverting, setReverting] = useState(false);
 
-  const receivedWithStock = lines.filter(
-    (l) => l.status === 'received' && l.stock_id,
-  );
+  const stockIdSet = useMemo(() => new Set(stockIds), [stockIds]);
 
   const { data: stock = [], isLoading } = useQuery<StockListItem[]>({
     queryKey: ['stock'],
@@ -215,19 +202,25 @@ export function ReceiptWizardPvpStep({
       const res = await axios.get(apiUrl('/stock'));
       return Array.isArray(res.data) ? res.data : [];
     },
+    enabled: stockIds.length > 0,
   });
 
-  const stockById = new Map(stock.map((s) => [s._id, s]));
+  const items = useMemo(
+    () =>
+      stockIds
+        .map((id) => stock.find((s) => s._id === id))
+        .filter((s): s is StockListItem => Boolean(s)),
+    [stock, stockIds],
+  );
 
-  const withoutPvp = receivedWithStock.filter((l) => {
-    const item = l.stock_id ? stockById.get(l.stock_id) : undefined;
-    return pvpStoredCop(item, convert) <= 0;
-  });
+  const missingCount = stockIds.length - items.length;
+
+  const withoutPvp = items.filter((item) => pvpStoredCop(item, convert) <= 0);
 
   const handleRevert = async () => {
     if (!onRevert) return;
     const ok = window.confirm(
-      '¿Deshacer la finalización?\n\nSe eliminará el stock creado y la sesión volverá a abierta.',
+      '¿Deshacer la creación de stock?\n\nSe eliminará el inventario creado y la sesión de homologación volverá a abierta.',
     );
     if (!ok) return;
     setReverting(true);
@@ -244,25 +237,29 @@ export function ReceiptWizardPvpStep({
         Asignar PVP
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Precio de venta en COP por línea recibida. Puedes saltar este paso.
+        Precio de venta en COP para el stock creado del envío. Puedes saltar este
+        paso.
       </Typography>
 
-      {receivedWithStock.length === 0 ? (
+      {stockIds.length === 0 ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          No se creó inventario (solo inconsistencias). Continúa o termina el
-          wizard.
+          No se creó inventario (solo novedades u otras exclusiones). Continúa o
+          termina el wizard.
         </Alert>
       ) : isLoading ? (
         <CircularProgress size={28} />
       ) : (
         <Box sx={{ mb: 2 }}>
-          {receivedWithStock.map((line) => (
+          {missingCount > 0 && (
+            <Alert severity="warning" sx={{ mb: 1 }}>
+              {missingCount} stock_id(s) no encontrados en el listado actual
+              ({stockIdSet.size} esperados).
+            </Alert>
+          )}
+          {items.map((item) => (
             <ReceiptPvpRow
-              key={line.line_id}
-              line={line}
-              stockItem={
-                line.stock_id ? stockById.get(line.stock_id) : undefined
-              }
+              key={item._id}
+              item={item}
               sessionId={sessionId}
               onOutcome={(message, severity) =>
                 setSnackbar({ open: true, message, severity })
@@ -272,9 +269,9 @@ export function ReceiptWizardPvpStep({
         </Box>
       )}
 
-      {!isLoading && withoutPvp.length > 0 && receivedWithStock.length > 0 && (
+      {!isLoading && withoutPvp.length > 0 && items.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          {withoutPvp.length} línea(s) sin PVP &gt; 0. Las etiquetas QR no serán
+          {withoutPvp.length} unidad(es) sin PVP {'>'} 0. Las etiquetas QR no serán
           elegibles hasta asignar precio.
         </Alert>
       )}

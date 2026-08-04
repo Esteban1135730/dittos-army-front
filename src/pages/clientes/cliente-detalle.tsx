@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import type { StockListItem } from "../../types/stock";
 import { formatCOP } from "../../utils/convert";
+import { CardThumb } from "../../components/card-thumb";
 import ClienteFormDialog from "./cliente-form-dialog";
 import {
   API_CLIENT,
@@ -549,16 +550,12 @@ export default function ClienteDetallePage() {
                   "&:last-of-type": { borderBottom: 0 },
                 }}
               >
-                {st?.image_url ? (
-                  <Box
-                    component="img"
-                    src={st.image_url}
-                    alt=""
-                    sx={{ width: 48, height: 64, objectFit: "contain", borderRadius: 1, bgcolor: "grey.100" }}
-                  />
-                ) : (
-                  <Box sx={{ width: 48, height: 64, bgcolor: "grey.100", borderRadius: 1 }} />
-                )}
+                <CardThumb
+                  src={st?.image_url}
+                  alt={st?.card_name ?? "Carta"}
+                  size="md"
+                  enlargeOnHover
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
                     <Typography fontWeight={600}>{st?.card_name ?? "Carta"}</Typography>

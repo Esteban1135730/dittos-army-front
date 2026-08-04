@@ -10,21 +10,28 @@ import {
 } from '@mui/material';
 import type { ReceiptLine } from './use-receipt-session';
 import { INCONSISTENCY_LABELS } from './use-receipt-session';
+import { CardThumb } from '../../components/card-thumb';
 
 type ReceiptLineRowProps = {
   line: ReceiptLine;
+  /** URL ya resuelta (image_url o blueprint CT). */
+  imageSrc?: string | null;
   onReceive: (lineId: string, qty: number) => Promise<void>;
   onInconsistency: (line: ReceiptLine) => void;
   onUndo: (lineId: string) => Promise<void>;
   disabled?: boolean;
+  /** Tamaño del thumb; default `lg` para apoyo visual en recepción. */
+  thumbSize?: 'md' | 'lg' | 'xl';
 };
 
 export function ReceiptLineRow({
   line,
+  imageSrc,
   onReceive,
   onInconsistency,
   onUndo,
   disabled = false,
+  thumbSize = 'lg',
 }: ReceiptLineRowProps) {
   const [qty, setQty] = useState<number>(line.quantity_expected);
   const [loading, setLoading] = useState(false);
@@ -60,7 +67,7 @@ export function ReceiptLineRow({
     }
   };
 
-  const imageSrc = line.image_url || null;
+  const resolvedSrc = imageSrc || line.image_url || null;
 
   return (
     <Box
@@ -74,35 +81,12 @@ export function ReceiptLineRow({
         '&:hover': { bgcolor: 'grey.50' },
       }}
     >
-      {/* Card image */}
-      <Box
-        sx={{
-          flexShrink: 0,
-          width: 48,
-          height: 68,
-          bgcolor: 'grey.100',
-          borderRadius: 0.5,
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt={line.card_name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        ) : (
-          <Typography variant="caption" color="text.disabled" align="center">
-            Sin imagen
-          </Typography>
-        )}
-      </Box>
+      <CardThumb
+        src={resolvedSrc}
+        alt={line.card_name}
+        size={thumbSize}
+        enlargeOnHover
+      />
 
       {/* Card info */}
       <Box sx={{ flex: 1, minWidth: 0 }}>

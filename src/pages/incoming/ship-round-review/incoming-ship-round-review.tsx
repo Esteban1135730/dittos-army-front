@@ -9,6 +9,7 @@ import {
   weightedAverageUnitCostCop,
 } from "../../incoming/incoming-variant-group";
 import { API_INCOMING } from "../../clientes/cliente-types";
+import { CardThumb } from "../../../components/card-thumb";
 
 type IncomingShipRoundReviewItem = {
   batch_item_id: string;
@@ -384,14 +385,15 @@ export default function IncomingShipRoundReviewPage() {
       {
         field: "image_url",
         headerName: "",
-        width: 76,
+        width: 100,
         sortable: false,
         filterable: false,
         renderCell: (p) => (
-          <img
+          <CardThumb
             src={p.row.ref.image_url}
-            alt=""
-            className="w-11 h-14 object-contain border rounded bg-gray-50"
+            alt={p.row.ref.card_name}
+            size="md"
+            enlargeOnHover
           />
         ),
       },
@@ -631,6 +633,7 @@ export default function IncomingShipRoundReviewPage() {
               rows={groupedFiltrados}
               columns={columns}
               getRowId={(row) => row.id}
+              rowHeight={104}
               getRowClassName={(params) => {
                 const g = params.row as GroupedShipRoundRow;
                 const arrived = sumArrivedGroup(g.lines);
