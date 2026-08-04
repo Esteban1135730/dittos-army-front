@@ -12,7 +12,7 @@ import {
   Snackbar,
 } from "@mui/material";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -24,6 +24,11 @@ import {
   STOCK_TAG_VALUES,
   type StockTagId,
 } from "../../../constants/stock-tags";
+import {
+  isQuantityProduct,
+  resolveStockImageUrl,
+} from "../../../constants/bulk-product";
+import { ensureBulkProduct } from "../../../api/ensure-bulk";
 import { PvpInlineCell } from "./pvp-inline-cell";
 import { API_BASE, apiUrl } from "../../../config/api";
 import {
@@ -138,6 +143,11 @@ export default function StockGrid() {
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
   const [ventaStockId, setVentaStockId] = useState<string | null>(null);
   const [ventaCardId, setVentaCardId] = useState<string | null>(null);
+  const [ventaProductKind, setVentaProductKind] = useState<"unit" | "quantity">(
+    "unit",
+  );
+  const [ventaMaxQty, setVentaMaxQty] = useState(1);
+  const [ventaQty, setVentaQty] = useState(1);
   const [precioVenta, setPrecioVenta] = useState<number | "">("");
   const [vendiendo, setVendiendo] = useState(false);
   const [errorVenta, setErrorVenta] = useState("");
@@ -155,6 +165,18 @@ export default function StockGrid() {
 
   const toast = (message: string, severity: "success" | "error") =>
     setSnackbar({ open: true, message, severity });
+
+  useEffect(() => {
+    void ensureBulkProduct().then((r) => {
+      if (!r.ok) {
+        toast(r.error ?? "No se pudo asegurar el SKU bulk", "error");
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+      }
+    });
+    // Solo al montar la grilla.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     data: stock = [],
@@ -317,10 +339,23 @@ export default function StockGrid() {
     }
   };
 
-  const handleAbrirModalVenta = (stockId: string, cardId: string, pvp?: number, pvpCurrency?: string) => {
-    setVentaStockId(stockId);
-    setVentaCardId(cardId);
+  const handleAbrirModalVenta = (row: StockItem) => {
+    setVentaStockId(row._id);
+    setVentaCardId(row.card_id);
+    const isQty = isQuantityProduct({
+      product_kind: row.product_kind,
+      card_id: row.card_id,
+    });
+    setVentaProductKind(isQty ? "quantity" : "unit");
+    const maxQ =
+      isQty && typeof row.quantity === "number" && row.quantity > 0
+        ? row.quantity
+        : 1;
+    setVentaMaxQty(maxQ);
+    setVentaQty(1);
 
+    const pvp = row.pvp;
+    const pvpCurrency = row.pvp_currency;
     // Si existe PVP, convertirlo a COP y establecerlo como valor por defecto
     if (pvp && pvp > 0 && pvpCurrency) {
       let pvpEnCOP = 0;
@@ -344,6 +379,9 @@ export default function StockGrid() {
     setMostrarModalVenta(false);
     setVentaStockId(null);
     setVentaCardId(null);
+    setVentaProductKind("unit");
+    setVentaMaxQty(1);
+    setVentaQty(1);
     setPrecioVenta("");
     setErrorVenta("");
   };
@@ -420,21 +458,40 @@ export default function StockGrid() {
       return;
     }
 
+    const qty =
+      ventaProductKind === "quantity" ? Math.floor(Number(ventaQty)) : 1;
+    if (!Number.isInteger(qty) || qty < 1) {
+      setErrorVenta("La cantidad debe ser un entero >= 1.");
+      return;
+    }
+    if (ventaProductKind === "quantity" && qty > ventaMaxQty) {
+      setErrorVenta(`Stock insuficiente (disponible: ${ventaMaxQty}).`);
+      return;
+    }
+
     try {
       setVendiendo(true);
       setErrorVenta("");
-      await axios.post(apiUrl("/sales/sell"), {
+      const res = await axios.post(apiUrl("/sales/sell"), {
         stock_id: ventaStockId,
         card_id: ventaCardId,
         amount_cop: Number(precioVenta),
         notes: "Venta registrada desde inventario",
+        quantity: qty,
       });
+      if (res.data?.success === false) {
+        setErrorVenta(
+          res.data?.message ||
+            "No fue posible registrar la venta. Intenta más tarde.",
+        );
+        return;
+      }
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       handleCerrarModalVenta();
     } catch (error: any) {
       setErrorVenta(
         error?.response?.data?.message ||
-        "No fue posible registrar la venta. Intenta más tarde."
+          "No fue posible registrar la venta. Intenta más tarde.",
       );
     } finally {
       setVendiendo(false);
@@ -445,13 +502,19 @@ export default function StockGrid() {
     {
       field: "image_url",
       headerName: "Imagen",
-      renderCell: (params) => (
-        <img
-          src={params.value}
-          alt="carta"
-          className="object-contain w-12 h-16"
-        />
-      ),
+      renderCell: (params) => {
+        const row = params.row as StockItem;
+        const src = resolveStockImageUrl(row.card_id, params.value as string);
+        return src ? (
+          <img
+            src={src}
+            alt="carta"
+            className="object-contain w-12 h-16"
+          />
+        ) : (
+          <span className="text-gray-400 text-xs">—</span>
+        );
+      },
       sortable: false,
       filterable: false,
       width: 80,
@@ -469,6 +532,27 @@ export default function StockGrid() {
           )}
         </span>
       ),
+    },
+    {
+      field: "quantity",
+      headerName: "Cant.",
+      width: 90,
+      renderCell: (params) => {
+        const row = params.row as StockItem;
+        if (
+          !isQuantityProduct({
+            product_kind: row.product_kind,
+            card_id: row.card_id,
+          })
+        ) {
+          return <span className="text-gray-400">—</span>;
+        }
+        return (
+          <span className="font-semibold text-gray-800">
+            {typeof row.quantity === "number" ? row.quantity : 0}
+          </span>
+        );
+      },
     },
     {
       field: "rareza",
@@ -697,16 +781,16 @@ export default function StockGrid() {
       renderCell: (params) => (
         <button
           onClick={() =>
-            handleAbrirModalVenta(
-              params.row._id,
-              params.row.card_id,
-              params.row.pvp,
-              params.row.pvp_currency
-            )
+            handleAbrirModalVenta(params.row as StockItem)
           }
           disabled={
             params.row.card_state === "vendida" ||
-            params.row.card_state === "propiedad"
+            params.row.card_state === "propiedad" ||
+            (isQuantityProduct({
+              product_kind: params.row.product_kind,
+              card_id: params.row.card_id,
+            }) &&
+              !(typeof params.row.quantity === "number" && params.row.quantity > 0))
           }
           className={`px-3 py-1 rounded ${params.row.card_state === "vendida" ||
               params.row.card_state === "propiedad"
@@ -1180,8 +1264,30 @@ export default function StockGrid() {
                 Registrar Venta
               </h2>
               <p className="text-sm text-gray-600 mb-4">
-                Ingresa el precio en el que se vendió la carta (en COP):
+                Ingresa el precio unitario de venta (en COP)
+                {ventaProductKind === "quantity"
+                  ? " y la cantidad de unidades."
+                  : ":"}
               </p>
+              {ventaProductKind === "quantity" ? (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cantidad (máx. {ventaMaxQty})
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={ventaMaxQty}
+                    step={1}
+                    value={ventaQty}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setVentaQty(Number.isFinite(n) ? n : 1);
+                    }}
+                    className="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              ) : null}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Precio de Venta (COP)
@@ -1219,7 +1325,7 @@ export default function StockGrid() {
                   }}
                   className="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Ej: 50000 o 50.000"
-                  autoFocus
+                  autoFocus={ventaProductKind !== "quantity"}
                 />
               </div>
               {errorVenta && (

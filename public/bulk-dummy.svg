@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="245" height="342" viewBox="0 0 245 342" role="img" aria-label="bulk">
+  <rect width="245" height="342" rx="12" fill="#1e293b"/>
+  <rect x="14" y="14" width="217" height="314" rx="8" fill="#334155" stroke="#64748b" stroke-width="2"/>
+  <text x="122.5" y="170" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#e2e8f0">bulk</text>
+  <text x="122.5" y="210" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#94a3b8">SKU cantidad</text>
+</svg>

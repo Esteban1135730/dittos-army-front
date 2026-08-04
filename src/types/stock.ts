@@ -46,5 +46,7 @@ export type StockListItem = {
   rareza?: string | null;
   tags?: string[];
   incoming_notes?: string;
+  product_kind?: "unit" | "quantity";
+  quantity?: number | null;
 };
 

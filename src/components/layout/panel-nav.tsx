@@ -72,8 +72,8 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
           <span className="ml-1 text-[10px] uppercase text-amber-400">legacy</span>
         </NavLink>
         <NavLink to="/incoming-v2" className={subLinkClass} onNavigate={onNavigate}>
-          <span className="text-gray-400">Compras v2</span>
-          <span className="ml-1 text-[10px] uppercase text-amber-400">legacy</span>
+          <span className="text-gray-400">Homologaci?n CT</span>
+          <span className="ml-1 text-[10px] uppercase text-amber-400">v2</span>
         </NavLink>
         <NavLink to="/incoming/novedad-stock" className={subLinkClass} onNavigate={onNavigate}>
           <span className="text-gray-400">Cartas con novedad</span>
@@ -113,7 +113,7 @@ export default function PanelNav({ onNavigate, collapseRates = false }: PanelNav
               <span className="flex items-center justify-between gap-2">
                 Tasas de cambio
                 <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">
-                  в–ѕ
+                  вяѕ
                 </span>
               </span>
             </summary>

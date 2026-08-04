@@ -6,6 +6,7 @@ const REJECT_MESSAGES: Record<StockSellRejectReason, string> = {
   ya_vendida: "Esta carta ya está vendida.",
   reservada: "Esta carta está reservada.",
   propiedad: "Esta carta está en propiedad.",
+  sin_stock: "Sin unidades disponibles.",
 };
 
 export function rejectReasonMessage(reason?: StockSellRejectReason): string {
@@ -18,10 +19,23 @@ export type ReservedScanNotice = {
   message: string;
 };
 
-/** Aviso a mostrar cuando el scan proviene de una línea reservada (delta 2026-07). */
+/** Aviso a mostrar tras un scan con sustitución o fallback (reserva / vendida). */
 export function reservedScanNotice(
-  view: Pick<StockScanView, "substituted" | "reserved_fallback">,
+  view: Pick<
+    StockScanView,
+    | "substituted"
+    | "reserved_fallback"
+    | "sold_language_fallback"
+    | "language"
+  >,
 ): ReservedScanNotice | null {
+  if (view.sold_language_fallback) {
+    const lang = (view.language ?? "").trim() || "?";
+    return {
+      severity: "warning",
+      message: `La carta escaneada ya estaba vendida; se cargó la misma carta en ${lang}.`,
+    };
+  }
   if (view.substituted) {
     return {
       severity: "info",

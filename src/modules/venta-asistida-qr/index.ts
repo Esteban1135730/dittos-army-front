@@ -4,7 +4,11 @@ export {
   reservedScanNotice,
   type ReservedScanNotice,
 } from "./reject-reason-message";
-export { lineProfitCop } from "./cart-helpers";
+export {
+  lineProfitCop,
+  expandCartLinesToSellBatchItems,
+  cartUnitCount,
+} from "./cart-helpers";
 export type {
   CartLine,
   SellBatchResult,

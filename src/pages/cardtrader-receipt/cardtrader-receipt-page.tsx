@@ -1,1272 +1,451 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
-  Checkbox,
-  Chip,
   CircularProgress,
   Divider,
   Paper,
   Stack,
+  Step,
+  StepButton,
+  Stepper,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-import { apiBase, apiUrl } from '../../config/api';
 import {
-  buildCreateTandaCardsPayload,
-  rankPanelCandidates,
-  type PanelHomologItem,
-  type PanelMatchCandidate,
-  type SentHomologUnit,
-} from '../../utils/sent-unit-homolog';
-import { fetchExpansionHomologIndex } from '../../utils/transit-card-match';
-import { fxUnitPriceFromSentUnit } from '../../utils/purchase-currency';
+  InconsistencyDialog,
+} from './inconsistency-dialog';
+import { ReceiptFinalizePanel } from './receipt-finalize-panel';
+import { ReceiptLineRow } from './receipt-line-row';
+import { ReceiptWizardLabelsStep } from './receipt-wizard-labels-step';
+import { ReceiptWizardPvpStep } from './receipt-wizard-pvp-step';
 import {
-  useHomologActive,
-  useHomologMutations,
-} from '../incoming-v2/use-incoming-homolog';
-import { HomologCardImage } from '../incoming-v2/homolog-card-image';
-import {
-  resolveBlueprintImageSrc,
-  resolvePanelImageSrc,
-  useHomologBlueprintImages,
-} from '../incoming-v2/use-homolog-blueprint-images';
-import { HomologMetaSection } from '../incoming-v2/homolog-meta-panel';
-import { HomologPriceBlock } from '../incoming-v2/homolog-price-block';
-import { PanelItemPrices } from '../incoming-v2/panel-item-prices';
-import { buildSentUnitMetaLines } from '../incoming-v2/homolog-meta-builders';
-import { formatFx, formatHomologDate } from '../incoming-v2/homolog-format';
-import {
-  buildPanelItemSearchHaystack,
-  buildSentUnitSearchHaystack,
-  filterByHomologSearch,
-} from '../incoming-v2/homolog-search';
-import { HomologSearchField } from '../incoming-v2/homolog-search-field';
-import { NovedadDialog } from '../incoming-v2/novedad-dialog';
-import { HomologCreateTandaPanel } from '../incoming-v2/homolog-create-tanda-panel';
-import { useAutoVerifyByBlueprint } from './use-cardtrader-receipt-session';
-import { useArrivalTracking } from './use-arrival-tracking';
-import { exportSentUnitsByBlueprintToPdf } from './export-sent-units-pdf';
+  axiosMessage,
+  clearPersistedReceiptStockIds,
+  persistReceiptStockIds,
+  readPersistedReceiptStockIds,
+  type InconsistencyType,
+  type ReceiptLine,
+  type ReceiptSession,
+  type ReceiptWizardStep,
+  useCancelReceiptSession,
+  useCreateReceiptSession,
+  useFinalizeReceipt,
+  useMarkInconsistency,
+  useReceiptActiveSession,
+  useReceiptSession,
+  useReceiveLine,
+  useRevertFinalization,
+  useUndoLine,
+} from './use-receipt-session';
 
-type ArrivalFilter = 'all' | 'arrived' | 'not_arrived';
+const STEP_LABELS = ['Recepción', 'Finalizar', 'Asignar PVP', 'Etiquetas'] as const;
 
-const API_CARDTRADER = apiUrl('/cardtrader');
-
-function axiosMsg(e: unknown): string {
-  if (axios.isAxiosError(e)) {
-    const msg = e.response?.data?.message;
-    if (typeof msg === 'string') return msg;
-    if (Array.isArray(msg) && typeof msg[0] === 'string') return msg[0];
+function groupLinesByLot(lines: ReceiptLine[]): Map<string, ReceiptLine[]> {
+  const map = new Map<string, ReceiptLine[]>();
+  for (const line of lines) {
+    const key = line.transit_lot_id || 'sin-lote';
+    const list = map.get(key) ?? [];
+    list.push(line);
+    map.set(key, list);
   }
-  return 'Error en la operación.';
+  return map;
 }
 
-function unitStatusColor(status: SentHomologUnit['status']) {
-  if (status === 'verified') return 'success';
-  if (status === 'novedad') return 'warning';
-  return 'default';
-}
-
-function tierLabel(tier: PanelMatchCandidate['matchTier']): string {
-  if (tier === 'product') return 'Product ID';
-  if (tier === 'exact') return 'Blueprint';
-  if (tier === 'best') return 'Nombre / precio';
-  return 'Posible';
-}
-
-/** Match perfecto: product_id idéntico, o blueprint + precio exacto. */
-function isPerfectMatch(c: PanelMatchCandidate): boolean {
-  if (c.matchTier === 'product') return true;
-  return (
-    c.matchTier === 'exact' &&
-    c.priceDelta != null &&
-    c.priceDelta < 0.0001
-  );
-}
-
-function CandidateRow(props: {
-  candidate: PanelMatchCandidate;
-  onSelect: () => void;
-  disabled?: boolean;
-  imageSrc?: string;
-}) {
-  const { candidate, onSelect, disabled, imageSrc } = props;
-  const perfect = isPerfectMatch(candidate);
-  const isProduct = candidate.matchTier === 'product';
-  const isExact = candidate.matchTier === 'exact';
-  const isBest = candidate.matchTier === 'best';
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        p: 1.25,
-        borderWidth: perfect ? 2 : 1,
-        borderColor: perfect
-          ? '#1b5e20'
-          : isExact
-            ? '#2e7d32'
-            : isBest
-              ? '#1565c0'
-              : '#e0e0e0',
-        bgcolor: perfect
-          ? '#c8e6c9'
-          : isExact
-            ? '#e8f5e9'
-            : isBest
-              ? '#e3f2fd'
-              : '#fff',
-        boxShadow: perfect ? '0 0 0 1px #1b5e20' : undefined,
-      }}
-    >
-      <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'stretch' }}>
-        <HomologCardImage src={imageSrc} alt={candidate.cardName} variant="candidate" />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" mb={0.5}>
-            <Typography variant="subtitle2" fontWeight={600}>
-              {candidate.cardName}
-            </Typography>
-            {perfect ? (
-              <Chip
-                size="small"
-                label="Match perfecto"
-                color="success"
-                sx={{ fontWeight: 700 }}
-              />
-            ) : (
-              <Chip
-                size="small"
-                label={tierLabel(candidate.matchTier)}
-                color={isExact ? 'success' : isBest ? 'primary' : 'default'}
-              />
-            )}
-            {perfect && isProduct ? (
-              <Chip size="small" variant="outlined" color="success" label="Product ID" />
-            ) : null}
-            {perfect && isExact ? (
-              <Chip size="small" variant="outlined" color="success" label="BP + precio" />
-            ) : null}
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`Disp. ${candidate.availableInSession}`}
-            />
-          </Stack>
-          <Typography variant="caption" color="text.secondary" display="block">
-            Lote {formatHomologDate(candidate.lotPurchaseDate)} · {candidate.language}
-            {candidate.rareza ? ` · ${candidate.rareza}` : ''}
-            {candidate.productId ? ` · P#${candidate.productId}` : ''}
-            {candidate.blueprintId ? ` · BP#${candidate.blueprintId}` : ''}
-            {perfect
-              ? ' · precio exacto'
-              : candidate.priceDelta != null
-                ? ` · Δ ${candidate.priceDelta.toFixed(2)}`
-                : ''}
-          </Typography>
-        </Box>
-        <PanelItemPrices
-          unitCostCop={candidate.unitCostCop}
-          eurUnitPrice={candidate.fxUnitPrice}
-          eurTotalLot={candidate.fxTotalLot}
-          currency={candidate.cardsCostCurrency}
-        />
-        <Button
-          size="small"
-          variant="contained"
-          color={perfect ? 'success' : 'primary'}
-          onClick={onSelect}
-          disabled={disabled}
-          sx={{ alignSelf: 'center', minWidth: 88, fontWeight: perfect ? 700 : 500 }}
-        >
-          {perfect ? 'Asignar' : 'Elegir'}
-        </Button>
-      </Box>
-    </Paper>
-  );
+function stockIdsFromSession(session: ReceiptSession | null | undefined): string[] {
+  if (!session) return [];
+  return session.lines
+    .filter((l) => l.status === 'received' && l.stock_id)
+    .map((l) => l.stock_id as string);
 }
 
 export default function CardtraderReceiptPage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { data: activeData, isLoading } = useHomologActive();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = Number(searchParams.get('step') || '0');
+  const sessionParam = searchParams.get('session') || undefined;
 
   const {
-    createSession,
-    syncSent,
-    verifyUnit,
-    markNovedad,
-    undoUnit,
-    createTanda,
-    cancelSession,
-    revertConversion,
-  } = useHomologMutations();
+    data: activeSession,
+    isLoading: activeLoading,
+    error: activeError,
+  } = useReceiptActiveSession();
 
-  const session = activeData?.session ?? null;
-  const panelItems = activeData?.panel_items ?? [];
-  const sessionId = session?.session_id;
+  const finalizedSessionId =
+    !activeSession && sessionParam ? sessionParam : undefined;
+  const { data: finalizedSession, isLoading: finalizedLoading } =
+    useReceiptSession(finalizedSessionId);
 
-  const autoVerify = useAutoVerifyByBlueprint(sessionId);
-  const {
-    isArrived,
-    toggleArrived,
-    markMany,
-  } = useArrivalTracking(sessionId);
+  const session: ReceiptSession | null =
+    activeSession ??
+    (finalizedSession?.status === 'finalized' ? finalizedSession : null) ??
+    null;
 
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [novedadOpen, setNovedadOpen] = useState(false);
-  const [exportingPdf, setExportingPdf] = useState(false);
-  const [appliedSentSearch, setAppliedSentSearch] = useState('');
-  const [appliedTransitSearch, setAppliedTransitSearch] = useState('');
-  const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'pending' | 'novedad'>(
-    'pending',
+  const sessionId = session?.session_id ?? '';
+
+  const [wizardStep, setWizardStep] = useState<ReceiptWizardStep>(1);
+  const [stockIds, setStockIds] = useState<string[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [inconsistencyLine, setInconsistencyLine] = useState<ReceiptLine | null>(
+    null,
   );
-  const [arrivalFilter, setArrivalFilter] = useState<ArrivalFilter>('all');
+  const [createBusy, setCreateBusy] = useState(false);
 
-  const units = session?.units ?? [];
-  const summary = session?.summary ?? { total: 0, pending: 0, verified: 0, novedad: 0 };
-  const { blueprintImages, imagesLoading } = useHomologBlueprintImages(units);
+  const createSession = useCreateReceiptSession();
+  const receiveLine = useReceiveLine(sessionId);
+  const markInconsistency = useMarkInconsistency(sessionId);
+  const undoLine = useUndoLine(sessionId);
+  const finalizeReceipt = useFinalizeReceipt(sessionId);
+  const cancelSession = useCancelReceiptSession(sessionId);
+  const revertFinalization = useRevertFinalization(sessionId);
 
-  const expansions = useMemo(
-    () => [...new Set(units.map((u) => u.expansion).filter(Boolean))],
-    [units],
-  );
+  // Sync step from session / query
+  useEffect(() => {
+    if (activeLoading || finalizedLoading) return;
 
-  const { data: expansionHomolog = {} } = useQuery({
-    queryKey: ['receipt-expansion-homolog', expansions.join('|')],
-    enabled: expansions.length > 0,
-    queryFn: () =>
-      fetchExpansionHomologIndex(async (expansion) => {
-        const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
-          params: { expansion },
-        });
-        return res.data as { tcgdex_set_id?: string | null };
-      }, expansions),
-    staleTime: 60_000 * 30,
-  });
-
-  const selectedUnit = useMemo(
-    () => units.find((u) => u.sent_unit_key === selectedKey) ?? null,
-    [units, selectedKey],
-  );
-
-  const candidates = useMemo(() => {
-    if (!selectedUnit || selectedUnit.status !== 'pending') return [];
-    return rankPanelCandidates({
-      sentUnit: selectedUnit,
-      panelItems,
-      expansionHomolog,
-    });
-  }, [selectedUnit, panelItems, expansionHomolog]);
-
-  const productCandidates = candidates.filter((c) => c.matchTier === 'product');
-  const exactCandidates = candidates.filter((c) => c.matchTier === 'exact');
-  const bestCandidates = candidates.filter((c) => c.matchTier === 'best');
-  const possibleCandidates = candidates.filter((c) => c.matchTier === 'possible');
-  const perfectCandidates = candidates.filter(isPerfectMatch);
-  const hasPerfectMatch = perfectCandidates.length > 0;
-
-  /** Para cada sent pendiente: si tiene al menos un match perfecto en tránsito. */
-  const perfectMatchBySentKey = useMemo(() => {
-    const map = new Map<string, boolean>();
-    for (const u of units) {
-      if (u.status !== 'pending') continue;
-      const ranked = rankPanelCandidates({
-        sentUnit: u,
-        panelItems,
-        expansionHomolog,
-      });
-      map.set(u.sent_unit_key, ranked.some(isPerfectMatch));
-    }
-    return map;
-  }, [units, panelItems, expansionHomolog]);
-
-  const sentSearchHaystackByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const u of units) {
-      map.set(u.sent_unit_key, buildSentUnitSearchHaystack(u));
-    }
-    return map;
-  }, [units]);
-
-  const transitSearchHaystackById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of panelItems) {
-      map.set(p.transit_line_id, buildPanelItemSearchHaystack(p));
-    }
-    return map;
-  }, [panelItems]);
-
-  const filteredSentUnits = useMemo(() => {
-    const base =
-      sentStatusFilter === 'all'
-        ? units
-        : units.filter((u) => u.status === sentStatusFilter);
-    const bySearch = filterByHomologSearch(
-      base,
-      (u) => sentSearchHaystackByKey.get(u.sent_unit_key) ?? '',
-      appliedSentSearch,
-    );
-    if (arrivalFilter === 'arrived') {
-      return bySearch.filter((u) => isArrived(u.sent_unit_key));
-    }
-    if (arrivalFilter === 'not_arrived') {
-      return bySearch.filter((u) => !isArrived(u.sent_unit_key));
-    }
-    return bySearch;
-  }, [
-    units,
-    appliedSentSearch,
-    sentSearchHaystackByKey,
-    sentStatusFilter,
-    arrivalFilter,
-    isArrived,
-  ]);
-
-  const arrivedInSessionCount = useMemo(
-    () => units.filter((u) => isArrived(u.sent_unit_key)).length,
-    [units, isArrived],
-  );
-
-  /** Búsqueda manual en tránsito: con sent pendiente, blueprint primero y precio exacto arriba. */
-  const rankedTransitBrowse = useMemo(() => {
-    if (!selectedUnit || selectedUnit.status !== 'pending') {
-      return filterByHomologSearch(
-        panelItems,
-        (p) => transitSearchHaystackById.get(p.transit_line_id) ?? '',
-        appliedTransitSearch,
-      );
-    }
-
-    const ranked = rankPanelCandidates({
-      sentUnit: selectedUnit,
-      panelItems,
-      expansionHomolog,
-    });
-
-    const sentBp =
-      typeof selectedUnit.blueprint_id === 'number' && selectedUnit.blueprint_id > 0
-        ? selectedUnit.blueprint_id
-        : null;
-
-    const blueprintRanked =
-      sentBp != null
-        ? ranked.filter((r) => r.blueprintId === sentBp)
-        : ranked;
-
-    const rankedIds = new Set(blueprintRanked.map((r) => r.transitLineId));
-    const filtered = filterByHomologSearch(
-      panelItems,
-      (p) => transitSearchHaystackById.get(p.transit_line_id) ?? '',
-      appliedTransitSearch,
-    );
-
-    const browsePool =
-      sentBp != null
-        ? filtered.filter(
-            (p) =>
-              typeof p.blueprint_id === 'number' &&
-              p.blueprint_id > 0 &&
-              p.blueprint_id === sentBp,
-          )
-        : filtered;
-
-    const byId = new Map(blueprintRanked.map((r) => [r.transitLineId, r]));
-    return [...browsePool].sort((a, b) => {
-      const ra = byId.get(a.transit_line_id);
-      const rb = byId.get(b.transit_line_id);
-      if (ra && rb) {
-        return blueprintRanked.indexOf(ra) - blueprintRanked.indexOf(rb);
-      }
-      if (ra && !rb) return -1;
-      if (!ra && rb) return 1;
-      if (rankedIds.has(a.transit_line_id) !== rankedIds.has(b.transit_line_id)) {
-        return rankedIds.has(a.transit_line_id) ? -1 : 1;
-      }
-      return a.card_name.localeCompare(b.card_name, 'es');
-    });
-  }, [
-    selectedUnit,
-    panelItems,
-    expansionHomolog,
-    appliedTransitSearch,
-    transitSearchHaystackById,
-  ]);
-
-  const handleStart = async () => {
-    setError(null);
-    try {
-      await createSession.mutateAsync();
-    } catch (e) {
-      if (axios.isAxiosError(e) && e.response?.status === 409) {
-        await queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] });
-        return;
-      }
-      setError(axiosMsg(e));
-    }
-  };
-
-  const handleCancelAndRestart = async () => {
-    if (!sessionId) return;
-    const ok = window.confirm(
-      '¿Cancelar la sesión actual y comenzar una nueva?\n\nSe perderá el progreso de homologación no guardado.',
-    );
-    if (!ok) return;
-    setError(null);
-    try {
-      await cancelSession.mutateAsync(sessionId);
-      await createSession.mutateAsync();
-    } catch (e) {
-      setError(axiosMsg(e));
-    }
-  };
-
-  const handleSyncAndAutoMatch = async () => {
-    if (!sessionId) return;
-    setError(null);
-    setInfo(null);
-    try {
-      await syncSent.mutateAsync(sessionId);
-      const result = await autoVerify.mutateAsync();
-      if (result.auto_verified > 0) {
-        const parts = [
-          `${result.auto_verified} verificada(s)`,
-          result.by_product_id
-            ? `${result.by_product_id} por product_id`
-            : null,
-          result.by_blueprint_id
-            ? `${result.by_blueprint_id} por blueprint`
-            : null,
-        ].filter(Boolean);
-        setInfo(`Auto-match: ${parts.join(' · ')}.`);
-      } else {
-        setInfo('Sync completado. Revisa candidatas para match manual.');
-      }
-    } catch (e) {
-      setError(axiosMsg(e));
-    }
-  };
-
-  const handleExportPdf = async () => {
-    setError(null);
-    setInfo(null);
-    if (units.length === 0) {
-      setError('No hay cartas en envío para exportar. Haz Sync CT primero.');
+    if (session?.status === 'finalized') {
+      const fromLines = stockIdsFromSession(session);
+      const persisted = readPersistedReceiptStockIds(session.session_id);
+      const ids = fromLines.length > 0 ? fromLines : persisted ?? [];
+      setStockIds(ids);
+      const requested =
+        stepParam === 3 || stepParam === 4 ? (stepParam as ReceiptWizardStep) : 3;
+      setWizardStep(requested);
       return;
     }
-    setExportingPdf(true);
+
+    if (session?.status === 'open') {
+      if (stepParam === 2) {
+        setWizardStep(2);
+      } else if (wizardStep > 2) {
+        setWizardStep(1);
+      }
+      return;
+    }
+
+    if (!session) {
+      setWizardStep(1);
+      setStockIds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to session/query changes
+  }, [
+    activeLoading,
+    finalizedLoading,
+    session?.session_id,
+    session?.status,
+    stepParam,
+  ]);
+
+  const lotGroups = useMemo((): Map<string, ReceiptLine[]> => {
+    return session ? groupLinesByLot(session.lines) : new Map();
+  }, [session]);
+
+  const canReachStep3 =
+    session?.status === 'finalized' || stockIds.length > 0 || !!sessionParam;
+
+  const goToStep = (step: ReceiptWizardStep) => {
+    if (step >= 3 && !canReachStep3 && session?.status !== 'finalized') return;
+    setWizardStep(step);
+    const next = new URLSearchParams(searchParams);
+    next.set('step', String(step));
+    if (sessionId) next.set('session', sessionId);
+    setSearchParams(next, { replace: true });
+  };
+
+  const handleCreate = async () => {
+    setActionError(null);
+    setCreateBusy(true);
     try {
-      const result = await exportSentUnitsByBlueprintToPdf(
-        units.map((u) => ({
-          name: u.name,
-          language: u.language,
-          rareza: u.rareza,
-          blueprint_id: u.blueprint_id,
-          qty: 1,
-          imageUrl: resolveBlueprintImageSrc(u.blueprint_id, blueprintImages),
-        })),
-        {
-          title: 'Cartas en envío (CardTrader)',
-          apiBase: apiBase(),
-          imageUrlByBlueprint: blueprintImages,
-        },
-      );
-      const imgNote =
-        result.imageFailures > 0
-          ? ` (${result.imageFailures} sin imagen)`
-          : '';
-      setInfo(
-        `PDF exportado: ${result.rows} carta(s) · ${result.units} unidad(es)${imgNote}.`,
-      );
+      await createSession.mutateAsync();
+      setStockIds([]);
+      setWizardStep(1);
+      setSearchParams({}, { replace: true });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo generar el PDF.');
+      setActionError(axiosMessage(e));
     } finally {
-      setExportingPdf(false);
+      setCreateBusy(false);
     }
   };
 
-  const handleVerifyCandidate = async (candidate: PanelMatchCandidate) => {
-    if (!sessionId || !selectedUnit) return;
-    setError(null);
+  const handleReceive = async (lineId: string, qty: number) => {
+    setActionError(null);
     try {
-      await verifyUnit.mutateAsync({
-        sessionId,
-        sentUnitKey: selectedUnit.sent_unit_key,
-        transitLineId: candidate.transitLineId,
-        matchScore: candidate.structuralScore,
-      });
+      await receiveLine.mutateAsync({ lineId, received_qty: qty });
     } catch (e) {
-      setError(axiosMsg(e));
+      setActionError(axiosMessage(e));
+      throw e;
     }
   };
 
-  const handleVerifyPanelItem = async (item: PanelHomologItem) => {
-    if (!sessionId || !selectedUnit || selectedUnit.status !== 'pending') return;
-    if (item.available_in_session <= 0) {
-      setError('Este ítem no tiene unidades disponibles.');
-      return;
-    }
-    setError(null);
+  const handleInconsistency = async (
+    lineId: string,
+    type: InconsistencyType,
+    notes: string,
+  ) => {
+    setActionError(null);
     try {
-      await verifyUnit.mutateAsync({
-        sessionId,
-        sentUnitKey: selectedUnit.sent_unit_key,
-        transitLineId: item.transit_line_id,
-      });
+      await markInconsistency.mutateAsync({ lineId, type, notes });
     } catch (e) {
-      setError(axiosMsg(e));
+      setActionError(axiosMessage(e));
+      throw e;
     }
   };
 
-  const handleNovedadSubmit = async (payload: {
-    notes: string;
-    transitLineId?: string;
-  }) => {
-    if (!sessionId || !selectedUnit) return;
-    setError(null);
+  const handleUndo = async (lineId: string) => {
+    setActionError(null);
     try {
-      await markNovedad.mutateAsync({
-        sessionId,
-        sentUnitKey: selectedUnit.sent_unit_key,
-        notes: payload.notes,
-        transitLineId: payload.transitLineId,
-      });
-      setNovedadOpen(false);
+      await undoLine.mutateAsync(lineId);
     } catch (e) {
-      setError(axiosMsg(e));
+      setActionError(axiosMessage(e));
+      throw e;
     }
   };
 
-  const handleCreateTanda = async (shippingTotalCop: number) => {
-    if (!sessionId || !session) return;
-    setError(null);
+  const handleFinalize = async (shippingCop: number) => {
+    setActionError(null);
     try {
-      const cards = buildCreateTandaCardsPayload(units, panelItems);
-      const res = await createTanda.mutateAsync({
-        sessionId,
-        shipping_total_cop: shippingTotalCop,
-        cards,
-      });
-      if (res.round_id) {
-        navigate(`/incoming/ship-round/${res.round_id}`);
-      } else {
-        const n = res.stock_created ?? 0;
-        setInfo(
-          `Tanda creada: ${n} carta(s) pasaron a stock disponible.`,
-        );
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] }),
-          queryClient.invalidateQueries({ queryKey: ['stock'] }),
-        ]);
-      }
+      const result = await finalizeReceipt.mutateAsync(shippingCop);
+      const ids = Array.isArray(result.stock_ids) ? result.stock_ids : [];
+      setStockIds(ids);
+      persistReceiptStockIds(result.session_id, ids);
+      setWizardStep(3);
+      setSearchParams(
+        {
+          step: '3',
+          session: result.session_id,
+        },
+        { replace: true },
+      );
     } catch (e) {
-      setError(axiosMsg(e));
+      setActionError(axiosMessage(e));
+      throw e;
     }
   };
 
-  const isBusy =
-    syncSent.isPending ||
-    autoVerify.isPending ||
-    verifyUnit.isPending ||
-    undoUnit.isPending ||
-    markNovedad.isPending ||
-    createTanda.isPending;
+  const handleCancel = async () => {
+    setActionError(null);
+    try {
+      await cancelSession.mutateAsync();
+      setStockIds([]);
+      setWizardStep(1);
+      setSearchParams({}, { replace: true });
+    } catch (e) {
+      setActionError(axiosMessage(e));
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <Box display="flex" justifyContent="center" py={6}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleRevert = async () => {
+    setActionError(null);
+    try {
+      await revertFinalization.mutateAsync();
+      if (sessionId) clearPersistedReceiptStockIds(sessionId);
+      setStockIds([]);
+      setWizardStep(1);
+      setSearchParams({}, { replace: true });
+    } catch (e) {
+      setActionError(axiosMessage(e));
+      throw e;
+    }
+  };
 
-  if (!session) {
-    return (
-      <Box maxWidth={600} mx="auto" py={6}>
-        <Typography variant="h5" fontWeight={700} gutterBottom>
-          Recepción CT
-        </Typography>
-        <Typography color="text.secondary" paragraph>
-          Homologa las <strong>cartas enviadas (sent)</strong> de CardTrader contra tu
-          inventario en tránsito. Match automático por <strong>product_id</strong>{' '}
-          (mismo Product CT en compra y envío); si no hay, por blueprint o selección
-          manual.
-        </Typography>
-        {error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        ) : null}
-        <Button
-          variant="contained"
-          size="large"
-          onClick={() => void handleStart()}
-          disabled={createSession.isPending}
-        >
-          {createSession.isPending ? 'Iniciando…' : 'Iniciar sesión de recepción'}
-        </Button>
-      </Box>
-    );
-  }
+  const handleFinishWizard = () => {
+    if (sessionId) clearPersistedReceiptStockIds(sessionId);
+    setStockIds([]);
+    setWizardStep(1);
+    setSearchParams({}, { replace: true });
+  };
 
-  if (session.status === 'converted') {
-    const handleRevert = async () => {
-      if (!sessionId) return;
-      setError(null);
-      try {
-        await revertConversion.mutateAsync(sessionId);
-      } catch (e) {
-        setError(axiosMsg(e));
-      }
-    };
-
-    const handleNewFromConverted = async () => {
-      setError(null);
-      try {
-        await createSession.mutateAsync();
-      } catch (e) {
-        setError(axiosMsg(e));
-      }
-    };
-
-    return (
-      <Box maxWidth={720} mx="auto" py={4}>
-        <Typography variant="h5" fontWeight={700} gutterBottom>
-          Recepción CT
-        </Typography>
-        {error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        ) : null}
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Sesión convertida
-          {session.ship_round_id ? (
-            <>
-              {' '}
-              — tanda <strong>{session.ship_round_id}</strong>
-            </>
-          ) : null}
-          .
-        </Alert>
-        <Stack direction="row" spacing={1} flexWrap="wrap">
-          {session.ship_round_id ? (
-            <Button
-              component={Link}
-              to={`/incoming/ship-round/${session.ship_round_id}`}
-              variant="contained"
-            >
-              Ir a tanda
-            </Button>
-          ) : null}
-          <Button
-            variant="outlined"
-            color="warning"
-            onClick={() => void handleRevert()}
-            disabled={revertConversion.isPending || createSession.isPending}
-          >
-            {revertConversion.isPending ? 'Restaurando…' : 'Restaurar sesión'}
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleNewFromConverted()}
-            disabled={revertConversion.isPending || createSession.isPending}
-          >
-            {createSession.isPending ? 'Iniciando…' : 'Nueva sesión de recepción'}
-          </Button>
-        </Stack>
-      </Box>
-    );
-  }
-
-  const selectedSentImage = selectedUnit
-    ? resolveBlueprintImageSrc(selectedUnit.blueprint_id, blueprintImages)
-    : undefined;
+  const loading = activeLoading || (!!finalizedSessionId && finalizedLoading);
 
   return (
-    <Box>
+    <Box sx={{ maxWidth: 1100, mx: 'auto', pb: 4 }}>
       <Stack
-        direction={{ xs: 'column', md: 'row' }}
+        direction="row"
+        alignItems="center"
         justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', md: 'center' }}
-        spacing={2}
+        flexWrap="wrap"
+        gap={1}
         mb={2}
       >
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Recepción CT
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Sent → tránsito. Auto: product_id → blueprint. Manual: mejores candidatas
-            arriba.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-          <Chip label={`${summary.verified} verificadas`} color="success" size="small" />
-          <Chip label={`${summary.pending} pendientes`} size="small" />
-          {summary.novedad > 0 && (
-            <Chip label={`${summary.novedad} novedad`} color="warning" size="small" />
-          )}
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => void handleSyncAndAutoMatch()}
-            disabled={isBusy}
-          >
-            {syncSent.isPending || autoVerify.isPending
-              ? 'Procesando…'
-              : 'Sync CT + Auto-match'}
+        <Typography variant="h5" fontWeight={700}>
+          Recepción CT
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Button component={Link} to="/cardtrader-transit" size="small">
+            Lotes en tránsito
           </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => void handleExportPdf()}
-            disabled={isBusy || exportingPdf || units.length === 0 || imagesLoading}
-          >
-            {exportingPdf
-              ? 'Generando PDF…'
-              : imagesLoading
-                ? 'Cargando imágenes…'
-                : 'Exportar PDF'}
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            variant="outlined"
-            onClick={() => void handleCancelAndRestart()}
-            disabled={isBusy || cancelSession.isPending || createSession.isPending}
-          >
-            Nueva sesión
+          <Button component={Link} to="/incoming-v2" size="small" color="inherit">
+            Homologación (Compras v2)
           </Button>
         </Stack>
       </Stack>
 
-      {error ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      ) : null}
-      {info ? (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setInfo(null)}>
-          {info}
-        </Alert>
-      ) : null}
+      <Stepper nonLinear activeStep={wizardStep - 1} sx={{ mb: 3 }}>
+        {STEP_LABELS.map((label, index) => {
+          const stepNum = (index + 1) as ReceiptWizardStep;
+          const disabled =
+            stepNum >= 3 &&
+            session?.status !== 'finalized' &&
+            stockIds.length === 0 &&
+            !sessionParam;
+          return (
+            <Step key={label} completed={wizardStep > stepNum}>
+              <StepButton
+                disabled={disabled}
+                onClick={() => goToStep(stepNum)}
+              >
+                {label}
+              </StepButton>
+            </Step>
+          );
+        })}
+      </Stepper>
 
-      {units.length === 0 ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Sesión sin sent units. Usa <strong>Sync CT + Auto-match</strong> para importar lo
-          enviado desde CardTrader.
+      {actionError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError(null)}>
+          {actionError}
         </Alert>
-      ) : null}
+      )}
 
-      {summary.pending === 0 || summary.verified > 0 ? (
-        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#fafafa' }}>
-          <HomologCreateTandaPanel
-            pendingCount={summary.pending}
-            totalUnits={summary.total}
-            verifiedCount={summary.verified}
-            isSubmitting={createTanda.isPending}
-            onCreate={handleCreateTanda}
-          />
-        </Paper>
-      ) : null}
+      {activeError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {axiosMessage(activeError)}
+        </Alert>
+      )}
 
-      <Box
-        display="grid"
-        gridTemplateColumns={{ xs: '1fr', lg: '340px 1fr 300px' }}
-        gap={2}
-      >
-        {/* Columna 1: sent units */}
-        <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 680, overflow: 'auto' }}>
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-            spacing={1}
-            sx={{ mb: 0.5 }}
+      {loading ? (
+        <Box py={6} display="flex" justifyContent="center">
+          <CircularProgress />
+        </Box>
+      ) : !session ? (
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            No hay sesión de recepción activa
+          </Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Inicia una recepción para cargar las líneas de tránsito abiertas
+            (remaining &gt; 0).
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreate()}
+            disabled={createBusy}
           >
-            <Typography variant="subtitle2" fontWeight={600}>
-              Enviadas (sent) ({filteredSentUnits.length})
-            </Typography>
-            <Chip
-              size="small"
-              color={arrivedInSessionCount > 0 ? 'success' : 'default'}
-              variant={arrivedInSessionCount > 0 ? 'filled' : 'outlined'}
-              label={`${arrivedInSessionCount}/${units.length} llegadas`}
-            />
-          </Stack>
-          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1 }}>
-            <Chip
-              label="Todas"
-              size="small"
-              clickable
-              color={sentStatusFilter === 'all' ? 'primary' : 'default'}
-              variant={sentStatusFilter === 'all' ? 'filled' : 'outlined'}
-              onClick={() => setSentStatusFilter('all')}
-            />
-            <Chip
-              label={`Pendientes (${summary.pending})`}
-              size="small"
-              clickable
-              color={sentStatusFilter === 'pending' ? 'primary' : 'default'}
-              variant={sentStatusFilter === 'pending' ? 'filled' : 'outlined'}
-              onClick={() => setSentStatusFilter('pending')}
-            />
-            <Chip
-              label={`Novedad (${summary.novedad})`}
-              size="small"
-              clickable
-              color={sentStatusFilter === 'novedad' ? 'warning' : 'default'}
-              variant={sentStatusFilter === 'novedad' ? 'filled' : 'outlined'}
-              onClick={() => setSentStatusFilter('novedad')}
-            />
-            <Chip
-              label="Sin llegar"
-              size="small"
-              clickable
-              color={arrivalFilter === 'not_arrived' ? 'primary' : 'default'}
-              variant={arrivalFilter === 'not_arrived' ? 'filled' : 'outlined'}
-              onClick={() =>
-                setArrivalFilter((prev) =>
-                  prev === 'not_arrived' ? 'all' : 'not_arrived',
-                )
-              }
-            />
-            <Chip
-              label="Llegadas"
-              size="small"
-              clickable
-              color={arrivalFilter === 'arrived' ? 'success' : 'default'}
-              variant={arrivalFilter === 'arrived' ? 'filled' : 'outlined'}
-              onClick={() =>
-                setArrivalFilter((prev) => (prev === 'arrived' ? 'all' : 'arrived'))
-              }
-            />
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-            <HomologSearchField
-              placeholder="Buscar nombre, pedido… (Enter)"
-              onApply={setAppliedSentSearch}
-              sx={{ flex: 1, mb: 0 }}
-            />
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={filteredSentUnits.every((u) => isArrived(u.sent_unit_key))}
-              onClick={() =>
-                markMany(filteredSentUnits.map((u) => u.sent_unit_key))
-              }
-              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              Marcar visibles
-            </Button>
-          </Stack>
-          <Stack spacing={1}>
-            {filteredSentUnits.map((u) => {
-              const thumbSrc = resolveBlueprintImageSrc(u.blueprint_id, blueprintImages);
-              const hasPerfect = perfectMatchBySentKey.get(u.sent_unit_key) === true;
-              const isSelected = selectedKey === u.sent_unit_key;
-              const arrived = isArrived(u.sent_unit_key);
-              return (
-                <Paper
-                  key={u.sent_unit_key}
-                  variant="outlined"
-                  onClick={() => setSelectedKey(u.sent_unit_key)}
-                  sx={{
-                    p: 1,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    gap: 1,
-                    alignItems: 'center',
-                    borderWidth: hasPerfect ? 2 : 1,
-                    borderColor: isSelected
-                      ? '#1565c0'
-                      : hasPerfect
-                        ? '#1b5e20'
-                        : arrived
-                          ? '#a5d6a7'
-                          : '#e0e0e0',
-                    bgcolor: isSelected
-                      ? '#e3f2fd'
-                      : arrived
-                        ? '#f1f8e9'
-                        : hasPerfect
-                          ? '#e8f5e9'
-                          : 'transparent',
-                  }}
-                >
-                  <Checkbox
-                    size="small"
-                    checked={arrived}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggleArrived(u.sent_unit_key)}
-                    inputProps={{ 'aria-label': 'Marcar como llegada' }}
-                    sx={{ p: 0.5, flexShrink: 0 }}
-                  />
-                  <HomologCardImage
-                    src={thumbSrc}
-                    alt={u.name}
-                    variant="list"
-                    loading={imagesLoading && !!u.blueprint_id && !thumbSrc}
-                  />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack direction="row" justifyContent="space-between" gap={0.5} alignItems="center">
-                      <Typography
-                        variant="body2"
-                        fontWeight={600}
-                        noWrap
-                        sx={{
-                          textDecoration: arrived ? 'line-through' : undefined,
-                          color: arrived ? 'text.secondary' : undefined,
-                        }}
-                      >
-                        {u.name}
-                      </Typography>
-                      {hasPerfect && u.status === 'pending' ? (
-                        <Chip
-                          size="small"
-                          color="success"
-                          label="Match"
-                          sx={{ fontWeight: 700, height: 22 }}
-                        />
-                      ) : (
-                        <Chip size="small" color={unitStatusColor(u.status)} label={u.status} />
-                      )}
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary" display="block" noWrap>
-                      {u.order_code}
-                      {u.blueprint_id ? ` · BP#${u.blueprint_id}` : ''}
-                      {u.rareza ? ` · ${u.rareza}` : ''}
-                    </Typography>
-                    {u.transit_line_card_name ? (
-                      <Typography variant="caption" color="success.main" display="block" noWrap>
-                        → {u.transit_line_card_name}
-                      </Typography>
-                    ) : hasPerfect && u.status === 'pending' ? (
-                      <Typography variant="caption" color="success.dark" display="block" noWrap fontWeight={600}>
-                        Match perfecto disponible
-                      </Typography>
-                    ) : null}
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    fontWeight={600}
-                    color={hasPerfect ? 'success.dark' : 'text.secondary'}
-                    sx={{ whiteSpace: 'nowrap' }}
-                  >
-                    {formatFx(
-                      fxUnitPriceFromSentUnit(u).amount,
-                      fxUnitPriceFromSentUnit(u).currency,
-                    )}
-                  </Typography>
-                </Paper>
-              );
-            })}
-          </Stack>
+            {createBusy ? 'Iniciando…' : 'Iniciar recepción'}
+          </Button>
         </Paper>
-
-        {/* Columna 2: detalle + candidatas rankeadas */}
-        <Paper variant="outlined" sx={{ p: 2, minHeight: 400 }}>
-          {!selectedUnit ? (
-            <Typography color="text.secondary">
-              Selecciona una carta sent para ver candidatas de tránsito.
-            </Typography>
-          ) : (
-            <>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={2}>
-                <Box textAlign="center">
-                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                    CardTrader (sent)
-                  </Typography>
-                  <HomologCardImage
-                    src={selectedSentImage}
-                    alt={selectedUnit.name}
-                    variant="detail"
-                    loading={
-                      imagesLoading && !!selectedUnit.blueprint_id && !selectedSentImage
-                    }
-                  />
-                </Box>
-              </Stack>
-
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                {selectedUnit.name}
-              </Typography>
-              <Box mb={2}>
-                <HomologPriceBlock
-                  fx={fxUnitPriceFromSentUnit(selectedUnit).amount}
-                  currency={fxUnitPriceFromSentUnit(selectedUnit).currency}
-                  fxLabel="Precio CardTrader"
-                  size="md"
-                />
-              </Box>
-              <HomologMetaSection
-                title="Pedido CardTrader"
-                lines={buildSentUnitMetaLines(selectedUnit)}
-                columns={2}
-              />
-
-              {selectedUnit.status === 'verified' ? (
-                <Alert severity="success" sx={{ mt: 2 }}>
-                  Homologada con <strong>{selectedUnit.transit_line_card_name}</strong>
-                  <Box mt={1}>
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        sessionId &&
-                        undoUnit.mutate({
-                          sessionId,
-                          sentUnitKey: selectedUnit.sent_unit_key,
-                        })
-                      }
-                      disabled={undoUnit.isPending}
-                    >
-                      Deshacer
-                    </Button>
-                  </Box>
-                </Alert>
-              ) : null}
-
-              {selectedUnit.status === 'novedad' ? (
-                <Alert severity="warning" sx={{ mt: 2 }}>
-                  Novedad: {selectedUnit.novedad_notes || '(sin nota)'}
-                  <Box mt={1}>
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        sessionId &&
-                        undoUnit.mutate({
-                          sessionId,
-                          sentUnitKey: selectedUnit.sent_unit_key,
-                        })
-                      }
-                      disabled={undoUnit.isPending}
-                    >
-                      Deshacer
-                    </Button>
-                  </Box>
-                </Alert>
-              ) : null}
-
-              {selectedUnit.status === 'pending' ? (
-                <Box mt={2}>
-                  {hasPerfectMatch ? (
-                    <Alert severity="success" sx={{ mb: 2 }} icon={false}>
-                      <Typography variant="body2" fontWeight={700}>
-                        Match perfecto encontrado
+      ) : (
+        <>
+          {(wizardStep === 1 || wizardStep === 2) &&
+            session.status === 'open' && (
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                alignItems="flex-start"
+              >
+                <Box flex={1} minWidth={0}>
+                  {wizardStep === 1 && (
+                    <>
+                      <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                        Líneas por lote
                       </Typography>
-                      <Typography variant="body2">
-                        {perfectCandidates.length === 1
-                          ? `Hay 1 candidata exacta (${perfectCandidates[0].matchTier === 'product' ? 'mismo product_id' : 'blueprint + precio'}).`
-                          : `Hay ${perfectCandidates.length} candidatas exactas. Asigna la de precio coincidente.`}
+                      <Typography variant="body2" color="text.secondary" mb={2}>
+                        Pendientes: {session.summary.pending} · Recibidas:{' '}
+                        {session.summary.received} · Inconsistencias:{' '}
+                        {session.summary.inconsistency}
                       </Typography>
-                    </Alert>
-                  ) : null}
-
-                  <Stack direction="row" spacing={1} mb={2}>
-                    <Button
-                      size="small"
-                      color="warning"
-                      variant="outlined"
-                      onClick={() => setNovedadOpen(true)}
-                    >
-                      Marcar novedad
-                    </Button>
-                    {perfectCandidates[0] ? (
+                      {[...lotGroups.entries()].map(([lotId, lines]) => (
+                        <Accordion key={lotId} defaultExpanded>
+                          <AccordionSummary>
+                            <Typography variant="subtitle2">
+                              Lote {lotId} ({lines.length})
+                            </Typography>
+                          </AccordionSummary>
+                          <AccordionDetails sx={{ p: 0 }}>
+                            {lines.map((line) => (
+                              <Box key={line.line_id}>
+                                <ReceiptLineRow
+                                  line={line}
+                                  onReceive={handleReceive}
+                                  onInconsistency={(l) => setInconsistencyLine(l)}
+                                  onUndo={handleUndo}
+                                />
+                                <Divider />
+                              </Box>
+                            ))}
+                          </AccordionDetails>
+                        </Accordion>
+                      ))}
                       <Button
-                        size="small"
-                        color="success"
-                        variant="contained"
-                        disabled={verifyUnit.isPending}
-                        onClick={() => void handleVerifyCandidate(perfectCandidates[0])}
+                        sx={{ mt: 2 }}
+                        variant="outlined"
+                        onClick={() => goToStep(2)}
                       >
-                        Asignar match perfecto
+                        Ir a Finalizar
                       </Button>
-                    ) : null}
-                  </Stack>
-
-                  {candidates.length === 0 ? (
-                    <Alert severity="warning">
-                      Sin candidatas automáticas. Usa el panel derecho para buscar en
-                      tránsito y elegir manualmente.
+                    </>
+                  )}
+                  {wizardStep === 2 && (
+                    <Alert severity="info">
+                      Revisa el resumen a la derecha e ingresa el costo de envío
+                      para crear el inventario.
                     </Alert>
-                  ) : (
-                    <Stack spacing={1.5}>
-                      {productCandidates.length > 0 ? (
-                        <>
-                          <Typography variant="subtitle2" fontWeight={600}>
-                            Product ID exacto
-                          </Typography>
-                          {productCandidates.map((c) => (
-                            <CandidateRow
-                              key={c.transitLineId}
-                              candidate={c}
-                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
-                              onSelect={() => void handleVerifyCandidate(c)}
-                              disabled={verifyUnit.isPending}
-                            />
-                          ))}
-                        </>
-                      ) : null}
-
-                      {exactCandidates.length > 0 ? (
-                        <>
-                          {productCandidates.length > 0 ? <Divider sx={{ my: 1 }} /> : null}
-                          <Typography variant="subtitle2" fontWeight={600}>
-                            Blueprint exacto
-                          </Typography>
-                          {exactCandidates.map((c) => (
-                            <CandidateRow
-                              key={c.transitLineId}
-                              candidate={c}
-                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
-                              onSelect={() => void handleVerifyCandidate(c)}
-                              disabled={verifyUnit.isPending}
-                            />
-                          ))}
-                        </>
-                      ) : null}
-
-                      {bestCandidates.length > 0 ? (
-                        <>
-                          {productCandidates.length > 0 || exactCandidates.length > 0 ? (
-                            <Divider sx={{ my: 1 }} />
-                          ) : null}
-                          <Typography variant="subtitle2" fontWeight={600}>
-                            Mejores match (nombre / precio / expansión)
-                          </Typography>
-                          {bestCandidates.map((c) => (
-                            <CandidateRow
-                              key={c.transitLineId}
-                              candidate={c}
-                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
-                              onSelect={() => void handleVerifyCandidate(c)}
-                              disabled={verifyUnit.isPending}
-                            />
-                          ))}
-                        </>
-                      ) : null}
-
-                      {possibleCandidates.length > 0 ? (
-                        <>
-                          <Divider sx={{ my: 1 }} />
-                          <Typography variant="subtitle2" fontWeight={600}>
-                            Posibles (por nombre)
-                          </Typography>
-                          {possibleCandidates.map((c) => (
-                            <CandidateRow
-                              key={c.transitLineId}
-                              candidate={c}
-                              imageSrc={resolvePanelImageSrc(c.imageUrl)}
-                              onSelect={() => void handleVerifyCandidate(c)}
-                              disabled={verifyUnit.isPending}
-                            />
-                          ))}
-                        </>
-                      ) : null}
-                    </Stack>
                   )}
                 </Box>
-              ) : null}
-            </>
-          )}
-        </Paper>
+                <Box width={{ xs: '100%', md: 320 }} flexShrink={0}>
+                  <ReceiptFinalizePanel
+                    session={session}
+                    onFinalize={handleFinalize}
+                    onCancel={handleCancel}
+                    error={actionError}
+                  />
+                  {wizardStep === 2 && (
+                    <Button
+                      sx={{ mt: 1 }}
+                      fullWidth
+                      variant="text"
+                      onClick={() => goToStep(1)}
+                    >
+                      Volver a Recepción
+                    </Button>
+                  )}
+                </Box>
+              </Stack>
+            )}
 
-        {/* Columna 3: catálogo tránsito con búsqueda ordenada */}
-        <Paper variant="outlined" sx={{ p: 2, maxHeight: 680, overflow: 'auto' }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            Tránsito (compras) ({rankedTransitBrowse.length}/{panelItems.length})
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-            Catálogo de tránsito. Con sent pendiente: filtra por blueprint si aplica;
-            precio exacto arriba. Clic para asignar.
-          </Typography>
-          <HomologSearchField
-            placeholder="Buscar nombre, BP#, precio… (Enter)"
-            onApply={setAppliedTransitSearch}
-            sx={{ mb: 1.5 }}
-          />
-          {rankedTransitBrowse.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {appliedTransitSearch.trim()
-                ? 'Sin resultados.'
-                : 'Sin líneas de tránsito disponibles.'}
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {rankedTransitBrowse.map((item) => {
-                const rank = candidates.find((c) => c.transitLineId === item.transit_line_id);
-                const perfect = rank ? isPerfectMatch(rank) : false;
-                const canPick =
-                  selectedUnit?.status === 'pending' && item.available_in_session > 0;
-                return (
-                  <Paper
-                    key={item.transit_line_id}
-                    variant="outlined"
-                    onClick={() => {
-                      if (canPick) void handleVerifyPanelItem(item);
-                    }}
-                    sx={{
-                      p: 1,
-                      cursor: canPick ? 'pointer' : 'default',
-                      opacity: item.available_in_session > 0 ? 1 : 0.5,
-                      borderWidth: perfect ? 2 : 1,
-                      borderColor: perfect
-                        ? '#1b5e20'
-                        : rank?.matchTier === 'exact'
-                          ? '#2e7d32'
-                          : rank?.matchTier === 'best'
-                            ? '#1565c0'
-                            : '#e0e0e0',
-                      bgcolor: perfect ? '#e8f5e9' : 'transparent',
-                      '&:hover': canPick ? { bgcolor: perfect ? '#c8e6c9' : 'action.hover' } : {},
-                    }}
-                  >
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <HomologCardImage
-                        src={resolvePanelImageSrc(item.image_url)}
-                        alt={item.card_name}
-                        variant="list"
-                      />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Stack direction="row" spacing={0.5} alignItems="center">
-                          <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1 }}>
-                            {item.card_name}
-                          </Typography>
-                          {perfect ? (
-                            <Chip
-                              size="small"
-                              color="success"
-                              label="Perfecto"
-                              sx={{ fontWeight: 700, height: 20, fontSize: 10 }}
-                            />
-                          ) : null}
-                        </Stack>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          Disp. {item.available_in_session}/{item.remaining_quantity}
-                          {item.blueprint_id ? ` · BP#${item.blueprint_id}` : ''}
-                          {rank && !perfect ? ` · ${tierLabel(rank.matchTier)}` : ''}
-                          {perfect ? ' · precio exacto' : ''}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                );
-              })}
-            </Stack>
+          {wizardStep === 3 && (
+            <ReceiptWizardPvpStep
+              sessionId={session.session_id}
+              lines={session.lines}
+              onContinue={() => goToStep(4)}
+              onSkip={() => goToStep(4)}
+              onRevert={handleRevert}
+            />
           )}
-        </Paper>
-      </Box>
 
-      <NovedadDialog
-        open={novedadOpen}
-        onClose={() => setNovedadOpen(false)}
-        panelItems={panelItems}
-        onSubmit={handleNovedadSubmit}
-        isSubmitting={markNovedad.isPending}
+          {wizardStep === 4 && (
+            <ReceiptWizardLabelsStep
+              stockIds={
+                stockIds.length > 0
+                  ? stockIds
+                  : stockIdsFromSession(session)
+              }
+              onFinish={handleFinishWizard}
+              onNewReceipt={() => void handleCreate()}
+              onRevert={handleRevert}
+            />
+          )}
+        </>
+      )}
+
+      <InconsistencyDialog
+        open={Boolean(inconsistencyLine)}
+        line={inconsistencyLine}
+        onConfirm={handleInconsistency}
+        onClose={() => setInconsistencyLine(null)}
       />
     </Box>
   );

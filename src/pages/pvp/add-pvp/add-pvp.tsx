@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
 import { operationalRarezaLabel } from "../../../constants/item-rareza";
 import { API_BASE, apiUrl } from "../../../config/api";
+import { sanitizeReturnPath } from "../../../modules/receipt-wizard";
 
 /** Respuesta estándar de carta desde TCGdex (mapeada en backend) */
 type CardDetail = {
@@ -65,6 +66,10 @@ type PvpCardRow = {
 export default function AsignarPVP() {
   const { id } = useParams(); // card_id
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnRaw = searchParams.get("return");
+  const returnPath =
+    returnRaw == null ? "/stock" : sanitizeReturnPath(returnRaw);
   const queryClient = useQueryClient();
   const [currency, setCurrency] = useState<"EUR" | "COP">("COP");
   const [pvp, setPvp] = useState<number | "">("");
@@ -274,9 +279,9 @@ export default function AsignarPVP() {
       setAlerta(null);
       await queryClient.invalidateQueries({ queryKey: ["pvp-rows", id] });
       
-      // Redirigir al menú de stock después de 1 segundo
+      // Redirigir al return seguro (wizard / stock) después de 1 segundo
       setTimeout(() => {
-        navigate("/stock");
+        navigate(returnPath);
       }, 1000);
     } catch (err: any) {
       console.error("Error al guardar PVP:", err);
@@ -290,9 +295,18 @@ export default function AsignarPVP() {
 
   return (
     <div className="mx-auto mt-10 px-8 max-w-6xl">
-      <h2 className="text-3xl font-bold mb-6 text-gray-800">
-        Asignar PVP a la carta
-      </h2>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">
+          Asignar PVP a la carta
+        </h2>
+        <button
+          type="button"
+          onClick={() => navigate(returnPath)}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Volver
+        </button>
+      </div>
 
       <div className="grid grid-cols-[325px_1fr] gap-8 items-start">
         {/* Lado izquierdo: Imagen y nombre */}

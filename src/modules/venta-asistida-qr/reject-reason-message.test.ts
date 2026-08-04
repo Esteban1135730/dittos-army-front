@@ -40,6 +40,19 @@ describe("reservedScanNotice", () => {
     });
   });
 
+  it("aviso cuando se sustituyó una carta ya vendida", () => {
+    const notice = reservedScanNotice({
+      substituted: true,
+      sold_language_fallback: true,
+      language: "EN",
+    });
+    expect(notice).toEqual({
+      severity: "warning",
+      message:
+        "La carta escaneada ya estaba vendida; se cargó la misma carta en EN.",
+    });
+  });
+
   it("sin aviso para escaneos normales", () => {
     expect(reservedScanNotice({})).toBeNull();
   });

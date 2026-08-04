@@ -3,7 +3,8 @@ export type StockSellRejectReason =
   | "estado_no_vendible"
   | "ya_vendida"
   | "reservada"
-  | "propiedad";
+  | "propiedad"
+  | "sin_stock";
 
 export type StockScanView = {
   stock_id: string;
@@ -23,12 +24,16 @@ export type StockScanView = {
   card_state: string;
   sellable: boolean;
   reject_reason?: StockSellRejectReason;
-  /** La escaneada estaba reservada y se devolvió una copia equivalente disponible. */
+  product_kind?: "unit" | "quantity";
+  quantity?: number | null;
+  /** La escaneada estaba reservada/vendida y se devolvió una copia equivalente disponible. */
   substituted?: boolean;
-  /** stock_id de la línea reservada que se escaneó (cuando substituted). */
+  /** stock_id de la línea reservada o vendida que se escaneó (cuando substituted). */
   scanned_stock_id?: string;
   /** Reservada sin equivalente: vendible, al vender se cancela la reserva. */
   reserved_fallback?: boolean;
+  /** Vendida: se cargó una copia equivalente (mismo idioma preferido, si no otro). */
+  sold_language_fallback?: boolean;
 };
 
 export type CartLine = {
@@ -41,6 +46,9 @@ export type CartLine = {
   expansion: string;
   rareza: string | null;
   language: string;
+  /** Unidades en carrito (default 1). Meaningful for product_kind quantity. */
+  qty?: number;
+  product_kind?: "unit" | "quantity";
   /** Línea proveniente de una reserva (fallback): se cancela la reserva al vender. */
   reserved?: boolean;
 };

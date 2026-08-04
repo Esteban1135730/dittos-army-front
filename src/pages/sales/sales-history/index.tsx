@@ -20,6 +20,7 @@ type SaleHistoryItem = {
     image_url: string;
     card_cost: number;
     currency: string;
+    language?: string;
     shipment: number;
     cards_in_shipmet: number;
     unity_cost: number;
@@ -75,9 +76,11 @@ export default function SalesHistory() {
   const ventasFiltradas = useMemo(() => {
     const termino = busqueda.trim().toLowerCase();
     if (!termino) return ventasValidas;
-    return ventasValidas.filter((sale) =>
-      (sale.stock_info?.card_name ?? "").toLowerCase().includes(termino)
-    );
+    return ventasValidas.filter((sale) => {
+      const nombre = (sale.stock_info?.card_name ?? "").toLowerCase();
+      const idioma = (sale.stock_info?.language ?? "").toLowerCase();
+      return nombre.includes(termino) || idioma.includes(termino);
+    });
   }, [ventasValidas, busqueda]);
 
   const columns: GridColDef[] = [
@@ -103,6 +106,12 @@ export default function SalesHistory() {
       headerName: "Nombre",
       valueGetter: (_value, row) => row?.stock_info?.card_name ?? "",
       width: 250,
+    },
+    {
+      field: "language",
+      headerName: "Idioma",
+      valueGetter: (_value, row) => row?.stock_info?.language?.trim() || "—",
+      width: 100,
     },
     {
       field: "costo_compra",
@@ -302,7 +311,7 @@ export default function SalesHistory() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Buscar por nombre de carta..."
+                placeholder="Buscar por nombre o idioma..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"

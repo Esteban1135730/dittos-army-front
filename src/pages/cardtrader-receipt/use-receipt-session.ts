@@ -47,13 +47,59 @@ export type ReceiptSession = {
 export type FinalizeResult = {
   session_id: string;
   stock_created: number;
+  /** ObjectId hex de cada Stock creado; length === stock_created */
+  stock_ids: string[];
   inconsistencies: Array<{
+    line_id?: string;
+    card_id?: string;
     card_name: string;
     inconsistency_type: InconsistencyType;
     notes: string;
   }>;
   shipping_total_cop: number;
 };
+
+export type ReceiptWizardStep = 1 | 2 | 3 | 4;
+
+const STOCK_IDS_STORAGE_PREFIX = 'receipt-wizard-stock-ids:';
+
+export function persistReceiptStockIds(
+  sessionId: string,
+  stockIds: string[],
+): void {
+  try {
+    sessionStorage.setItem(
+      `${STOCK_IDS_STORAGE_PREFIX}${sessionId}`,
+      JSON.stringify(stockIds),
+    );
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readPersistedReceiptStockIds(
+  sessionId: string,
+): string[] | null {
+  try {
+    const raw = sessionStorage.getItem(
+      `${STOCK_IDS_STORAGE_PREFIX}${sessionId}`,
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((id): id is string => typeof id === 'string');
+  } catch {
+    return null;
+  }
+}
+
+export function clearPersistedReceiptStockIds(sessionId: string): void {
+  try {
+    sessionStorage.removeItem(`${STOCK_IDS_STORAGE_PREFIX}${sessionId}`);
+  } catch {
+    /* ignore */
+  }
+}
 
 export const INCONSISTENCY_LABELS: Record<InconsistencyType, string> = {
   not_arrived: 'No llegó',
@@ -84,6 +130,9 @@ function normalizeRawSession(raw: unknown): ReceiptSession | null {
   // Forma anidada: { session: {...}, lines: [...] }
   const sessionDoc = (r['session'] as Record<string, unknown> | undefined) ?? r;
   const linesRaw = (r['lines'] as unknown[]) ?? [];
+  const postFinalize = r['post_finalize'] as
+    | { stock_ids?: unknown; stock_created?: unknown }
+    | undefined;
 
   const lines: ReceiptLine[] = linesRaw.map((l) => {
     const ld = l as Record<string, unknown>;
@@ -108,6 +157,19 @@ function normalizeRawSession(raw: unknown): ReceiptSession | null {
       stock_id: (ld['stock_id'] as string | null) ?? null,
     };
   });
+
+  // Si post_finalize trae stock_ids y líneas aún no tienen stock_id, rellenar
+  if (postFinalize && Array.isArray(postFinalize.stock_ids)) {
+    const ids = postFinalize.stock_ids.filter(
+      (id): id is string => typeof id === 'string',
+    );
+    let idx = 0;
+    for (const line of lines) {
+      if (line.status === 'received' && !line.stock_id && idx < ids.length) {
+        line.stock_id = ids[idx++];
+      }
+    }
+  }
 
   const summary = {
     total: lines.length,
@@ -243,9 +305,15 @@ export function useFinalizeReceipt(sessionId: string) {
       return res.data as FinalizeResult;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['cardtrader-receipt-session-active'],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['cardtrader-receipt-session-active'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['cardtrader-receipt-session', sessionId],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['stock'] }),
+      ]);
     },
   });
 }
@@ -260,9 +328,15 @@ export function useRevertFinalization(sessionId: string) {
       return res.data as ReceiptSession;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['cardtrader-receipt-session-active'],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['cardtrader-receipt-session-active'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['cardtrader-receipt-session', sessionId],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['stock'] }),
+      ]);
     },
   });
 }

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import {
@@ -10,12 +10,19 @@ import {
   Tooltip,
 } from "@mui/material";
 import { apiUrl } from "../../config/api";
+import { ensureBulkProduct } from "../../api/ensure-bulk";
 import type { StockListItem } from "../../types/stock";
 import { formatCOP } from "../../utils/convert";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
+import {
+  isQuantityProduct,
+  resolveStockImageUrl,
+} from "../../constants/bulk-product";
 import { filterStockVisibleInGrid } from "../../utils/stock-grid-visible";
 import {
+  downloadOpenLabelQrLabelsCsv,
   openStockQrLabelsPrintWindow,
+  openStockQrLabelsThermalPrintWindow,
   type StockQrExportRow,
 } from "../../modules/stock-barcode";
 import {
@@ -25,6 +32,10 @@ import {
   formatQrLabelPageStatsMessage,
   usePrintQueue,
 } from "../../modules/stock-qr-print-queue";
+import {
+  isQrEligible,
+  parseStockIdsQuery,
+} from "../../modules/receipt-wizard";
 
 function rarezaLabel(item: StockListItem): string | null {
   let rz =
@@ -49,9 +60,17 @@ function cardStateLabel(state: string): string {
 }
 
 export default function ImprimirEtiquetasQrPage() {
+  const [searchParams] = useSearchParams();
+  const receiptStockIds = useMemo(
+    () => parseStockIdsQuery(searchParams.get("stockIds")),
+    [searchParams],
+  );
+
   const [busqueda, setBusqueda] = useState("");
   const [addQtyById, setAddQtyById] = useState<Record<string, number>>({});
-  const [imprimiendo, setImprimiendo] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState<
+    "a4" | "thermal" | "openlabel" | null
+  >(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -67,6 +86,16 @@ export default function ImprimirEtiquetasQrPage() {
 
   const { queue, add, setQuantity, remove, clear, totalLabels } =
     usePrintQueue();
+
+  useEffect(() => {
+    void ensureBulkProduct().then((r) => {
+      if (!r.ok) {
+        showSnackbar(r.error ?? "No se pudo asegurar el SKU bulk", "warning");
+      }
+    });
+    // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: stock = [], isLoading: loadingStock } = useQuery<
     StockListItem[]
@@ -129,14 +158,48 @@ export default function ImprimirEtiquetasQrPage() {
     showSnackbar("Añadido a la cola de impresión");
   };
 
-  const handleImprimir = async () => {
+  const receiptItems = useMemo(() => {
+    if (receiptStockIds.length === 0) return [];
+    return receiptStockIds.map((id) => ({
+      id,
+      item: stockById.get(id),
+      elegible: isQrEligible(id, eligibleIds),
+      exportRow: exportByStockId.get(id),
+    }));
+  }, [receiptStockIds, stockById, eligibleIds, exportByStockId]);
+
+  const handleAddReceiptEligible = () => {
+    let added = 0;
+    for (const row of receiptItems) {
+      if (!row.elegible) continue;
+      add(row.id, 1);
+      added += 1;
+    }
+    if (added === 0) {
+      showSnackbar(
+        "Ninguna línea de esta recepción es elegible (revisa PVP).",
+        "warning",
+      );
+      return;
+    }
+    showSnackbar(
+      `Añadidas ${added} línea${added === 1 ? "" : "s"} elegible${added === 1 ? "" : "s"} a la cola`,
+    );
+  };
+
+  const resolveQueueRows = () => {
+    const { rows, omittedCount } = expandQueueToExportRows(
+      queue,
+      exportByStockId,
+    );
+    return { rows, omittedCount };
+  };
+
+  const handleImprimir = async (mode: "a4" | "thermal") => {
     if (totalLabels === 0) return;
     try {
-      setImprimiendo(true);
-      const { rows, omittedCount } = expandQueueToExportRows(
-        queue,
-        exportByStockId,
-      );
+      setImprimiendo(mode);
+      const { rows, omittedCount } = resolveQueueRows();
 
       if (rows.length === 0) {
         showSnackbar(
@@ -153,9 +216,15 @@ export default function ImprimirEtiquetasQrPage() {
         );
       }
 
-      await openStockQrLabelsPrintWindow(rows, {
-        subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · hoja A4 5×12`,
-      });
+      if (mode === "thermal") {
+        await openStockQrLabelsThermalPrintWindow(rows, {
+          subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · térmica 50×25 mm`,
+        });
+      } else {
+        await openStockQrLabelsPrintWindow(rows, {
+          subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · hoja A4 5×12`,
+        });
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error
@@ -163,7 +232,43 @@ export default function ImprimirEtiquetasQrPage() {
           : "No se pudieron generar las etiquetas QR.";
       showSnackbar(msg, "error");
     } finally {
-      setImprimiendo(false);
+      setImprimiendo(null);
+    }
+  };
+
+  const handleExportOpenLabel = () => {
+    if (totalLabels === 0) return;
+    try {
+      setImprimiendo("openlabel");
+      const { rows, omittedCount } = resolveQueueRows();
+
+      if (rows.length === 0) {
+        showSnackbar(
+          "Ninguna línea de la cola es elegible para QR. Revisa PVP y estado.",
+          "error",
+        );
+        return;
+      }
+
+      if (omittedCount > 0) {
+        showSnackbar(
+          `Se omitieron ${omittedCount} etiqueta${omittedCount === 1 ? "" : "s"} no elegibles; se exportan ${rows.length}.`,
+          "warning",
+        );
+      }
+
+      downloadOpenLabelQrLabelsCsv(rows);
+      showSnackbar(
+        `CSV OpenLabel+ descargado · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"}`,
+      );
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "No se pudo exportar el CSV para OpenLabel+.";
+      showSnackbar(msg, "error");
+    } finally {
+      setImprimiendo(null);
     }
   };
 
@@ -186,6 +291,68 @@ export default function ImprimirEtiquetasQrPage() {
         Busca líneas de inventario, arma una cola con cantidad y imprime
         etiquetas QR (misma plantilla A4 5×12 que Exportar QR en Stock).
       </p>
+
+      {receiptItems.length > 0 && (
+        <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800">
+              De esta recepción ({receiptItems.length})
+            </h2>
+            <Button
+              variant="outlined"
+              disabled={loading || !receiptItems.some((r) => r.elegible)}
+              onClick={handleAddReceiptEligible}
+            >
+              Añadir elegibles a la cola
+            </Button>
+          </div>
+          <ul className="space-y-3">
+            {receiptItems.map(({ id, item, elegible, exportRow }) => (
+              <li
+                key={id}
+                className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50"
+              >
+                {item &&
+                resolveStockImageUrl(item.card_id, item.image_url) ? (
+                  <img
+                    src={resolveStockImageUrl(item.card_id, item.image_url)}
+                    alt=""
+                    className="w-16 h-24 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-24 bg-gray-200 rounded-md flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-base text-gray-900">
+                    {item?.card_name ?? exportRow?.card_name ?? id}
+                  </p>
+                  {exportRow && (
+                    <p className="text-sm font-bold text-blue-800 mt-1">
+                      COP {formatCOP(exportRow.price_cop)}
+                    </p>
+                  )}
+                  <span
+                    className={`inline-block text-sm px-2 py-0.5 rounded mt-2 ${
+                      elegible
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-200 text-gray-600"
+                    }`}
+                  >
+                    {elegible ? "Elegible" : "No elegible"}
+                  </span>
+                </div>
+                <Button
+                  variant="contained"
+                  disabled={!elegible}
+                  onClick={() => handleAdd(id)}
+                >
+                  Añadir
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 flex-1 min-h-0">
         <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 flex flex-col min-h-[420px] xl:min-h-0">
@@ -224,9 +391,9 @@ export default function ImprimirEtiquetasQrPage() {
                     key={item._id}
                     className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50"
                   >
-                    {item.image_url ? (
+                    {resolveStockImageUrl(item.card_id, item.image_url) ? (
                       <img
-                        src={item.image_url}
+                        src={resolveStockImageUrl(item.card_id, item.image_url)}
                         alt=""
                         className="w-20 h-28 md:w-24 md:h-32 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0 shadow-sm"
                       />
@@ -242,6 +409,12 @@ export default function ImprimirEtiquetasQrPage() {
                         {item.language ? `${item.language} · ` : ""}
                         {rz ? `${rz} · ` : ""}
                         {cardStateLabel(item.card_state)}
+                        {isQuantityProduct({
+                          product_kind: item.product_kind,
+                          card_id: item.card_id,
+                        })
+                          ? ` · Stock: ${typeof item.quantity === "number" ? item.quantity : 0}`
+                          : ""}
                       </p>
                       {exportRow && (
                         <p className="text-sm md:text-base font-bold text-blue-800 mt-1">
@@ -395,10 +568,30 @@ export default function ImprimirEtiquetasQrPage() {
             <Button
               variant="contained"
               size="large"
-              disabled={totalLabels === 0 || imprimiendo}
-              onClick={() => void handleImprimir()}
+              disabled={totalLabels === 0 || imprimiendo !== null}
+              onClick={() => void handleImprimir("a4")}
             >
-              {imprimiendo ? "Generando…" : "Imprimir cola"}
+              {imprimiendo === "a4" ? "Generando…" : "Imprimir cola"}
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              disabled={totalLabels === 0 || imprimiendo !== null}
+              onClick={() => void handleImprimir("thermal")}
+            >
+              {imprimiendo === "thermal"
+                ? "Generando…"
+                : "Imprimir térmica (50×25)"}
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              disabled={totalLabels === 0 || imprimiendo !== null}
+              onClick={handleExportOpenLabel}
+            >
+              {imprimiendo === "openlabel"
+                ? "Exportando…"
+                : "Exportar CSV OpenLabel+"}
             </Button>
             <Button
               variant="outlined"

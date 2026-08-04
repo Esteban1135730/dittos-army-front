@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  IconButton,
   Paper,
   Snackbar,
   Stack,
@@ -27,12 +28,16 @@ import { useBarcodeScanner } from "../../components/barcode-scanner/use-barcode-
 import { useLaserBarcodeInput } from "../../components/barcode-scanner/use-laser-barcode-input";
 import { ScannerErrorBoundary } from "../../components/barcode-scanner/scanner-error-boundary";
 import { apiUrl } from "../../config/api";
+import { ensureBulkProduct } from "../../api/ensure-bulk";
+import { resolveStockImageUrl } from "../../constants/bulk-product";
 import { parseStockQrPayload } from "../../modules/stock-barcode";
 import {
   rejectReasonMessage,
   reservedScanNotice,
   useVentaAsistidaCart,
   lineProfitCop,
+  expandCartLinesToSellBatchItems,
+  cartUnitCount,
   type ReservedScanNotice,
   type SellBatchResult,
   type StockScanView,
@@ -98,9 +103,16 @@ function VentaAsistidaQrContent() {
   const [scanLoading, setScanLoading] = useState(false);
   const [selling, setSelling] = useState(false);
   const [sellMessage, setSellMessage] = useState<string | null>(null);
+  const [bulkWarn, setBulkWarn] = useState<string | null>(null);
 
   const canScan = !scanLoading && !selling;
   const laserFocusRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    void ensureBulkProduct().then((r) => {
+      if (!r.ok) setBulkWarn(r.error ?? "No se pudo asegurar el SKU bulk");
+    });
+  }, []);
 
   const handleScan = useCallback(
     async (raw: string) => {
@@ -119,9 +131,10 @@ function VentaAsistidaQrContent() {
 
       setScanLoading(true);
       try {
-        // Excluir líneas ya en carrito para que el back no proponga dos veces
-        // la misma copia equivalente de una reservada.
-        const excludeIds = cart.lines.map((l) => l.stock_id);
+        // Excluir líneas unitarias ya en carrito (quantity se re-escanea para +1).
+        const excludeIds = cart.lines
+          .filter((l) => l.product_kind !== "quantity")
+          .map((l) => l.stock_id);
         const excludeQuery =
           excludeIds.length > 0
             ? `?exclude=${encodeURIComponent(excludeIds.join(","))}`
@@ -141,12 +154,14 @@ function VentaAsistidaQrContent() {
           stock_id: view.stock_id,
           card_id: view.card_id ?? "",
           card_name: view.card_name,
-          image_url: view.image_url,
+          image_url: resolveStockImageUrl(view.card_id, view.image_url),
           amount_cop: view.price_cop ?? 0,
           card_cost_cop: view.card_cost_cop ?? 0,
           expansion: view.expansion ?? "",
           rareza: view.rareza ?? null,
           language: view.language ?? "",
+          product_kind: view.product_kind ?? "unit",
+          qty: 1,
           reserved: view.reserved_fallback === true,
         });
 
@@ -208,11 +223,7 @@ function VentaAsistidaQrContent() {
     setScanError(null);
     try {
       const res = await axios.post<SellBatchResult>(apiUrl("/sales/sell-batch"), {
-        items: cart.lines.map((l) => ({
-          stock_id: l.stock_id,
-          amount_cop: l.amount_cop,
-          notes: "Venta asistida QR",
-        })),
+        items: expandCartLinesToSellBatchItems(cart.lines),
       });
       const data = res.data;
       const soldIds = data.results.filter((r) => r.success).map((r) => r.stock_id);
@@ -223,7 +234,7 @@ function VentaAsistidaQrContent() {
       await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
 
       if (failed.length === 0) {
-        setSellMessage(`Se vendieron ${data.sold_count} cartas.`);
+        setSellMessage(`Se vendieron ${data.sold_count} unidades.`);
         cart.clear();
       } else {
         setSellMessage(
@@ -432,11 +443,22 @@ function VentaAsistidaQrContent() {
               Carrito
             </Typography>
             <Chip
-              label={`${cart.lines.length} ${cart.lines.length === 1 ? "carta" : "cartas"}`}
+              label={`${cartUnitCount(cart.lines)} ${cartUnitCount(cart.lines) === 1 ? "unidad" : "unidades"}`}
               size="small"
               color={cart.lines.length > 0 ? "primary" : "default"}
             />
           </Stack>
+
+          {bulkWarn ? (
+            <Alert
+              severity="warning"
+              sx={{ mb: 2 }}
+              variant="outlined"
+              onClose={() => setBulkWarn(null)}
+            >
+              {bulkWarn}
+            </Alert>
+          ) : null}
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} mb={2}>
             <SummaryCard
@@ -477,6 +499,9 @@ function VentaAsistidaQrContent() {
                 <TableHead>
                   <TableRow sx={{ "& th": { bgcolor: "grey.100", fontWeight: 700 } }}>
                     <TableCell>Carta</TableCell>
+                    <TableCell align="center" width={110}>
+                      Cant.
+                    </TableCell>
                     <TableCell align="right" width={130}>
                       Precio
                     </TableCell>
@@ -489,6 +514,8 @@ function VentaAsistidaQrContent() {
                 <TableBody>
                   {cart.lines.map((line) => {
                     const profit = lineProfitCop(line);
+                    const qty = line.qty ?? 1;
+                    const img = resolveStockImageUrl(line.card_id, line.image_url);
                     return (
                       <TableRow
                         key={line.stock_id}
@@ -497,10 +524,10 @@ function VentaAsistidaQrContent() {
                       >
                         <TableCell>
                           <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                            {line.image_url ? (
+                            {img ? (
                               <Box
                                 component="img"
-                                src={line.image_url}
+                                src={img}
                                 alt=""
                                 sx={{
                                   width: 44,
@@ -536,6 +563,33 @@ function VentaAsistidaQrContent() {
                               </Stack>
                             </Box>
                           </Stack>
+                        </TableCell>
+                        <TableCell align="center">
+                          {line.product_kind === "quantity" ? (
+                            <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5}>
+                              <IconButton
+                                size="small"
+                                aria-label="menos"
+                                onClick={() =>
+                                  cart.updateQty(line.stock_id, Math.max(1, qty - 1))
+                                }
+                              >
+                                −
+                              </IconButton>
+                              <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20 }}>
+                                {qty}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                aria-label="más"
+                                onClick={() => cart.updateQty(line.stock_id, qty + 1)}
+                              >
+                                +
+                              </IconButton>
+                            </Stack>
+                          ) : (
+                            <Typography variant="body2">1</Typography>
+                          )}
                         </TableCell>
                         <TableCell align="right">
                           <TextField
