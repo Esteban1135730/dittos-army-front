@@ -19,6 +19,7 @@ const line = {
   expansion: "Base Set",
   rareza: null,
   language: "EN",
+  owner: "pablo" as const,
 };
 
 const bulkLine = {
@@ -33,6 +34,7 @@ const bulkLine = {
   language: "",
   product_kind: "quantity" as const,
   qty: 1,
+  owner: "pablo" as const,
 };
 
 describe("cart-helpers", () => {

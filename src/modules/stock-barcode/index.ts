@@ -1,9 +1,11 @@
 export {
   parseStockQrPayload,
+  parseStockQrPayloadMulti,
   parseStockBarcodePayload,
   STOCK_QR_PREFIX,
   STOCK_BARCODE_PREFIX,
 } from "./stock-barcode-payload";
+export type { ParsedStockQr } from "./stock-barcode-payload";
 export {
   openStockQrLabelsPrintWindow,
   openStockQrLabelsThermalPrintWindow,

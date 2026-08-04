@@ -37,6 +37,7 @@ import {
   type StockQrExportRow,
 } from "../../../modules/stock-barcode";
 import { filterStockVisibleInGrid } from "../../../utils/stock-grid-visible";
+import { useOwner } from "../../../modules/owner";
 
 export type StockItem = StockListItem;
 
@@ -131,6 +132,8 @@ function stockIncluidoEnCalculos(item: StockListItem): boolean {
 export default function StockGrid() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can } = useOwner();
+  const canExportTienda = can("export-tienda");
   const [busqueda, setBusqueda] = useState("");
   /** Tags seleccionados en el filtro: la fila debe incluir todos (AND). */
   const [filtroTags, setFiltroTags] = useState<StockTagId[]>([]);
@@ -1091,6 +1094,7 @@ export default function StockGrid() {
             >
               {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
             </button>
+            {canExportTienda ? (
             <button
               type="button"
               title="Genera inventory.json y upcoming.json en dittos-army-store/public y hace push a main (despliegue Firebase)"
@@ -1100,6 +1104,7 @@ export default function StockGrid() {
             >
               {actualizandoTienda ? "Actualizando..." : "Actualizar tienda (catálogo + Próximamente)"}
             </button>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4 text-sm text-gray-700">

@@ -1,3 +1,7 @@
+import axios from "axios";
+import type { OwnerKey } from "./owners";
+import { OWNERS_CONFIG } from "./owners";
+
 const API_PORT = import.meta.env.VITE_API_PORT ?? "3000";
 
 /**
@@ -32,3 +36,24 @@ export function apiUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${getApiBase()}${normalized}`;
 }
+
+/** Active owner for Axios default instance (034). */
+let activeApiOwner: OwnerKey = OWNERS_CONFIG.defaultOwner;
+
+export function setApiOwnerHeader(owner: OwnerKey) {
+  activeApiOwner = owner;
+  axios.defaults.headers.common["X-Owner"] = owner;
+}
+
+export function getApiOwnerHeader(): OwnerKey {
+  return activeApiOwner;
+}
+
+// Interceptor on the shared axios default instance (panel uses `import axios from "axios"`).
+axios.interceptors.request.use((config) => {
+  config.headers = config.headers ?? {};
+  config.headers["X-Owner"] = activeApiOwner;
+  return config;
+});
+
+setApiOwnerHeader(OWNERS_CONFIG.defaultOwner);

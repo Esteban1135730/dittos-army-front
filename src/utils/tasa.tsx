@@ -100,32 +100,32 @@ export default function ExchangeRateConverter() {
     rates.usdToEur === null
   ) {
     return (
-      <div className="p-4 rounded bg-gray-800 text-white text-sm space-y-2">
-        <label className="block text-sm font-semibold">Tasas de cambio:</label>
+      <div className="space-y-2 rounded-md bg-black/20 p-2.5 text-xs text-white">
+        <label className="block font-semibold text-gray-200">Tasas de cambio</label>
         <input
           type="number"
           placeholder="EUR → COP"
           step="0.01"
           onChange={(e) => setInputs({ ...inputs, euroToCop: e.target.value })}
-          className="w-full bg-gray-900 px-2 py-1 rounded border border-gray-600"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1"
         />
         <input
           type="number"
           placeholder="USD → COP"
           step="0.01"
           onChange={(e) => setInputs({ ...inputs, usdToCop: e.target.value })}
-          className="w-full bg-gray-900 px-2 py-1 rounded border border-gray-600"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1"
         />
         <input
           type="number"
           placeholder="USD → EUR"
           step="0.0001"
           onChange={(e) => setInputs({ ...inputs, usdToEur: e.target.value })}
-          className="w-full bg-gray-900 px-2 py-1 rounded border border-gray-600"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1"
         />
         <button
           onClick={() => handleSaveRates(inputs)}
-          className="bg-blue-500 text-white px-4 py-1 rounded"
+          className="w-full rounded bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-500"
         >
           Guardar tasas
         </button>
@@ -134,14 +134,14 @@ export default function ExchangeRateConverter() {
   }
 
   return (
-    <div className="mt-4 bg-gray-800 p-4 rounded shadow text-sm text-white space-y-4">
+    <div className="mt-1 space-y-3 rounded-md bg-black/20 p-2.5 text-xs text-white">
       <div>
-        <label className="block mb-1 font-medium">Convertir EUR → COP:</label>
+        <label className="mb-1 block font-medium text-gray-300">EUR → COP</label>
         <input
           type="number"
           value={eur}
           onChange={(e) => setEur(parseFloat(e.target.value) || 0)}
-          className="w-full bg-gray-900 text-white border border-gray-600 px-2 py-1 rounded"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1 text-white"
         />
         <p className="mt-1 text-green-300">
           {convert.toCopFromEur(eur)?.toLocaleString("es-CO", {
@@ -152,12 +152,12 @@ export default function ExchangeRateConverter() {
       </div>
 
       <div>
-        <label className="block mb-1 font-medium">Convertir USD → COP:</label>
+        <label className="mb-1 block font-medium text-gray-300">USD → COP</label>
         <input
           type="number"
           value={usd}
           onChange={(e) => setUsd(parseFloat(e.target.value) || 0)}
-          className="w-full bg-gray-900 text-white border border-gray-600 px-2 py-1 rounded"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1 text-white"
         />
         <p className="mt-1 text-blue-300">
           {convert.toCopFromUsd(usd)?.toLocaleString("es-CO", {
@@ -168,7 +168,7 @@ export default function ExchangeRateConverter() {
       </div>
 
       <div>
-        <label className="block mb-1 font-medium">Convertir USD → EUR:</label>
+        <label className="mb-1 block font-medium text-gray-300">USD → EUR</label>
         <p className="text-purple-300">
           {convert.toEurFromUsd(usd)?.toLocaleString("es-ES", {
             style: "currency",
@@ -178,12 +178,12 @@ export default function ExchangeRateConverter() {
       </div>
 
       <div>
-        <label className="block mb-1 font-medium">Convertir COP → EUR:</label>
+        <label className="mb-1 block font-medium text-gray-300">COP → EUR</label>
         <input
           type="number"
           value={cop}
           onChange={(e) => setCop(parseFloat(e.target.value) || 0)}
-          className="w-full bg-gray-900 text-white border border-gray-600 px-2 py-1 rounded"
+          className="w-full rounded border border-white/10 bg-gray-900 px-2 py-1 text-white"
         />
         <p className="mt-1 text-indigo-300">
           {convert.toEurFromCop(cop)?.toLocaleString("es-ES", {

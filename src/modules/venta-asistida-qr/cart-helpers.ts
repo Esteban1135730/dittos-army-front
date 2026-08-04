@@ -76,11 +76,17 @@ export function cartUnitCount(lines: CartLine[]): number {
 /** Expande líneas quantity a N ítems unitarios para POST /sales/sell-batch. */
 export function expandCartLinesToSellBatchItems(
   lines: CartLine[],
-): Array<{ stock_id: string; amount_cop: number; notes: string }> {
+): Array<{
+  stock_id: string;
+  amount_cop: number;
+  notes: string;
+  owner: CartLine["owner"];
+}> {
   const items: Array<{
     stock_id: string;
     amount_cop: number;
     notes: string;
+    owner: CartLine["owner"];
   }> = [];
   for (const l of lines) {
     const n = lineQty(l);
@@ -89,6 +95,7 @@ export function expandCartLinesToSellBatchItems(
         stock_id: l.stock_id,
         amount_cop: l.amount_cop,
         notes: "Venta asistida QR",
+        owner: l.owner,
       });
     }
   }

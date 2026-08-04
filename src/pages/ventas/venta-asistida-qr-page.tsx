@@ -30,7 +30,7 @@ import { ScannerErrorBoundary } from "../../components/barcode-scanner/scanner-e
 import { apiUrl } from "../../config/api";
 import { ensureBulkProduct } from "../../api/ensure-bulk";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
-import { parseStockQrPayload } from "../../modules/stock-barcode";
+import { parseStockQrPayloadMulti } from "../../modules/stock-barcode";
 import {
   rejectReasonMessage,
   reservedScanNotice,
@@ -43,6 +43,9 @@ import {
   type StockScanView,
 } from "../../modules/venta-asistida-qr";
 import { formatCOP } from "../../utils/convert";
+import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
+import { useOwner } from "../../modules/owner";
+import { useOwnerChangeGuard } from "../../modules/owner/owner-change-guard";
 
 type ScanMode = "laser" | "camera";
 
@@ -95,6 +98,7 @@ function SummaryCard({
 
 function VentaAsistidaQrContent() {
   const queryClient = useQueryClient();
+  const { owner: activeOwner } = useOwner();
   const cart = useVentaAsistidaCart();
   const [mode, setMode] = useState<ScanMode>("laser");
   const [cameraOn, setCameraOn] = useState(false);
@@ -104,9 +108,23 @@ function VentaAsistidaQrContent() {
   const [selling, setSelling] = useState(false);
   const [sellMessage, setSellMessage] = useState<string | null>(null);
   const [bulkWarn, setBulkWarn] = useState<string | null>(null);
+  const [ownerAmbiguousMsg, setOwnerAmbiguousMsg] = useState<string | null>(null);
 
   const canScan = !scanLoading && !selling;
   const laserFocusRef = useRef<(() => void) | null>(null);
+
+  const cartClearGuard = useCallback(
+    (_next: OwnerKey) => {
+      if (cart.lines.length === 0) return true;
+      const ok = window.confirm(
+        "Hay ítems en el carrito QR. Al cambiar de owner se vaciará el carrito. ¿Continuar?",
+      );
+      if (ok) cart.clear();
+      return ok;
+    },
+    [cart],
+  );
+  useOwnerChangeGuard(cartClearGuard);
 
   useEffect(() => {
     void ensureBulkProduct().then((r) => {
@@ -119,28 +137,32 @@ function VentaAsistidaQrContent() {
       const trimmed = raw.trim();
       setScanError(null);
       setScanNotice(null);
+      setOwnerAmbiguousMsg(null);
 
-      const stockId = parseStockQrPayload(trimmed);
-      if (!stockId) {
+      const parsed = parseStockQrPayloadMulti(trimmed);
+      if (!parsed) {
         setScanError(
-          "QR no reconocido. Usa etiquetas QR exportadas desde Stock (DA-STOCK:…).",
+          "QR no reconocido. Usa etiquetas DA-STOCK:… o ESTEBAN-STOCK:….",
         );
         setCameraOn(false);
         return;
       }
 
+      const { stockId, owner: prefixOwner } = parsed;
+
       setScanLoading(true);
       try {
-        // Excluir líneas unitarias ya en carrito (quantity se re-escanea para +1).
         const excludeIds = cart.lines
           .filter((l) => l.product_kind !== "quantity")
           .map((l) => l.stock_id);
-        const excludeQuery =
-          excludeIds.length > 0
-            ? `?exclude=${encodeURIComponent(excludeIds.join(","))}`
-            : "";
+        const params = new URLSearchParams();
+        params.set("multi", "1");
+        if (prefixOwner) params.set("scan_owner", prefixOwner);
+        if (excludeIds.length > 0) {
+          params.set("exclude", excludeIds.join(","));
+        }
         const res = await axios.get<StockScanView>(
-          apiUrl(`/stock/${stockId}/scan${excludeQuery}`),
+          apiUrl(`/stock/${stockId}/scan?${params.toString()}`),
         );
         const view = res.data;
 
@@ -148,6 +170,15 @@ function VentaAsistidaQrContent() {
           setScanError(rejectReasonMessage(view.reject_reason));
           setCameraOn(false);
           return;
+        }
+
+        const lineOwner: OwnerKey =
+          view.owner ?? prefixOwner ?? activeOwner;
+
+        if (view.owner_ambiguous_resolved) {
+          setOwnerAmbiguousMsg(
+            `ObjectId presente en ambas bases; se usó ${OWNERS_CONFIG.owners[lineOwner].label}.`,
+          );
         }
 
         const addResult = cart.addLine({
@@ -163,6 +194,7 @@ function VentaAsistidaQrContent() {
           product_kind: view.product_kind ?? "unit",
           qty: 1,
           reserved: view.reserved_fallback === true,
+          owner: lineOwner,
         });
 
         if (addResult === "duplicate") {
@@ -184,7 +216,7 @@ function VentaAsistidaQrContent() {
         }
       }
     },
-    [cart, mode],
+    [cart, mode, activeOwner],
   );
 
   const laser = useLaserBarcodeInput({
@@ -499,6 +531,9 @@ function VentaAsistidaQrContent() {
                 <TableHead>
                   <TableRow sx={{ "& th": { bgcolor: "grey.100", fontWeight: 700 } }}>
                     <TableCell>Carta</TableCell>
+                    <TableCell align="center" width={90}>
+                      Owner
+                    </TableCell>
                     <TableCell align="center" width={110}>
                       Cant.
                     </TableCell>
@@ -563,6 +598,14 @@ function VentaAsistidaQrContent() {
                               </Stack>
                             </Box>
                           </Stack>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={OWNERS_CONFIG.owners[line.owner]?.label ?? line.owner}
+                            size="small"
+                            color={line.owner === "esteban" ? "secondary" : "default"}
+                            sx={{ height: 22, fontSize: 11, fontWeight: 600 }}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           {line.product_kind === "quantity" ? (
@@ -666,6 +709,13 @@ function VentaAsistidaQrContent() {
         onClose={() => setSellMessage(null)}
         message={sellMessage ?? ""}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
+      <Snackbar
+        open={ownerAmbiguousMsg != null}
+        autoHideDuration={6000}
+        onClose={() => setOwnerAmbiguousMsg(null)}
+        message={ownerAmbiguousMsg ?? ""}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       />
     </Box>
   );
