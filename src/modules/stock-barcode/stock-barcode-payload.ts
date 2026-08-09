@@ -14,10 +14,12 @@ export type ParsedStockQr = {
 
 function loosePrefixRe(prefix: string): RegExp {
   const body = prefix.replace(/:$/, "");
-  const escaped = body
-    .replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
-    .replace(/-/g, "[-_']?");
-  return new RegExp(`${escaped}[:\\u00D1;]?([a-f0-9]{24})`, "i");
+  // Guiones del prefijo: layout ES (') o Mac ES/LATAM (/).
+  const withHyphenClass = body.replace(/-/g, "<<HYPHEN>>");
+  const escaped = withHyphenClass.replace(/[\\^$*+?.()|[\]{}]/g, "\\$&");
+  const pattern = escaped.replace(/<<HYPHEN>>/g, "[-_'/]?");
+  // Separador id: ":" canónico; Ñ/; (ES); ">" (Mac ES/LATAM).
+  return new RegExp(`${pattern}[:\\u00D1;>]?([a-f0-9]{24})`, "i");
 }
 
 const PREFIX_ENTRIES = Object.values(OWNERS_CONFIG.owners).map((o) => ({
@@ -26,8 +28,18 @@ const PREFIX_ENTRIES = Object.values(OWNERS_CONFIG.owners).map((o) => ({
   loose: loosePrefixRe(o.stockQrPrefix),
 }));
 
+/**
+ * Normaliza tipado de pistola cuando el SO usa layout distinto al del scanner (US).
+ * - ES Windows/Linux: '-' → "'", ':' → 'Ñ'
+ * - ES/LATAM macOS: '-' → '/', ':' → '>'
+ */
 function normalizeQrWedgeInput(raw: string): string {
-  return raw.trim().replace(/Ñ/g, ":").replace(/[''´`]/g, "-");
+  return raw
+    .trim()
+    .replace(/[Ññ]/g, ":")
+    .replace(/>/g, ":")
+    .replace(/[''´`]/g, "-")
+    .replace(/\//g, "-");
 }
 
 export function parseStockQrPayloadMulti(raw: string): ParsedStockQr | null {

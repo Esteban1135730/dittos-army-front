@@ -5,6 +5,8 @@ const WEDGE_IDLE_MS = 120;
 type UseLaserBarcodeInputOptions = {
   enabled: boolean;
   onScan: (value: string) => void;
+  /** Si true, enfoca el input al activarse el modo. Default true. */
+  autoFocusOnEnable?: boolean;
 };
 
 function isEnterKey(e: KeyboardEvent): boolean {
@@ -20,7 +22,11 @@ function isEnterKey(e: KeyboardEvent): boolean {
  * Entrada para pistola QR (emula teclado + Enter).
  * Listeners nativos en el <input> (compatible con MUI TextField).
  */
-export function useLaserBarcodeInput({ enabled, onScan }: UseLaserBarcodeInputOptions) {
+export function useLaserBarcodeInput({
+  enabled,
+  onScan,
+  autoFocusOnEnable = true,
+}: UseLaserBarcodeInputOptions) {
   const inputRef = useRef<HTMLInputElement>(null);
   const onScanRef = useRef(onScan);
   const idleTimerRef = useRef<number | null>(null);
@@ -28,7 +34,10 @@ export function useLaserBarcodeInput({ enabled, onScan }: UseLaserBarcodeInputOp
   onScanRef.current = onScan;
 
   const focus = useCallback(() => {
-    inputRef.current?.focus();
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
   }, []);
 
   const flush = useCallback((raw: string) => {
@@ -107,10 +116,10 @@ export function useLaserBarcodeInput({ enabled, onScan }: UseLaserBarcodeInputOp
   }, [enabled, clearIdleTimer, flush, scheduleIdleFlush]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !autoFocusOnEnable) return;
     const t = window.setTimeout(focus, 100);
     return () => window.clearTimeout(t);
-  }, [enabled, focus]);
+  }, [enabled, autoFocusOnEnable, focus]);
 
   return {
     inputRef,

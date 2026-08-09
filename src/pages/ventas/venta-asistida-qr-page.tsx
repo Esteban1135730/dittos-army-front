@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
@@ -112,7 +112,6 @@ function VentaAsistidaQrContent() {
   const [ownerAmbiguousMsg, setOwnerAmbiguousMsg] = useState<string | null>(null);
 
   const canScan = !scanLoading && !selling;
-  const laserFocusRef = useRef<(() => void) | null>(null);
 
   const cartClearGuard = useCallback(
     (_next: OwnerKey) => {
@@ -212,9 +211,6 @@ function VentaAsistidaQrContent() {
       } finally {
         setScanLoading(false);
         setCameraOn(mode === "camera");
-        if (mode === "laser") {
-          window.setTimeout(() => laserFocusRef.current?.(), 80);
-        }
       }
     },
     [cart, mode, activeOwner],
@@ -222,12 +218,12 @@ function VentaAsistidaQrContent() {
 
   const laser = useLaserBarcodeInput({
     enabled: mode === "laser",
+    autoFocusOnEnable: false,
     onScan: (text) => {
       if (!canScan) return;
       void handleScan(text);
     },
   });
-  laserFocusRef.current = laser.focus;
 
   const { videoRef, status, errorMessage, start } = useBarcodeScanner({
     enabled: mode === "camera" && cameraOn && canScan,
@@ -239,9 +235,6 @@ function VentaAsistidaQrContent() {
     setMode(next);
     setScanError(null);
     setCameraOn(next === "camera");
-    if (next === "laser") {
-      window.setTimeout(() => laser.focus(), 150);
-    }
   };
 
   const handleSellAll = async () => {
@@ -278,9 +271,6 @@ function VentaAsistidaQrContent() {
       setScanError("No se pudo completar la venta. Intenta de nuevo.");
     } finally {
       setSelling(false);
-      if (mode === "laser") {
-        window.setTimeout(() => laser.focus(), 100);
-      }
     }
   };
 
@@ -352,18 +342,13 @@ function VentaAsistidaQrContent() {
           {mode === "laser" ? (
             <Box>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                El cursor debe estar en el campo; la pistola envía el texto y Enter.
+                Haz clic en el campo para escanear con la pistola. Luego puedes editar precios en el carrito.
               </Typography>
               <TextField
                 inputRef={laser.inputRef}
                 fullWidth
-                autoFocus
                 placeholder="Clic aquí y escanea…"
-                onBlur={() => {
-                  if (mode === "laser") {
-                    window.setTimeout(() => laser.focus(), 50);
-                  }
-                }}
+                onClick={() => laser.focus()}
                 sx={{
                   "& .MuiOutlinedInput-root": {
                     fontSize: "1.05rem",

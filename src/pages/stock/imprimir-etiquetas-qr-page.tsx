@@ -94,7 +94,7 @@ export default function ImprimirEtiquetasQrPage() {
   const [busqueda, setBusqueda] = useState("");
   const [addQtyById, setAddQtyById] = useState<Record<string, number>>({});
   const [imprimiendo, setImprimiendo] = useState<
-    "a4" | "thermal" | "openlabel" | null
+    "a4" | "thermal" | "openlabel" | "all-a4" | "all-thermal" | null
   >(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -267,12 +267,73 @@ export default function ImprimirEtiquetasQrPage() {
     removeMany(receiptEligibleIds);
   };
 
+  const allEligibleIds = useMemo(() => [...eligibleIds], [eligibleIds]);
+
+  const handleAddAllEligible = () => {
+    if (allEligibleIds.length === 0) {
+      showSnackbar(
+        "No hay líneas elegibles para QR (necesitan PVP y estado vendible).",
+        "warning",
+      );
+      return;
+    }
+    const before = queuedIds.size;
+    addManyMissing(allEligibleIds);
+    const added = allEligibleIds.filter((id) => !queuedIds.has(id)).length;
+    const already = allEligibleIds.length - added;
+    showSnackbar(
+      already > 0 && before > 0
+        ? `Cola: ${allEligibleIds.length} elegibles (${added} nuevas, ${already} ya estaban).`
+        : `Añadidas ${allEligibleIds.length} línea${allEligibleIds.length === 1 ? "" : "s"} elegibles a la cola.`,
+    );
+  };
+
   const resolveQueueRows = () => {
     const { rows, omittedCount } = expandQueueToExportRows(
       queue,
       exportByStockId,
     );
     return { rows, omittedCount };
+  };
+
+  const handleImprimirTodoStock = async (mode: "a4" | "thermal") => {
+    if (qrExportRows.length === 0) {
+      showSnackbar(
+        "No hay líneas con PVP en stock vendible para imprimir QR.",
+        "error",
+      );
+      return;
+    }
+    const ok = window.confirm(
+      `¿Imprimir todo el stock elegible?\n\n` +
+        `• ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} QR\n` +
+        `• Formato: ${mode === "thermal" ? "térmica 50×25 mm" : "hoja A4 5×12"}\n\n` +
+        `Solo incluye líneas con PVP y estado imprimible (disponible / Colombia / reserva).`,
+    );
+    if (!ok) return;
+
+    try {
+      setImprimiendo(mode === "thermal" ? "all-thermal" : "all-a4");
+      const subtitle = `Todo el stock con PVP · ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} · ${
+        mode === "thermal" ? "térmica 50×25 mm" : "hoja A4 5×12"
+      }`;
+      if (mode === "thermal") {
+        await openStockQrLabelsThermalPrintWindow(qrExportRows, { subtitle });
+      } else {
+        await openStockQrLabelsPrintWindow(qrExportRows, { subtitle });
+      }
+      showSnackbar(
+        `Generadas ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} de todo el stock.`,
+      );
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "No se pudieron generar las etiquetas QR.";
+      showSnackbar(msg, "error");
+    } finally {
+      setImprimiendo(null);
+    }
   };
 
   const handleImprimir = async (mode: "a4" | "thermal") => {
@@ -371,6 +432,52 @@ export default function ImprimirEtiquetasQrPage() {
         Busca líneas de inventario, arma una cola con cantidad y imprime
         etiquetas QR (misma plantilla A4 5×12 que Exportar QR en Stock).
       </p>
+
+      <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800">
+              Todo el stock
+            </h2>
+            <p className="text-sm text-gray-600 mt-0.5">
+              {loading
+                ? "Cargando elegibles…"
+                : `${qrExportRows.length} línea${qrExportRows.length === 1 ? "" : "s"} elegible${qrExportRows.length === 1 ? "" : "s"} (con PVP).`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="contained"
+              disabled={loading || qrExportRows.length === 0 || imprimiendo !== null}
+              onClick={() => void handleImprimirTodoStock("a4")}
+            >
+              {imprimiendo === "all-a4" ? "Generando…" : "Imprimir todo (A4)"}
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={loading || qrExportRows.length === 0 || imprimiendo !== null}
+              onClick={() => void handleImprimirTodoStock("thermal")}
+            >
+              {imprimiendo === "all-thermal"
+                ? "Generando…"
+                : "Imprimir todo (térmica)"}
+            </Button>
+            <Button
+              variant="outlined"
+              color="inherit"
+              disabled={
+                loading ||
+                allEligibleIds.length === 0 ||
+                (allEligibleIds.length > 0 &&
+                  allEligibleIds.every((id) => queuedIds.has(id)))
+              }
+              onClick={handleAddAllEligible}
+            >
+              Añadir todo a la cola
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {receiptItems.length > 0 && (
         <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 mb-4">
