@@ -5,6 +5,7 @@ import axios from "axios";
 import {
   Alert,
   Button,
+  Checkbox,
   Snackbar,
   TextField,
   Tooltip,
@@ -47,6 +48,30 @@ function rarezaLabel(item: StockListItem): string | null {
   return rz === "" ? null : operationalRarezaLabel(rz);
 }
 
+/** Estados que GET /stock/qr-export admite (alineado al back). */
+const QR_PRINTABLE_STATES = new Set([
+  "disponible",
+  "en_stock_colombia",
+  "reserva",
+]);
+
+function stockHasListedPvp(item: StockListItem | undefined): boolean {
+  return item != null && typeof item.pvp === "number" && item.pvp > 0;
+}
+
+function qrBlockReason(
+  item: StockListItem | undefined,
+  inQrExport: boolean,
+): string {
+  if (inQrExport) return "";
+  if (!item) return "No está en inventario visible";
+  if (!QR_PRINTABLE_STATES.has(item.card_state)) {
+    return `Estado no imprimible (${cardStateLabel(item.card_state)})`;
+  }
+  if (!stockHasListedPvp(item)) return "Sin PVP";
+  return "Con PVP en stock pero aún no en export QR — recarga la página";
+}
+
 function cardStateLabel(state: string): string {
   const labels: Record<string, string> = {
     disponible: "Disponible",
@@ -84,8 +109,15 @@ export default function ImprimirEtiquetasQrPage() {
     setSnackbar({ open: true, message, severity });
   };
 
-  const { queue, add, setQuantity, remove, clear, totalLabels } =
+  const { queue, add, addManyMissing, setQuantity, remove, removeMany, clear, totalLabels, queuedIds } =
     usePrintQueue();
+
+  const [receiptSeeded, setReceiptSeeded] = useState(false);
+  const receiptIdsKey = receiptStockIds.join(",");
+
+  useEffect(() => {
+    setReceiptSeeded(false);
+  }, [receiptIdsKey]);
 
   useEffect(() => {
     void ensureBulkProduct().then((r) => {
@@ -97,6 +129,8 @@ export default function ImprimirEtiquetasQrPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fromReceipt = receiptStockIds.length > 0;
+
   const { data: stock = [], isLoading: loadingStock } = useQuery<
     StockListItem[]
   >({
@@ -107,6 +141,8 @@ export default function ImprimirEtiquetasQrPage() {
         ? filterStockVisibleInGrid(res.data)
         : [];
     },
+    // Tras create-tanda / PVP del wizard, no reutilizar caché obsoleta.
+    refetchOnMount: fromReceipt ? "always" : true,
   });
 
   const { data: qrExportRows = [], isLoading: loadingQr } = useQuery<
@@ -117,25 +153,33 @@ export default function ImprimirEtiquetasQrPage() {
       const res = await axios.get(apiUrl("/stock/qr-export"));
       return Array.isArray(res.data) ? res.data : [];
     },
+    refetchOnMount: fromReceipt ? "always" : true,
   });
 
   const exportByStockId = useMemo(() => {
     const map = new Map<string, StockQrExportRow>();
     for (const row of qrExportRows) {
-      map.set(row.stock_id, row);
+      const key = String(row.stock_id ?? "").trim().toLowerCase();
+      if (key) map.set(key, row);
     }
     return map;
   }, [qrExportRows]);
 
   const eligibleIds = useMemo(
-    () => new Set(qrExportRows.map((r) => r.stock_id)),
+    () =>
+      new Set(
+        qrExportRows
+          .map((r) => String(r.stock_id ?? "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
     [qrExportRows],
   );
 
   const stockById = useMemo(() => {
     const map = new Map<string, StockListItem>();
     for (const item of stock) {
-      map.set(item._id, item);
+      const key = String(item._id ?? "").trim().toLowerCase();
+      if (key) map.set(key, item);
     }
     return map;
   }, [stock]);
@@ -153,38 +197,74 @@ export default function ImprimirEtiquetasQrPage() {
   const getAddQty = (stockId: string) => addQtyById[stockId] ?? 1;
 
   const handleAdd = (stockId: string) => {
-    if (!eligibleIds.has(stockId)) return;
-    add(stockId, getAddQty(stockId));
+    const key = String(stockId ?? "").trim().toLowerCase();
+    if (!eligibleIds.has(key)) return;
+    add(key, getAddQty(key));
     showSnackbar("Añadido a la cola de impresión");
   };
 
   const receiptItems = useMemo(() => {
     if (receiptStockIds.length === 0) return [];
-    return receiptStockIds.map((id) => ({
-      id,
-      item: stockById.get(id),
-      elegible: isQrEligible(id, eligibleIds),
-      exportRow: exportByStockId.get(id),
-    }));
+    return receiptStockIds.map((id) => {
+      const key = id.toLowerCase();
+      const item = stockById.get(key);
+      const exportRow = exportByStockId.get(key);
+      const elegible = isQrEligible(key, eligibleIds);
+      return {
+        id: key,
+        item,
+        elegible,
+        exportRow,
+        blockReason: elegible
+          ? null
+          : qrBlockReason(item, exportRow != null),
+      };
+    });
   }, [receiptStockIds, stockById, eligibleIds, exportByStockId]);
 
-  const handleAddReceiptEligible = () => {
-    let added = 0;
-    for (const row of receiptItems) {
-      if (!row.elegible) continue;
-      add(row.id, 1);
-      added += 1;
+  const receiptEligibleIds = useMemo(
+    () => receiptItems.filter((r) => r.elegible).map((r) => r.id),
+    [receiptItems],
+  );
+
+  const receiptSelectedCount = useMemo(
+    () => receiptEligibleIds.filter((id) => queuedIds.has(id)).length,
+    [receiptEligibleIds, queuedIds],
+  );
+
+  /** Al cargar recepción: preselecciona en cola solo las elegibles (con PVP). */
+  useEffect(() => {
+    if (receiptSeeded) return;
+    if (receiptStockIds.length === 0) return;
+    if (loadingStock || loadingQr) return;
+    if (receiptEligibleIds.length > 0) {
+      addManyMissing(receiptEligibleIds);
     }
-    if (added === 0) {
-      showSnackbar(
-        "Ninguna línea de esta recepción es elegible (revisa PVP).",
-        "warning",
-      );
-      return;
-    }
+    setReceiptSeeded(true);
+  }, [
+    receiptSeeded,
+    receiptStockIds.length,
+    loadingStock,
+    loadingQr,
+    receiptEligibleIds,
+    addManyMissing,
+  ]);
+
+  const handleToggleReceiptItem = (id: string, elegible: boolean, checked: boolean) => {
+    if (!elegible) return;
+    if (checked) addManyMissing([id]);
+    else remove(id);
+  };
+
+  const handleSelectAllReceiptEligible = () => {
+    addManyMissing(receiptEligibleIds);
     showSnackbar(
-      `Añadidas ${added} línea${added === 1 ? "" : "s"} elegible${added === 1 ? "" : "s"} a la cola`,
+      `Seleccionadas ${receiptEligibleIds.length} línea${receiptEligibleIds.length === 1 ? "" : "s"} con PVP`,
     );
+  };
+
+  const handleClearReceiptSelection = () => {
+    removeMany(receiptEligibleIds);
   };
 
   const resolveQueueRows = () => {
@@ -294,63 +374,107 @@ export default function ImprimirEtiquetasQrPage() {
 
       {receiptItems.length > 0 && (
         <section className="bg-white border border-gray-200 rounded-lg p-4 md:p-5 mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold text-gray-800">
-              De esta recepción ({receiptItems.length})
-            </h2>
-            <Button
-              variant="outlined"
-              disabled={loading || !receiptItems.some((r) => r.elegible)}
-              onClick={handleAddReceiptEligible}
-            >
-              Añadir elegibles a la cola
-            </Button>
-          </div>
-          <ul className="space-y-3">
-            {receiptItems.map(({ id, item, elegible, exportRow }) => (
-              <li
-                key={id}
-                className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50"
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div>
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800">
+                De esta recepción ({receiptItems.length})
+              </h2>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Seleccionadas {receiptSelectedCount} de {receiptEligibleIds.length}{" "}
+                elegibles (con PVP en export QR). Sin PVP no se pueden seleccionar.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={
+                  loading ||
+                  receiptEligibleIds.length === 0 ||
+                  receiptSelectedCount === receiptEligibleIds.length
+                }
+                onClick={handleSelectAllReceiptEligible}
               >
-                {item &&
-                resolveStockImageUrl(item.card_id, item.image_url) ? (
-                  <img
-                    src={resolveStockImageUrl(item.card_id, item.image_url)}
-                    alt=""
-                    className="w-16 h-24 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-16 h-24 bg-gray-200 rounded-md flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-base text-gray-900">
-                    {item?.card_name ?? exportRow?.card_name ?? id}
-                  </p>
-                  {exportRow && (
-                    <p className="text-sm font-bold text-blue-800 mt-1">
-                      COP {formatCOP(exportRow.price_cop)}
-                    </p>
-                  )}
-                  <span
-                    className={`inline-block text-sm px-2 py-0.5 rounded mt-2 ${
-                      elegible
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-200 text-gray-600"
+                Todas elegibles
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                disabled={receiptSelectedCount === 0}
+                onClick={handleClearReceiptSelection}
+              >
+                Quitar selección
+              </Button>
+            </div>
+          </div>
+          {loading ? (
+            <p className="text-gray-500 text-sm">Cargando líneas de recepción…</p>
+          ) : (
+            <ul className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {receiptItems.map(({ id, item, elegible, exportRow, blockReason }) => {
+                const selected = elegible && queuedIds.has(id);
+                return (
+                  <li
+                    key={id}
+                    className={`flex items-center gap-3 md:gap-4 p-2.5 md:p-3 rounded-lg border ${
+                      selected
+                        ? "border-blue-300 bg-blue-50"
+                        : elegible
+                          ? "border-gray-200 bg-gray-50"
+                          : "border-gray-100 bg-gray-100 opacity-80"
                     }`}
                   >
-                    {elegible ? "Elegible" : "No elegible"}
-                  </span>
-                </div>
-                <Button
-                  variant="contained"
-                  disabled={!elegible}
-                  onClick={() => handleAdd(id)}
-                >
-                  Añadir
-                </Button>
-              </li>
-            ))}
-          </ul>
+                    <Checkbox
+                      size="small"
+                      checked={selected}
+                      disabled={!elegible}
+                      onChange={(_, checked) =>
+                        handleToggleReceiptItem(id, elegible, checked)
+                      }
+                      inputProps={{
+                        "aria-label": elegible
+                          ? `Seleccionar ${item?.card_name ?? id}`
+                          : `${blockReason ?? "No elegible"} — no seleccionable`,
+                      }}
+                    />
+                    {item &&
+                    resolveStockImageUrl(item.card_id, item.image_url) ? (
+                      <img
+                        src={resolveStockImageUrl(item.card_id, item.image_url)}
+                        alt=""
+                        className="w-12 h-16 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-16 bg-gray-200 rounded-md flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm md:text-base text-gray-900 truncate">
+                        {item?.card_name ?? exportRow?.card_name ?? id}
+                      </p>
+                      {exportRow ? (
+                        <p className="text-sm font-bold text-blue-800">
+                          COP {formatCOP(exportRow.price_cop)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          {blockReason ?? "No elegible QR"}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className={`inline-block text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                        elegible
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {elegible ? "Elegible" : blockReason ?? "No elegible"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       )}
 
@@ -381,14 +505,15 @@ export default function ImprimirEtiquetasQrPage() {
           ) : (
             <ul className="mt-4 space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
               {resultados.map((item) => {
-                const elegible = eligibleIds.has(item._id);
-                const exportRow = exportByStockId.get(item._id);
+                const stockKey = String(item._id ?? "").trim().toLowerCase();
+                const elegible = eligibleIds.has(stockKey);
+                const exportRow = exportByStockId.get(stockKey);
                 const rz = rarezaLabel(item);
-                const inQueue = queue.some((e) => e.stockId === item._id);
+                const inQueue = queue.some((e) => e.stockId === stockKey);
 
                 return (
                   <li
-                    key={item._id}
+                    key={stockKey}
                     className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50"
                   >
                     {resolveStockImageUrl(item.card_id, item.image_url) ? (
@@ -429,7 +554,9 @@ export default function ImprimirEtiquetasQrPage() {
                               : "bg-gray-200 text-gray-600"
                           }`}
                         >
-                          {elegible ? "Elegible para QR" : "No elegible"}
+                          {elegible
+                            ? "Elegible para QR"
+                            : qrBlockReason(item, false)}
                         </span>
                         {inQueue && (
                           <span className="text-sm text-blue-700 font-medium">
@@ -442,12 +569,12 @@ export default function ImprimirEtiquetasQrPage() {
                       <TextField
                         type="number"
                         label="Cant."
-                        value={getAddQty(item._id)}
+                        value={getAddQty(stockKey)}
                         onChange={(e) => {
                           const v = parseInt(e.target.value, 10);
                           setAddQtyById((prev) => ({
                             ...prev,
-                            [item._id]: Number.isFinite(v) ? v : 1,
+                            [stockKey]: Number.isFinite(v) ? v : 1,
                           }));
                         }}
                         inputProps={{ min: 1, style: { width: 64 } }}
@@ -457,14 +584,14 @@ export default function ImprimirEtiquetasQrPage() {
                         title={
                           elegible
                             ? "Añadir a la cola"
-                            : "Sin PVP o estado no imprimible (p. ej. vendida)"
+                            : qrBlockReason(item, false)
                         }
                       >
                         <span>
                           <Button
                             variant="contained"
                             disabled={!elegible}
-                            onClick={() => handleAdd(item._id)}
+                            onClick={() => handleAdd(stockKey)}
                             sx={{ minWidth: 96, whiteSpace: "nowrap" }}
                           >
                             Añadir
@@ -497,14 +624,17 @@ export default function ImprimirEtiquetasQrPage() {
           ) : (
             <ul className="space-y-3 flex-1 min-h-0 overflow-y-auto mb-4 pr-1">
               {queue.map((entry) => {
-                const item = stockById.get(entry.stockId);
-                const exportRow = exportByStockId.get(entry.stockId);
-                const elegible = eligibleIds.has(entry.stockId);
+                const stockKey = String(entry.stockId ?? "")
+                  .trim()
+                  .toLowerCase();
+                const item = stockById.get(stockKey);
+                const exportRow = exportByStockId.get(stockKey);
+                const elegible = eligibleIds.has(stockKey);
                 const imageUrl = item?.image_url;
 
                 return (
                   <li
-                    key={entry.stockId}
+                    key={stockKey || entry.stockId}
                     className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50"
                   >
                     {imageUrl ? (
@@ -544,7 +674,7 @@ export default function ImprimirEtiquetasQrPage() {
                         onChange={(e) => {
                           const v = parseInt(e.target.value, 10);
                           setQuantity(
-                            entry.stockId,
+                            stockKey || entry.stockId,
                             Number.isFinite(v) ? v : 1,
                           );
                         }}

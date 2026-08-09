@@ -7,4 +7,10 @@ describe("isQrEligible", () => {
     expect(isQrEligible("a", eligible)).toBe(true);
     expect(isQrEligible("c", eligible)).toBe(false);
   });
+
+  it("compara ObjectId sin importar mayúsculas", () => {
+    const id = "507f1f77bcf86cd799439011";
+    const eligible = new Set([id]);
+    expect(isQrEligible(id.toUpperCase(), eligible)).toBe(true);
+  });
 });

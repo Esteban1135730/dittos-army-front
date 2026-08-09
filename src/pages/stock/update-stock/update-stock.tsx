@@ -36,7 +36,7 @@ export default function ModificarStock() {
     shipment: 0,
     unity_cost: 0,
     cards_in_shipmet: 1,
-    card_state: "near_mint",
+    card_state: "disponible",
     language: "",
     holofoil: false,
     league_card: false,
@@ -97,7 +97,7 @@ export default function ModificarStock() {
       shipment: data.shipment || 0,
       unity_cost: data.unity_cost || 0,
       cards_in_shipmet: data.cards_in_shipmet || 1,
-      card_state: data.card_state || "near_mint",
+      card_state: data.card_state || "disponible",
       language: data.language || "",
       holofoil: rz === "holofoil",
       league_card: rz === "league card",
@@ -313,11 +313,17 @@ export default function ModificarStock() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border rounded"
               >
-                <option value="mint">Mint</option>
-                <option value="near_mint">Near Mint</option>
-                <option value="played">Played</option>
-                <option value="good">Good</option>
-                <option value="poor">Poor</option>
+                <option value="disponible">Disponible</option>
+                <option value="en_stock_colombia">En stock Colombia</option>
+                <option value="reserva">Reserva</option>
+                {/* Legacy: por si aún no se migró la línea */}
+                {["mint", "near_mint", "played", "good", "poor"].includes(
+                  form.card_state,
+                ) && (
+                  <option value={form.card_state}>
+                    {form.card_state} (legacy → guardar corrige a disponible)
+                  </option>
+                )}
               </select>
             )}
           </div>

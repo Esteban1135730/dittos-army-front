@@ -87,6 +87,7 @@ function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
         rareza: rarezaFromStock(item),
       });
       onOutcome('PVP actualizado.', 'success');
+      // Incluye ['stock','qr-export']: la página de etiquetas usa ese listado para elegibilidad.
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
     } catch (err: unknown) {
       setDraft(storedCop > 0 ? String(storedCop) : '');
@@ -208,7 +209,10 @@ export function ReceiptWizardPvpStep({
   const items = useMemo(
     () =>
       stockIds
-        .map((id) => stock.find((s) => s._id === id))
+        .map((id) => {
+          const key = id.toLowerCase();
+          return stock.find((s) => String(s._id).toLowerCase() === key);
+        })
         .filter((s): s is StockListItem => Boolean(s)),
     [stock, stockIds],
   );

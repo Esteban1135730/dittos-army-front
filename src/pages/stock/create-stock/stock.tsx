@@ -48,7 +48,7 @@ export default function Stock() {
   const [costoEnvio, setCostoEnvio] = useState<number>(0);
   const [cartasEnvio, setCartasEnvio] = useState<number>(1);
   const [copias, setCopias] = useState<number>(1);
-  const [cardState, setCardState] = useState<string>("near_mint");
+  const [cardState, setCardState] = useState<string>("disponible");
   const [catalogLocale, setCatalogLocale] = useState<string>("en");
   const [language, setLanguage] = useState<string>("en");
   /** "" = sin variante (mismo catálogo que incoming / PVP) */

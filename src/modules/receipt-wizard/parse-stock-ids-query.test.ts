@@ -21,4 +21,10 @@ describe("parseStockIdsQuery", () => {
       parseStockIdsQuery(" 507f1f77bcf86cd799439011 , 507f191e810c19729de860ea "),
     ).toEqual(["507f1f77bcf86cd799439011", "507f191e810c19729de860ea"]);
   });
+
+  it("normaliza a minúsculas", () => {
+    expect(parseStockIdsQuery("507F1F77BCF86CD799439011")).toEqual([
+      "507f1f77bcf86cd799439011",
+    ]);
+  });
 });

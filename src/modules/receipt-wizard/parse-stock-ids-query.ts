@@ -15,7 +15,8 @@ export function parseStockIdsQuery(
     const key = id.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(id);
+    // Siempre minúsculas: Mongo ObjectId hex y qr-export usan lowercase.
+    out.push(key);
   }
   return out;
 }
