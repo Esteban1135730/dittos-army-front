@@ -26,6 +26,8 @@ import {
   type ComplementosDraftLine,
 } from "../../utils/ct0-incoming-batch-draft";
 import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
+import { TransitLotOwnerSelect } from "../cardtrader-transit/transit-lot-owner-select";
+import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 const API_TCG_FIND = apiUrl("/tcg-dex/card/find");
@@ -50,6 +52,7 @@ export default function Ct0ComplementosRegisterPanel(
   const { ct0Items, registeredPackageKeys = [], loading } = props;
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState("");
+  const [owner, setOwner] = useState<OwnerKey>(OWNERS_CONFIG.defaultOwner);
 
   const complementItems = useMemo(
     () => filterCt0ComplementItems(ct0Items),
@@ -140,6 +143,7 @@ export default function Ct0ComplementosRegisterPanel(
         lines,
         purchaseDateToday(),
         packageKey,
+        owner,
       );
       if (payload.items.length === 0) {
         throw new Error("No hay líneas con ID TCGdex para registrar.");
@@ -276,6 +280,17 @@ export default function Ct0ComplementosRegisterPanel(
           );
         })}
       </Stack>
+
+      {!alreadyRegistered ? (
+        <Box sx={{ maxWidth: 280, mb: 2 }}>
+          <TransitLotOwnerSelect
+            id="complementos"
+            value={owner}
+            onChange={setOwner}
+            disabled={registerMutation.isPending}
+          />
+        </Box>
+      ) : null}
 
       <Button
         variant="contained"

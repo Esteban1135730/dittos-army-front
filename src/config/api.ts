@@ -40,6 +40,20 @@ export function apiUrl(path: string): string {
 /** Active owner for Axios default instance (034). */
 let activeApiOwner: OwnerKey = OWNERS_CONFIG.defaultOwner;
 
+declare module "axios" {
+  interface AxiosRequestConfig {
+    /** Per-request X-Owner without changing the layout profile (037). */
+    ownerOverride?: OwnerKey;
+  }
+}
+
+export function resolveAxiosOwner(
+  config: { ownerOverride?: OwnerKey },
+  active: OwnerKey,
+): OwnerKey {
+  return config.ownerOverride ?? active;
+}
+
 export function setApiOwnerHeader(owner: OwnerKey) {
   activeApiOwner = owner;
   axios.defaults.headers.common["X-Owner"] = owner;
@@ -52,7 +66,7 @@ export function getApiOwnerHeader(): OwnerKey {
 // Interceptor on the shared axios default instance (panel uses `import axios from "axios"`).
 axios.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
-  config.headers["X-Owner"] = activeApiOwner;
+  config.headers["X-Owner"] = resolveAxiosOwner(config, activeApiOwner);
   return config;
 });
 

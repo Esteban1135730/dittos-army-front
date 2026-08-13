@@ -6,12 +6,14 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import axios from 'axios';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiUrl } from '../../config/api';
 import type { StockListItem } from '../../types/stock';
 import { useExchangeRates } from '../../utils/tasa';
+import type { CreatedStockRef } from '../incoming-v2/use-incoming-homolog';
+import type { OwnerKey } from '../../config/owners';
 
 function pvpStoredCop(
   item: StockListItem | undefined,
@@ -25,14 +27,14 @@ function pvpStoredCop(
 }
 
 type ReceiptWizardLabelsStepProps = {
-  stockIds: string[];
+  createdStocks: CreatedStockRef[];
   onFinish: () => void;
   onNewReceipt: () => void;
   onRevert?: () => Promise<void>;
 };
 
 export function ReceiptWizardLabelsStep({
-  stockIds,
+  createdStocks,
   onFinish,
   onNewReceipt,
   onRevert,
@@ -41,24 +43,48 @@ export function ReceiptWizardLabelsStep({
   const { convert } = useExchangeRates();
   const [reverting, setReverting] = useState(false);
 
-  const { data: stock = [] } = useQuery<StockListItem[]>({
-    queryKey: ['stock'],
-    queryFn: async () => {
-      const res = await axios.get(apiUrl('/stock'));
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: stockIds.length > 0,
+  const owners = useMemo(() => {
+    const set = new Set<OwnerKey>();
+    for (const ref of createdStocks) set.add(ref.owner);
+    return [...set];
+  }, [createdStocks]);
+
+  const stockQueries = useQueries({
+    queries: owners.map((owner) => ({
+      queryKey: ['stock', owner] as const,
+      queryFn: async () => {
+        const res = await axios.get(apiUrl('/stock'), { ownerOverride: owner });
+        return Array.isArray(res.data) ? (res.data as StockListItem[]) : [];
+      },
+      enabled: createdStocks.length > 0,
+    })),
   });
 
-  const stockById = new Map(stock.map((s) => [s._id, s]));
-  const withPvp = stockIds.filter(
-    (id) => pvpStoredCop(stockById.get(id), convert) > 0,
-  ).length;
+  const stockByOwner = useMemo(() => {
+    const map = new Map<OwnerKey, Map<string, StockListItem>>();
+    owners.forEach((owner, i) => {
+      const inner = new Map<string, StockListItem>();
+      for (const s of stockQueries[i]?.data ?? []) {
+        inner.set(String(s._id).toLowerCase(), s);
+      }
+      map.set(owner, inner);
+    });
+    return map;
+  }, [owners, stockQueries]);
+
+  const withPvp = createdStocks.filter((ref) => {
+    const item = stockByOwner.get(ref.owner)?.get(ref.stock_id.toLowerCase());
+    return pvpStoredCop(item, convert) > 0;
+  }).length;
 
   const handleOpenLabels = () => {
-    if (stockIds.length === 0) return;
+    if (createdStocks.length === 0) return;
+    const ids = createdStocks.map((r) => encodeURIComponent(r.stock_id)).join(',');
+    const ownersParam = createdStocks
+      .map((r) => encodeURIComponent(r.owner))
+      .join(',');
     navigate(
-      `/stock/imprimir-etiquetas-qr?stockIds=${stockIds.map(encodeURIComponent).join(',')}`,
+      `/stock/imprimir-etiquetas-qr?stockIds=${ids}&stockOwners=${ownersParam}`,
     );
   };
 
@@ -82,14 +108,14 @@ export function ReceiptWizardLabelsStep({
         Etiquetas
       </Typography>
 
-      {stockIds.length === 0 ? (
+      {createdStocks.length === 0 ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           No se creó inventario (solo inconsistencias).
         </Alert>
       ) : (
         <>
           <Typography variant="body1" mb={1}>
-            {stockIds.length} stock(s) creado(s) · {withPvp} con PVP (estimación)
+            {createdStocks.length} stock(s) creado(s) · {withPvp} con PVP (estimación)
           </Typography>
           <Alert severity="info" sx={{ mb: 2 }}>
             Una etiqueta por línea de stock; ajusta cantidad en la cola si
@@ -101,7 +127,7 @@ export function ReceiptWizardLabelsStep({
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Button
           variant="contained"
-          disabled={stockIds.length === 0}
+          disabled={createdStocks.length === 0}
           onClick={handleOpenLabels}
         >
           Abrir Imprimir etiquetas

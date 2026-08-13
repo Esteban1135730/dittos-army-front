@@ -103,20 +103,55 @@ export async function buildWhatsAppPedidoText(opts: {
   return parts.join("\n");
 }
 
-/** Igual que en imprimir-pedidos: dígitos; Colombia 10 dígitos empezando en 3 → prefijo 57 */
+/** Dígitos; Colombia 10 dígitos empezando en 3 → prefijo 57 */
 export function normalizarNumeroWhatsApp(celular: string): string {
   const digitos = celular.replace(/\D/g, "");
   if (digitos.length === 10 && digitos.startsWith("3")) return "57" + digitos;
   return digitos;
 }
 
-export function abrirWhatsAppConTexto(celular: string | undefined, texto: string): void {
-  const encoded = encodeURIComponent(texto);
-  const numero = celular?.trim();
-  if (numero) {
-    const waNum = normalizarNumeroWhatsApp(numero);
-    window.open(`https://wa.me/${waNum}?text=${encoded}`, "_blank", "noopener,noreferrer");
-  } else {
-    window.open(`https://wa.me/?text=${encoded}`, "_blank", "noopener,noreferrer");
+/** Usuario WhatsApp: quita `@` iniciales y espacios. */
+export function normalizarNickWhatsApp(contacto: string): string {
+  return contacto.trim().replace(/^@+/, "").trim();
+}
+
+export type DestinoWhatsApp =
+  | { kind: "phone"; value: string }
+  | { kind: "username"; value: string };
+
+/**
+ * Número (solo dígitos / formato telefónico) o usuario `@{nick}`.
+ * Letras o `_` (o un `@` inicial) se tratan como nick.
+ */
+export function resolverDestinoWhatsApp(contacto: string): DestinoWhatsApp | null {
+  const raw = contacto.trim();
+  if (!raw) return null;
+
+  if (raw.startsWith("@") || /[A-Za-z_]/.test(raw)) {
+    const nick = normalizarNickWhatsApp(raw);
+    if (!nick) return null;
+    return { kind: "username", value: nick };
   }
+
+  const phone = normalizarNumeroWhatsApp(raw);
+  if (!phone) return null;
+  return { kind: "phone", value: phone };
+}
+
+/** Path de wa.me: dígitos del número o `@{nick}`. */
+export function pathDestinoWhatsApp(contacto: string): string | null {
+  const dest = resolverDestinoWhatsApp(contacto);
+  if (!dest) return null;
+  return dest.kind === "username" ? `@${dest.value}` : dest.value;
+}
+
+export function urlWhatsAppConTexto(contacto: string | undefined, texto: string): string {
+  const encoded = encodeURIComponent(texto);
+  const path = contacto?.trim() ? pathDestinoWhatsApp(contacto) : null;
+  if (path) return `https://wa.me/${path}?text=${encoded}`;
+  return `https://wa.me/?text=${encoded}`;
+}
+
+export function abrirWhatsAppConTexto(celular: string | undefined, texto: string): void {
+  window.open(urlWhatsAppConTexto(celular, texto), "_blank", "noopener,noreferrer");
 }

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiUrl } from '../../config/api';
+import type { CreatedStockRef } from '../incoming-v2/use-incoming-homolog';
+import { normalizeCreatedStockRefs } from '../incoming-v2/use-incoming-homolog';
 
 const API_RECEIPT = apiUrl('/cardtrader/receipt');
 
@@ -65,23 +67,23 @@ export type ReceiptWizardStep = 1 | 2 | 3 | 4;
 
 const STOCK_IDS_STORAGE_PREFIX = 'receipt-wizard-stock-ids:';
 
-export function persistReceiptStockIds(
+export function persistReceiptCreatedStocks(
   sessionId: string,
-  stockIds: string[],
+  refs: CreatedStockRef[],
 ): void {
   try {
     sessionStorage.setItem(
       `${STOCK_IDS_STORAGE_PREFIX}${sessionId}`,
-      JSON.stringify(stockIds),
+      JSON.stringify(refs),
     );
   } catch {
     /* ignore quota / private mode */
   }
 }
 
-export function readPersistedReceiptStockIds(
+export function readPersistedReceiptCreatedStocks(
   sessionId: string,
-): string[] | null {
+): CreatedStockRef[] | null {
   try {
     const raw = sessionStorage.getItem(
       `${STOCK_IDS_STORAGE_PREFIX}${sessionId}`,
@@ -89,10 +91,32 @@ export function readPersistedReceiptStockIds(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return null;
-    return parsed.filter((id): id is string => typeof id === 'string');
+    if (parsed.length === 0) return [];
+    if (typeof parsed[0] === 'string') {
+      return normalizeCreatedStockRefs(undefined, parsed);
+    }
+    const refs = normalizeCreatedStockRefs(parsed);
+    return refs.length > 0 ? refs : null;
   } catch {
     return null;
   }
+}
+
+export function persistReceiptStockIds(
+  sessionId: string,
+  stockIds: string[],
+): void {
+  persistReceiptCreatedStocks(
+    sessionId,
+    normalizeCreatedStockRefs(undefined, stockIds),
+  );
+}
+
+export function readPersistedReceiptStockIds(
+  sessionId: string,
+): string[] | null {
+  const refs = readPersistedReceiptCreatedStocks(sessionId);
+  return refs ? refs.map((r) => r.stock_id) : null;
 }
 
 export function clearPersistedReceiptStockIds(sessionId: string): void {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Ct0BoxItem } from './cardtrader-ct0-box';
 import {
+  buildComplementosTransitLotPayload,
   buildCt0IncomingBatchDrafts,
   buildInitialCopByPackageKey,
   buildTransitLotPayloadFromDraft,
@@ -257,6 +258,7 @@ describe('ct0-incoming-batch-draft', () => {
     expect(payload.total_cop_cards_cost).toBe(90000);
     expect(payload.items[0].card_id).toBe('sv8-194');
     expect(payload.items[0].fx_total_lot).toBe(1.5);
+    expect(payload.owner).toBe('pablo');
   });
 
   it('sin FX legacy no envía legacy_basis', () => {
@@ -300,6 +302,98 @@ describe('ct0-incoming-batch-draft', () => {
     expect(payload.legacy_basis_total_fx_cards_cost).toBeUndefined();
     expect(payload.total_cop_cards_cost).toBe(80000);
     expect(payload.cards_cost_currency).toBe('USD');
+    expect(payload.owner).toBe('pablo');
+  });
+
+  it('buildTransitLotPayloadFromDraft usa owner esteban si se pasa', () => {
+    const draft = {
+      packageKey: 'pk',
+      paidAt: '2026-05-30T10:00:00.000Z',
+      paidAtLabel: 'x',
+      purchaseDate: '2026-05-30',
+      status: 'ready' as const,
+      transitLotId: null,
+      legacyBatchId: null,
+      legacyCopHint: null,
+      legacyCopAutoFilled: false,
+      legacyTotalFxCardsCost: null,
+      legacyCardsCostCurrency: null,
+      legacyRealFxRateCop: null,
+      matchScore: null,
+      totalUnits: 1,
+      usdSubtotal: 1,
+      unresolvedCount: 0,
+      lines: [
+        {
+          lineKey: 'a',
+          ct0ItemId: 1,
+          productId: 1,
+          name: 'Card',
+          expansion: 'Set',
+          collectorNumber: '1',
+          language: 'en',
+          qty: 1,
+          usdTotalLot: 1,
+          rareza: null,
+          tcgdexCardId: 'sv8-1',
+          tcgdexError: null,
+          blueprintId: 1,
+        },
+      ],
+    };
+
+    const payload = buildTransitLotPayloadFromDraft(draft, 80000, 'esteban');
+    expect(payload.owner).toBe('esteban');
+  });
+
+  it('buildComplementosTransitLotPayload incluye owner pablo por defecto', () => {
+    const payload = buildComplementosTransitLotPayload(
+      [
+        {
+          lineKey: 'comp-1',
+          ct0ItemId: 1,
+          productId: 1,
+          blueprintId: 1,
+          name: 'Pad',
+          expansion: 'Set',
+          collectorNumber: '1',
+          language: 'es',
+          qty: 1,
+          rareza: null,
+          tcgdexCardId: 'me03-081',
+          tcgdexError: null,
+        },
+      ],
+      '2026-07-28',
+      'complementos:1',
+    );
+    expect(payload.owner).toBe('pablo');
+    expect(payload.source).toBe('complementos');
+  });
+
+  it('buildComplementosTransitLotPayload usa owner esteban si se pasa', () => {
+    const payload = buildComplementosTransitLotPayload(
+      [
+        {
+          lineKey: 'comp-1',
+          ct0ItemId: 1,
+          productId: 1,
+          blueprintId: 1,
+          name: 'Pad',
+          expansion: 'Set',
+          collectorNumber: '1',
+          language: 'es',
+          qty: 1,
+          rareza: null,
+          tcgdexCardId: 'me03-081',
+          tcgdexError: null,
+        },
+      ],
+      '2026-07-28',
+      'complementos:1',
+      'esteban',
+    );
+    expect(payload.owner).toBe('esteban');
   });
 
   it('resolveCt0BatchDraftTcgdex cachea por expansión+número', async () => {

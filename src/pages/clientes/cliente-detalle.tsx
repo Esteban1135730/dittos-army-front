@@ -377,7 +377,7 @@ export default function ClienteDetallePage() {
             <strong>Tienda de entrega:</strong> {client.tienda_entrega}
           </Typography>
           <Typography>
-            <strong>Celular:</strong> {client.celular?.trim() || "—"}
+            <strong>WhatsApp:</strong> {client.celular?.trim() || "—"}
           </Typography>
           <Typography>
             <strong>Canal:</strong>{" "}

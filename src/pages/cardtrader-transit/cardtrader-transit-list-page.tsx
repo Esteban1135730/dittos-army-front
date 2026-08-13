@@ -6,6 +6,7 @@ import {
   API_CARDTRADER_TRANSIT_LOTS,
   type CardtraderTransitLotRow,
 } from "./cardtrader-transit-types";
+import { OWNERS_CONFIG, isOwnerKey } from "../../config/owners";
 
 export default function CardtraderTransitListPage() {
   const queryClient = useQueryClient();
@@ -104,7 +105,9 @@ export default function CardtraderTransitListPage() {
         </div>
 
         <div className="divide-y divide-gray-100">
-          {lots.map((lot) => (
+          {lots.map((lot) => {
+            const ownerKey = isOwnerKey(lot.owner) ? lot.owner : "pablo";
+            return (
             <div
               key={lot.lot_id}
               className="grid grid-cols-12 gap-2 px-4 py-3 items-center"
@@ -126,6 +129,15 @@ export default function CardtraderTransitListPage() {
                 ) : (
                   <span className="uppercase">{lot.source}</span>
                 )}
+                <span
+                  className={`mt-1 flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    ownerKey === "esteban"
+                      ? "bg-indigo-100 text-indigo-800"
+                      : "bg-slate-100 text-slate-800"
+                  }`}
+                >
+                  {OWNERS_CONFIG.owners[ownerKey].label}
+                </span>
               </div>
               <div className="col-span-2 text-sm text-gray-700">
                 {lot.remaining_total_quantity}
@@ -170,7 +182,8 @@ export default function CardtraderTransitListPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

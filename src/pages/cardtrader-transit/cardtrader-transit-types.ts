@@ -1,4 +1,5 @@
 import { apiUrl } from "../../config/api";
+import type { OwnerKey } from "../../config/owners";
 
 export const API_CARDTRADER_TRANSIT_LOTS = apiUrl("/cardtrader/transit-lots");
 
@@ -16,6 +17,7 @@ export type CardtraderTransitLotRow = {
   /** Suma FX de las líneas CT0 registradas (puede ser menor que total_fx_cards_cost legacy). */
   registered_items_fx_subtotal: number | null;
   remaining_total_quantity: number;
+  owner?: OwnerKey;
 };
 
 export type CardtraderTransitLotMeta = {
@@ -32,6 +34,8 @@ export type CardtraderTransitLotMeta = {
   legacy_incoming_cop_hint: number | null;
   registered_items_fx_subtotal: number | null;
   created_at: string;
+  owner?: OwnerKey;
+  owner_editable?: boolean;
 };
 
 export type CardtraderTransitLineRow = {

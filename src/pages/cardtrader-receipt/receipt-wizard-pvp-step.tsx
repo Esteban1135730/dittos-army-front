@@ -11,13 +11,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiUrl } from '../../config/api';
 import type { StockListItem } from '../../types/stock';
 import { useExchangeRates } from '../../utils/tasa';
 import { CardThumb } from '../../components/card-thumb';
 import { resolvePanelImageSrc } from '../incoming-v2/use-homolog-blueprint-images';
+import { OWNERS_CONFIG, type OwnerKey } from '../../config/owners';
+import type { CreatedStockRef } from '../incoming-v2/use-incoming-homolog';
 
 function rarezaFromStock(item: StockListItem): string | null {
   const rz =
@@ -40,11 +42,12 @@ function pvpStoredCop(
 
 type PvpRowProps = {
   item: StockListItem;
+  owner: OwnerKey;
   sessionId: string;
   onOutcome: (message: string, severity: 'success' | 'error') => void;
 };
 
-function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
+function ReceiptPvpRow({ item, owner, sessionId, onOutcome }: PvpRowProps) {
   const { convert } = useExchangeRates();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -80,12 +83,16 @@ function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
     }
     setBusy(true);
     try {
-      await axios.post(apiUrl('/pvp'), {
-        card_id: item.card_id,
-        pvp: nextCop,
-        currency: 'COP',
-        rareza: rarezaFromStock(item),
-      });
+      await axios.post(
+        apiUrl('/pvp'),
+        {
+          card_id: item.card_id,
+          pvp: nextCop,
+          currency: 'COP',
+          rareza: rarezaFromStock(item),
+        },
+        { ownerOverride: owner },
+      );
       onOutcome('PVP actualizado.', 'success');
       // Incluye ['stock','qr-export']: la página de etiquetas usa ese listado para elegibilidad.
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
@@ -125,6 +132,11 @@ function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
         <Typography variant="subtitle2" noWrap>
           {item.card_name}
         </Typography>
+        <Chip
+          size="small"
+          label={OWNERS_CONFIG.owners[owner].label}
+          sx={{ mt: 0.5 }}
+        />
         <Typography variant="caption" color="text.secondary" display="block">
           {[item.rareza, item.language].filter(Boolean).join(' · ')}
         </Typography>
@@ -174,7 +186,7 @@ function ReceiptPvpRow({ item, sessionId, onOutcome }: PvpRowProps) {
 
 type ReceiptWizardPvpStepProps = {
   sessionId: string;
-  stockIds: string[];
+  createdStocks: CreatedStockRef[];
   onContinue: () => void;
   onSkip: () => void;
   onRevert?: () => Promise<void>;
@@ -182,7 +194,7 @@ type ReceiptWizardPvpStepProps = {
 
 export function ReceiptWizardPvpStep({
   sessionId,
-  stockIds,
+  createdStocks,
   onContinue,
   onSkip,
   onRevert,
@@ -195,31 +207,46 @@ export function ReceiptWizardPvpStep({
   }>({ open: false, message: '', severity: 'success' });
   const [reverting, setReverting] = useState(false);
 
-  const stockIdSet = useMemo(() => new Set(stockIds), [stockIds]);
+  const owners = useMemo(() => {
+    const set = new Set<OwnerKey>();
+    for (const ref of createdStocks) set.add(ref.owner);
+    return [...set];
+  }, [createdStocks]);
 
-  const { data: stock = [], isLoading } = useQuery<StockListItem[]>({
-    queryKey: ['stock'],
-    queryFn: async () => {
-      const res = await axios.get(apiUrl('/stock'));
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: stockIds.length > 0,
+  const stockQueries = useQueries({
+    queries: owners.map((owner) => ({
+      queryKey: ['stock', owner] as const,
+      queryFn: async () => {
+        const res = await axios.get(apiUrl('/stock'), { ownerOverride: owner });
+        return Array.isArray(res.data) ? (res.data as StockListItem[]) : [];
+      },
+      enabled: createdStocks.length > 0,
+    })),
   });
 
-  const items = useMemo(
-    () =>
-      stockIds
-        .map((id) => {
-          const key = id.toLowerCase();
-          return stock.find((s) => String(s._id).toLowerCase() === key);
-        })
-        .filter((s): s is StockListItem => Boolean(s)),
-    [stock, stockIds],
-  );
+  const stockByOwner = useMemo(() => {
+    const map = new Map<OwnerKey, StockListItem[]>();
+    owners.forEach((owner, i) => {
+      map.set(owner, stockQueries[i]?.data ?? []);
+    });
+    return map;
+  }, [owners, stockQueries]);
 
-  const missingCount = stockIds.length - items.length;
+  const items = useMemo(() => {
+    const out: Array<{ item: StockListItem; owner: OwnerKey }> = [];
+    for (const ref of createdStocks) {
+      const list = stockByOwner.get(ref.owner) ?? [];
+      const key = ref.stock_id.toLowerCase();
+      const item = list.find((s) => String(s._id).toLowerCase() === key);
+      if (item) out.push({ item, owner: ref.owner });
+    }
+    return out;
+  }, [createdStocks, stockByOwner]);
 
-  const withoutPvp = items.filter((item) => pvpStoredCop(item, convert) <= 0);
+  const isLoading = stockQueries.some((q) => q.isLoading);
+  const missingCount = createdStocks.length - items.length;
+
+  const withoutPvp = items.filter(({ item }) => pvpStoredCop(item, convert) <= 0);
 
   const handleRevert = async () => {
     if (!onRevert) return;
@@ -245,7 +272,7 @@ export function ReceiptWizardPvpStep({
         paso.
       </Typography>
 
-      {stockIds.length === 0 ? (
+      {createdStocks.length === 0 ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           No se creó inventario (solo novedades u otras exclusiones). Continúa o
           termina el wizard.
@@ -256,14 +283,15 @@ export function ReceiptWizardPvpStep({
         <Box sx={{ mb: 2 }}>
           {missingCount > 0 && (
             <Alert severity="warning" sx={{ mb: 1 }}>
-              {missingCount} stock_id(s) no encontrados en el listado actual
-              ({stockIdSet.size} esperados).
+              {missingCount} stock_id(s) no encontrados en el listado del dueño
+              (Pablo/Esteban). {createdStocks.length} esperados.
             </Alert>
           )}
-          {items.map((item) => (
+          {items.map(({ item, owner }) => (
             <ReceiptPvpRow
-              key={item._id}
+              key={`${owner}:${item._id}`}
               item={item}
+              owner={owner}
               sessionId={sessionId}
               onOutcome={(message, severity) =>
                 setSnackbar({ open: true, message, severity })

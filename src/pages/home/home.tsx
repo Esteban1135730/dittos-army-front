@@ -23,6 +23,7 @@ const QUICK_LINKS = [
   { to: "/stock", label: "Stock" },
   { to: "/ventas", label: "Ventas" },
   { to: "/clientes", label: "Clientes" },
+  { to: "/cardtrader-transit", label: "Tránsito CT" },
   { to: "/incoming", label: "Compras en camino" },
   { to: "/ventas/escanear-qr", label: "Venta QR" },
 ] as const;
@@ -310,7 +311,7 @@ export default function Home() {
               <DetailMetric
                 label="En tránsito"
                 value={`${data.incoming.units_in_transit} uds.`}
-                sub={`${data.incoming.open_batches_count} lote(s) abierto(s)`}
+                sub="CardTrader / en camino"
               />
             </Grid>
           </Grid>
@@ -393,16 +394,16 @@ export default function Home() {
                 <Panel
                   title="Pipeline"
                   action={
-                    <Button component={Link} to="/incoming" size="small">
-                      Ver compras
+                    <Button component={Link} to="/cardtrader-transit" size="small">
+                      Ver tránsito CT
                     </Button>
                   }
                 >
                   <Stack spacing={1.5}>
                     <DetailMetric
-                      label="Costo en tránsito"
+                      label="Costo en tránsito (CT)"
                       value={formatCOP(data.incoming.estimated_cost_cop)}
-                      sub={`${data.incoming.units_in_transit} unidades pendientes`}
+                      sub={`${data.incoming.units_in_transit} uds. pendientes`}
                     />
                     <DetailMetric
                       label="Reservas en camino"

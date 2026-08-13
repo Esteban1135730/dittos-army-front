@@ -39,7 +39,9 @@ import { unitCostCopFromBatchItemRuleOfThree } from "../../utils/purchase-curren
 import { formatCop } from "../../utils/cardtrader-order-pricing";
 import type { TcgdexResolveResponse } from "../../utils/cardtrader-order-item-map";
 import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
+import { TransitLotOwnerSelect } from "../cardtrader-transit/transit-lot-owner-select";
 import { useCt0DraftTcgdexImages } from "../../utils/use-ct0-draft-tcgdex-images";
+import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 
@@ -186,6 +188,8 @@ function DraftLotRow(props: {
   onToggle: () => void;
   copInput: string;
   onCopChange: (value: string) => void;
+  owner: OwnerKey;
+  onOwnerChange: (owner: OwnerKey) => void;
   tcgdxImages: Record<string, string>;
   tcgdxImagesLoading: boolean;
   tcgdxMissingImageIds: Set<string>;
@@ -197,6 +201,8 @@ function DraftLotRow(props: {
     onToggle,
     copInput,
     onCopChange,
+    owner,
+    onOwnerChange,
     tcgdxImages,
     tcgdxImagesLoading,
     tcgdxMissingImageIds,
@@ -303,7 +309,7 @@ function DraftLotRow(props: {
         </Box>
 
         {draft.status === "ready" ? (
-          <Box onClick={(e) => e.stopPropagation()} sx={{ minWidth: 200 }}>
+          <Box onClick={(e) => e.stopPropagation()} sx={{ minWidth: 200, display: "flex", flexDirection: "column", gap: 1.5 }}>
             <TextField
               fullWidth
               size="small"
@@ -324,6 +330,11 @@ function DraftLotRow(props: {
                     ? "Valor sugerido desde compras en camino (legacy)"
                     : undefined
               }
+            />
+            <TransitLotOwnerSelect
+              id={draft.packageKey.replace(/[^a-zA-Z0-9_-]/g, "-")}
+              value={owner}
+              onChange={onOwnerChange}
             />
           </Box>
         ) : null}
@@ -425,6 +436,7 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [copByPackageKey, setCopByPackageKey] = useState<Record<string, string>>({});
+  const [ownerByPackageKey, setOwnerByPackageKey] = useState<Record<string, OwnerKey>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [registerMsg, setRegisterMsg] = useState("");
 
@@ -460,7 +472,11 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
           continue;
         }
 
-        const body = buildTransitLotPayloadFromDraft(draft, cop);
+        const body = buildTransitLotPayloadFromDraft(
+          draft,
+          cop,
+          ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner,
+        );
         const res = await axios.post(API_CARDTRADER_TRANSIT_LOTS, body);
         const lotId = res.data?.lot_id as string;
         if (lotId) created.push(lotId);
@@ -623,6 +639,10 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
               onCopChange={(value) =>
                 setCopByPackageKey((prev) => ({ ...prev, [draft.packageKey]: value }))
               }
+              owner={ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner}
+              onOwnerChange={(next) =>
+                setOwnerByPackageKey((prev) => ({ ...prev, [draft.packageKey]: next }))
+              }
               tcgdxImages={tcgdxImages}
               tcgdxImagesLoading={tcgdxImagesLoading}
               tcgdxMissingImageIds={tcgdxMissingImageIds}
@@ -641,11 +661,14 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
           <Stack spacing={1}>
             {eligible.map((draft) => {
               const cop = suggestedCopForDraft(draft, copByPackageKey) ?? 0;
+              const owner =
+                ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner;
               return (
                 <Paper key={draft.packageKey} variant="outlined" sx={{ p: 1.5 }}>
                   <Typography variant="subtitle2">{draft.paidAtLabel}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {draft.totalUnits} uds · {draft.lines.length} líneas · {formatCop(cop)} COP
+                    {" · "}Dueño: {OWNERS_CONFIG.owners[owner].label}
                   </Typography>
                 </Paper>
               );

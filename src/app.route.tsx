@@ -34,6 +34,7 @@ import StockReviewResolvePage from "./pages/stock/revision/resolve-page";
 import StockLostCardsPage from "./pages/stock/lost-cards";
 import ImprimirEtiquetasQrPage from "./pages/stock/imprimir-etiquetas-qr-page";
 import NovedadStockPage from "./pages/incoming/novedad-stock/novedad-stock-page";
+import MetricasPage from "./pages/metricas/metricas-page";
 
 export default function AppRouter() {
   return (
@@ -243,6 +244,14 @@ export default function AppRouter() {
         element={
           <SideLayout>
             <SalesDashboard />
+          </SideLayout>
+        }
+      />
+      <Route
+        path="/metricas"
+        element={
+          <SideLayout>
+            <MetricasPage />
           </SideLayout>
         }
       />

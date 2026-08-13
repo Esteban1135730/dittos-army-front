@@ -1239,10 +1239,11 @@ export default function ReservarCartasPage() {
                 onChange={(e) => setEditTienda(e.target.value)}
               />
               <TextField
-                label="Celular"
+                label="WhatsApp (número o @nick)"
                 fullWidth
                 value={editCelular}
                 onChange={(e) => setEditCelular(e.target.value)}
+                helperText="Número o usuario @{nick}"
               />
               <TextField
                 select

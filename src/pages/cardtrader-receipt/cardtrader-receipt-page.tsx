@@ -31,6 +31,8 @@ import { useExchangeRates } from '../../utils/tasa';
 import {
   useHomologActive,
   useHomologMutations,
+  normalizeCreatedStockRefs,
+  type CreatedStockRef,
 } from '../incoming-v2/use-incoming-homolog';
 import { HomologCardImage } from '../incoming-v2/homolog-card-image';
 import {
@@ -62,8 +64,8 @@ import {
 } from '../../modules/receipt-wizard';
 import {
   clearPersistedReceiptStockIds,
-  persistReceiptStockIds,
-  readPersistedReceiptStockIds,
+  persistReceiptCreatedStocks,
+  readPersistedReceiptCreatedStocks,
   type ReceiptWizardStep,
 } from './use-receipt-session';
 
@@ -237,7 +239,8 @@ export default function CardtraderReceiptPage() {
 
   const stepParam = Number(searchParams.get('step') || '0');
   const [wizardStep, setWizardStep] = useState<ReceiptWizardStep>(1);
-  const [stockIds, setStockIds] = useState<string[]>([]);
+  const [createdStocks, setCreatedStocks] = useState<CreatedStockRef[]>([]);
+  const stockIds = createdStocks.map((r) => r.stock_id);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -261,23 +264,26 @@ export default function CardtraderReceiptPage() {
     [rates.euroToCop, rates.usdToCop],
   );
 
-  const resolveStockIds = (sid: string | undefined): string[] => {
+  const resolveCreatedStocks = (sid: string | undefined): CreatedStockRef[] => {
     if (!sid) return [];
-    const fromSession = session?.created_stock_ids;
-    if (Array.isArray(fromSession) && fromSession.length > 0) return fromSession;
-    return readPersistedReceiptStockIds(sid) ?? [];
+    const fromSession = normalizeCreatedStockRefs(
+      session?.created_stocks,
+      session?.created_stock_ids,
+    );
+    if (fromSession.length > 0) return fromSession;
+    return readPersistedReceiptCreatedStocks(sid) ?? [];
   };
 
   useEffect(() => {
     if (isLoading) return;
     if (!session) {
       setWizardStep(1);
-      setStockIds([]);
+      setCreatedStocks([]);
       return;
     }
     if (session.status === 'converted') {
-      const ids = resolveStockIds(session.session_id);
-      setStockIds(ids);
+      const refs = resolveCreatedStocks(session.session_id);
+      setCreatedStocks(refs);
       const requested =
         stepParam === 3 || stepParam === 4
           ? (stepParam as ReceiptWizardStep)
@@ -298,6 +304,7 @@ export default function CardtraderReceiptPage() {
     session?.session_id,
     session?.status,
     session?.created_stock_ids,
+    session?.created_stocks,
     stepParam,
   ]);
 
@@ -640,15 +647,15 @@ export default function CardtraderReceiptPage() {
         shipping_total_cop: shippingTotalCop,
         cards,
       });
-      const ids = Array.isArray(res.stock_ids) ? res.stock_ids : [];
-      setStockIds(ids);
-      persistReceiptStockIds(sessionId, ids);
+      const refs = normalizeCreatedStockRefs(res.created_stocks, res.stock_ids);
+      setCreatedStocks(refs);
+      persistReceiptCreatedStocks(sessionId, refs);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] }),
         queryClient.invalidateQueries({ queryKey: ['stock'] }),
       ]);
       // Legacy ship-round path: still allow deep-link, but CT receipt continues wizard.
-      if (res.round_id && ids.length === 0) {
+      if (res.round_id && refs.length === 0) {
         navigate(`/incoming/ship-round/${res.round_id}`);
         return;
       }
@@ -658,7 +665,7 @@ export default function CardtraderReceiptPage() {
         { replace: true },
       );
       setInfo(
-        `Stock creado: ${res.stock_created ?? ids.length} unidad(es). Continúa con PVP.`,
+        `Stock creado: ${res.stock_created ?? refs.length} unidad(es). Continúa con PVP.`,
       );
     } catch (e) {
       setError(axiosMsg(e));
@@ -671,7 +678,7 @@ export default function CardtraderReceiptPage() {
     try {
       await revertConversion.mutateAsync(sessionId);
       clearPersistedReceiptStockIds(sessionId);
-      setStockIds([]);
+      setCreatedStocks([]);
       setWizardStep(1);
       setSearchParams({}, { replace: true });
     } catch (e) {
@@ -682,7 +689,7 @@ export default function CardtraderReceiptPage() {
 
   const handleFinishWizard = () => {
     if (sessionId) clearPersistedReceiptStockIds(sessionId);
-    setStockIds([]);
+    setCreatedStocks([]);
     setWizardStep(1);
     setSearchParams({}, { replace: true });
   };
@@ -692,7 +699,7 @@ export default function CardtraderReceiptPage() {
     try {
       if (sessionId) clearPersistedReceiptStockIds(sessionId);
       await createSession.mutateAsync();
-      setStockIds([]);
+      setCreatedStocks([]);
       setWizardStep(1);
       setSearchParams({}, { replace: true });
     } catch (e) {
@@ -805,8 +812,10 @@ export default function CardtraderReceiptPage() {
   }
 
   if (session.status === 'converted') {
-    const ids =
-      stockIds.length > 0 ? stockIds : resolveStockIds(session.session_id);
+    const refs =
+      createdStocks.length > 0
+        ? createdStocks
+        : resolveCreatedStocks(session.session_id);
     const step: ReceiptWizardStep =
       wizardStep === 4 ? 4 : 3;
     return (
@@ -826,14 +835,14 @@ export default function CardtraderReceiptPage() {
         {step === 3 ? (
           <ReceiptWizardPvpStep
             sessionId={session.session_id}
-            stockIds={ids}
+            createdStocks={refs}
             onContinue={() => goToStep(4)}
             onSkip={() => goToStep(4)}
             onRevert={handleRevertConversion}
           />
         ) : (
           <ReceiptWizardLabelsStep
-            stockIds={ids}
+            createdStocks={refs}
             onFinish={handleFinishWizard}
             onNewReceipt={() => void handleNewReceipt()}
             onRevert={handleRevertConversion}

@@ -125,10 +125,11 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
             </Stack>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
-                label="Celular (WhatsApp)"
+                label="WhatsApp (número o @nick)"
                 fullWidth
                 value={form.celular}
                 onChange={(e) => setForm((f) => ({ ...f, celular: e.target.value }))}
+                helperText="Número (p. ej. 3001234567) o usuario @{nick}"
               />
               <TextField
                 select

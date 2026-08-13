@@ -23,6 +23,7 @@ import {
   type TcgdexResolveResponse,
 } from './cardtrader-order-item-map';
 import { operationalRarezaLabel } from '../constants/item-rareza';
+import { OWNERS_CONFIG, type OwnerKey } from '../config/owners';
 
 export type Ct0BatchDraftLine = {
   lineKey: string;
@@ -524,6 +525,7 @@ export function buildComplementosTransitLotPayload(
   lines: ComplementosDraftLine[],
   purchaseDate: string,
   packageKey: string,
+  owner: OwnerKey = OWNERS_CONFIG.defaultOwner,
 ): CreateTransitLotPayload {
   const ready = lines.filter((l) => l.tcgdexCardId);
   return {
@@ -545,6 +547,7 @@ export function buildComplementosTransitLotPayload(
     cards_cost_currency: 'USD',
     source: 'complementos',
     ct0_package_key: packageKey,
+    owner,
   };
 }
 
@@ -573,11 +576,13 @@ export type CreateTransitLotPayload = {
   legacy_basis_total_cop_cards_cost?: number;
   legacy_basis_real_fx_rate_cop?: number;
   legacy_basis_cards_cost_currency?: string;
+  owner?: OwnerKey;
 };
 
 export function buildTransitLotPayloadFromDraft(
   draft: Ct0BatchDraft,
   totalCopCardsCost: number,
+  owner: OwnerKey = OWNERS_CONFIG.defaultOwner,
 ): CreateTransitLotPayload {
   const hasLegacyBasis =
     draft.legacyBatchId != null &&
@@ -619,6 +624,7 @@ export function buildTransitLotPayloadFromDraft(
     legacy_basis_cards_cost_currency: hasLegacyBasis
       ? (draft.legacyCardsCostCurrency ?? undefined)
       : undefined,
+    owner,
   };
 }
 

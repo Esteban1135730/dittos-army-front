@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import axios from "axios";
 import {
   Alert,
@@ -34,9 +34,10 @@ import {
   usePrintQueue,
 } from "../../modules/stock-qr-print-queue";
 import {
-  isQrEligible,
   parseStockIdsQuery,
+  parseStockOwnersQuery,
 } from "../../modules/receipt-wizard";
+import type { OwnerKey } from "../../config/owners";
 
 function rarezaLabel(item: StockListItem): string | null {
   let rz =
@@ -90,6 +91,23 @@ export default function ImprimirEtiquetasQrPage() {
     () => parseStockIdsQuery(searchParams.get("stockIds")),
     [searchParams],
   );
+  const receiptOwners = useMemo(
+    () => parseStockOwnersQuery(searchParams.get("stockOwners"), receiptStockIds.length),
+    [searchParams, receiptStockIds.length],
+  );
+  const receiptRefs = useMemo(
+    () =>
+      receiptStockIds.map((stock_id, i) => ({
+        stock_id,
+        owner: receiptOwners[i] as OwnerKey,
+      })),
+    [receiptStockIds, receiptOwners],
+  );
+  const receiptOwnerKeys = useMemo(() => {
+    const set = new Set<OwnerKey>();
+    for (const ref of receiptRefs) set.add(ref.owner);
+    return [...set];
+  }, [receiptRefs]);
 
   const [busqueda, setBusqueda] = useState("");
   const [addQtyById, setAddQtyById] = useState<Record<string, number>>({});
@@ -156,6 +174,39 @@ export default function ImprimirEtiquetasQrPage() {
     refetchOnMount: fromReceipt ? "always" : true,
   });
 
+  const receiptStockQueries = useQueries({
+    queries: receiptOwnerKeys.map((owner) => ({
+      queryKey: ["stock", owner] as const,
+      queryFn: async () => {
+        const res = await axios.get(apiUrl("/stock"), { ownerOverride: owner });
+        return Array.isArray(res.data)
+          ? filterStockVisibleInGrid(res.data)
+          : [];
+      },
+      enabled: fromReceipt,
+      refetchOnMount: "always" as const,
+    })),
+  });
+
+  const receiptQrQueries = useQueries({
+    queries: receiptOwnerKeys.map((owner) => ({
+      queryKey: ["stock", "qr-export", owner] as const,
+      queryFn: async () => {
+        const res = await axios.get(apiUrl("/stock/qr-export"), {
+          ownerOverride: owner,
+        });
+        return Array.isArray(res.data) ? (res.data as StockQrExportRow[]) : [];
+      },
+      enabled: fromReceipt,
+      refetchOnMount: "always" as const,
+    })),
+  });
+
+  const loadingReceiptLookups =
+    fromReceipt &&
+    (receiptStockQueries.some((q) => q.isLoading) ||
+      receiptQrQueries.some((q) => q.isLoading));
+
   const exportByStockId = useMemo(() => {
     const map = new Map<string, StockQrExportRow>();
     for (const row of qrExportRows) {
@@ -184,6 +235,37 @@ export default function ImprimirEtiquetasQrPage() {
     return map;
   }, [stock]);
 
+  const receiptStockByOwnerId = useMemo(() => {
+    const map = new Map<string, StockListItem>();
+    receiptOwnerKeys.forEach((owner, i) => {
+      for (const item of receiptStockQueries[i]?.data ?? []) {
+        const id = String(item._id ?? "").trim().toLowerCase();
+        if (id) map.set(`${owner}:${id}`, item);
+      }
+    });
+    return map;
+  }, [receiptOwnerKeys, receiptStockQueries]);
+
+  const receiptExportByOwnerId = useMemo(() => {
+    const map = new Map<string, StockQrExportRow>();
+    receiptOwnerKeys.forEach((owner, i) => {
+      for (const row of receiptQrQueries[i]?.data ?? []) {
+        const id = String(row.stock_id ?? "").trim().toLowerCase();
+        if (id) map.set(`${owner}:${id}`, row);
+      }
+    });
+    return map;
+  }, [receiptOwnerKeys, receiptQrQueries]);
+
+  const mergedExportByStockId = useMemo(() => {
+    const map = new Map(exportByStockId);
+    for (const [ownerId, row] of receiptExportByOwnerId) {
+      const id = ownerId.slice(ownerId.indexOf(":") + 1);
+      if (id) map.set(id, row);
+    }
+    return map;
+  }, [exportByStockId, receiptExportByOwnerId]);
+
   const resultados = useMemo(
     () => filterStockForSearch(stock, busqueda),
     [stock, busqueda],
@@ -204,12 +286,13 @@ export default function ImprimirEtiquetasQrPage() {
   };
 
   const receiptItems = useMemo(() => {
-    if (receiptStockIds.length === 0) return [];
-    return receiptStockIds.map((id) => {
-      const key = id.toLowerCase();
-      const item = stockById.get(key);
-      const exportRow = exportByStockId.get(key);
-      const elegible = isQrEligible(key, eligibleIds);
+    if (receiptRefs.length === 0) return [];
+    return receiptRefs.map((ref) => {
+      const key = ref.stock_id.toLowerCase();
+      const ownerKey = `${ref.owner}:${key}`;
+      const item = receiptStockByOwnerId.get(ownerKey);
+      const exportRow = receiptExportByOwnerId.get(ownerKey);
+      const elegible = exportRow != null;
       return {
         id: key,
         item,
@@ -220,7 +303,7 @@ export default function ImprimirEtiquetasQrPage() {
           : qrBlockReason(item, exportRow != null),
       };
     });
-  }, [receiptStockIds, stockById, eligibleIds, exportByStockId]);
+  }, [receiptRefs, receiptStockByOwnerId, receiptExportByOwnerId]);
 
   const receiptEligibleIds = useMemo(
     () => receiptItems.filter((r) => r.elegible).map((r) => r.id),
@@ -236,7 +319,7 @@ export default function ImprimirEtiquetasQrPage() {
   useEffect(() => {
     if (receiptSeeded) return;
     if (receiptStockIds.length === 0) return;
-    if (loadingStock || loadingQr) return;
+    if (loadingStock || loadingQr || loadingReceiptLookups) return;
     if (receiptEligibleIds.length > 0) {
       addManyMissing(receiptEligibleIds);
     }
@@ -246,6 +329,7 @@ export default function ImprimirEtiquetasQrPage() {
     receiptStockIds.length,
     loadingStock,
     loadingQr,
+    loadingReceiptLookups,
     receiptEligibleIds,
     addManyMissing,
   ]);
@@ -291,7 +375,7 @@ export default function ImprimirEtiquetasQrPage() {
   const resolveQueueRows = () => {
     const { rows, omittedCount } = expandQueueToExportRows(
       queue,
-      exportByStockId,
+      mergedExportByStockId,
     );
     return { rows, omittedCount };
   };

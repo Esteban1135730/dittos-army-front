@@ -3,17 +3,20 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
+import { OWNERS_CONFIG, isOwnerKey, type OwnerKey } from "../../config/owners";
 import {
   API_CARDTRADER_TRANSIT_LOTS,
   type CardtraderTransitLineRow,
   type CardtraderTransitLotMeta,
 } from "./cardtrader-transit-types";
+import { TransitLotOwnerSelect } from "./transit-lot-owner-select";
 
 export default function CardtraderTransitLotDetailPage() {
   const { lotId } = useParams<{ lotId: string }>();
   const queryClient = useQueryClient();
   const [purchaseDate, setPurchaseDate] = useState("");
   const [totalCopCardsCost, setTotalCopCardsCost] = useState("");
+  const [owner, setOwner] = useState<OwnerKey>(OWNERS_CONFIG.defaultOwner);
   const [savingMeta, setSavingMeta] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
@@ -43,7 +46,8 @@ export default function CardtraderTransitLotDetailPage() {
     const dd = String(d.getDate()).padStart(2, "0");
     setPurchaseDate(`${yyyy}-${mm}-${dd}`);
     setTotalCopCardsCost(String(Math.round(lotMeta.total_cop_cards_cost)));
-  }, [lotMeta?.lot_id, lotMeta?.purchase_date, lotMeta?.total_cop_cards_cost]);
+    setOwner(isOwnerKey(lotMeta.owner) ? lotMeta.owner : OWNERS_CONFIG.defaultOwner);
+  }, [lotMeta?.lot_id, lotMeta?.purchase_date, lotMeta?.total_cop_cards_cost, lotMeta?.owner]);
 
   const saveLotMeta = async () => {
     if (!lotId || !lotMeta) return;
@@ -63,6 +67,7 @@ export default function CardtraderTransitLotDetailPage() {
       const res = await axios.put(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`, {
         purchase_date: purchaseDate,
         total_cop_cards_cost: totalCop,
+        owner,
       });
       if (!res.data?.success) {
         setMensaje(res.data?.message || "No se pudo actualizar el lote.");
@@ -75,12 +80,19 @@ export default function CardtraderTransitLotDetailPage() {
       ]);
       setMensaje("✅ Lote actualizado.");
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string; error?: string } } };
+      const err = e as {
+        response?: { data?: { message?: string; error?: string }; status?: number };
+      };
       setMensaje(
         err?.response?.data?.message ||
           err?.response?.data?.error ||
           "No se pudo actualizar el lote.",
       );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cardtrader-transit-lot-meta", lotId] }),
+        queryClient.invalidateQueries({ queryKey: ["cardtrader-transit-lot-lines", lotId] }),
+        queryClient.invalidateQueries({ queryKey: ["cardtrader-transit-lots-open"] }),
+      ]);
     } finally {
       setSavingMeta(false);
     }
@@ -106,7 +118,7 @@ export default function CardtraderTransitLotDetailPage() {
           <p className="text-sm text-gray-600">Cargando…</p>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Fecha de compra
@@ -128,6 +140,19 @@ export default function CardtraderTransitLotDetailPage() {
                   value={totalCopCardsCost}
                   onChange={(e) => setTotalCopCardsCost(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md"
+                />
+              </div>
+              <div>
+                <TransitLotOwnerSelect
+                  id="lot-detail"
+                  value={owner}
+                  onChange={setOwner}
+                  disabled={lotMeta?.owner_editable === false}
+                  helperText={
+                    lotMeta?.owner_editable === false
+                      ? "No se puede cambiar el dueño porque ya se creó stock o se recibió parte del lote."
+                      : undefined
+                  }
                 />
               </div>
               <div>

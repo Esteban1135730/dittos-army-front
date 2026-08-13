@@ -2,8 +2,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiUrl } from '../../config/api';
 import type { PanelHomologItem, SentHomologUnit } from '../../utils/sent-unit-homolog';
+import type { OwnerKey } from '../../config/owners';
+import { isOwnerKey } from '../../config/owners';
 
 const API_HOMOLOG = apiUrl('/incoming/homolog');
+
+export type CreatedStockRef = {
+  stock_id: string;
+  owner: OwnerKey;
+};
+
+export function normalizeCreatedStockRefs(
+  input: unknown,
+  fallbackIds?: unknown,
+): CreatedStockRef[] {
+  if (Array.isArray(input) && input.length > 0) {
+    const refs: CreatedStockRef[] = [];
+    for (const row of input) {
+      if (!row || typeof row !== 'object') continue;
+      const rec = row as { stock_id?: unknown; owner?: unknown };
+      if (typeof rec.stock_id !== 'string' || rec.stock_id.trim() === '') continue;
+      refs.push({
+        stock_id: rec.stock_id.trim(),
+        owner: isOwnerKey(rec.owner) ? rec.owner : 'pablo',
+      });
+    }
+    if (refs.length > 0) return refs;
+  }
+  if (!Array.isArray(fallbackIds)) return [];
+  return fallbackIds
+    .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+    .map((id) => ({ stock_id: id.trim(), owner: 'pablo' as const }));
+}
 
 export type HomologSession = {
   session_id: string;
@@ -12,6 +42,7 @@ export type HomologSession = {
   ship_round_id: string | null;
   /** Stock creado en create-tanda CT; útil para recuperar pasos PVP/etiquetas. */
   created_stock_ids?: string[];
+  created_stocks?: CreatedStockRef[];
   units: SentHomologUnit[];
   summary: {
     total: number;
@@ -225,6 +256,7 @@ export function useHomologMutations() {
         transit_reception?: boolean;
         stock_created?: number;
         stock_ids?: string[];
+        created_stocks?: CreatedStockRef[];
       };
     },
     onSuccess: async (_data, vars) => {
