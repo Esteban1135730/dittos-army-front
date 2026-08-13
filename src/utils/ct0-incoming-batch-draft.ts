@@ -116,6 +116,7 @@ export type TcgdexResolveFn = (args: {
   expansion: string;
   collectorNumber: string | null;
   language: string;
+  blueprintId?: number;
 }) => Promise<TcgdexResolveResponse>;
 
 function formatPaidAtLabel(paidAt: string): string {
@@ -380,12 +381,18 @@ export async function resolveCt0BatchDraftTcgdex(
     expansion: string,
     collectorNumber: string | null,
     language: string,
+    blueprintId?: number,
   ): Promise<TcgdexResolveResponse> => {
-    const cacheKey = `${language.toLowerCase()}|${expansion.toLowerCase()}|${collectorNumber ?? ''}`;
+    const cacheKey = `${language.toLowerCase()}|${expansion.toLowerCase()}|${collectorNumber ?? ''}|${blueprintId ?? ''}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const result = await resolveTcgdex({ expansion, collectorNumber, language });
+    const result = await resolveTcgdex({
+      expansion,
+      collectorNumber,
+      language,
+      blueprintId,
+    });
     cache.set(cacheKey, result);
     return result;
   };
@@ -414,6 +421,7 @@ export async function resolveCt0BatchDraftTcgdex(
         line.expansion,
         line.collectorNumber,
         line.language,
+        line.blueprintId,
       );
       if (resolved.tcgdex_card_id) {
         lines.push({
@@ -494,13 +502,14 @@ export async function resolveComplementosDraftTcgdex(
   const out: ComplementosDraftLine[] = [];
 
   for (const line of lines) {
-    const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${line.collectorNumber ?? ''}`;
+    const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${line.collectorNumber ?? ''}|${line.blueprintId ?? ''}`;
     let resolved = cache.get(cacheKey);
     if (!resolved) {
       resolved = await resolveTcgdex({
         expansion: line.expansion,
         collectorNumber: line.collectorNumber,
         language: line.language,
+        blueprintId: line.blueprintId,
       });
       cache.set(cacheKey, resolved);
     }

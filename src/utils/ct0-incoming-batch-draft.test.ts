@@ -396,7 +396,7 @@ describe('ct0-incoming-batch-draft', () => {
     expect(payload.owner).toBe('esteban');
   });
 
-  it('resolveCt0BatchDraftTcgdex cachea por expansión+número', async () => {
+  it('resolveCt0BatchDraftTcgdex cachea por expansión+número+blueprint', async () => {
     const paidAt = '2026-05-31T10:00:00.000Z';
     const drafts = buildCt0IncomingBatchDrafts({
       ct0Items: [

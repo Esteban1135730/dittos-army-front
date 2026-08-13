@@ -74,19 +74,22 @@ export default function Ct0ComplementosRegisterPanel(
   const resolveQuery = useQuery({
     queryKey: [
       "ct0-complementos-resolved",
-      baseLines.map((l) => `${l.ct0ItemId}:${l.collectorNumber}`).join("|"),
+      baseLines
+        .map((l) => `${l.ct0ItemId}:${l.collectorNumber}:${l.blueprintId}`)
+        .join("|"),
     ],
     enabled: baseLines.length > 0 && !alreadyRegistered && !loading,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
       resolveComplementosDraftTcgdex(
         baseLines,
-        async ({ expansion, collectorNumber, language }) => {
+        async ({ expansion, collectorNumber, language, blueprintId }) => {
           const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
             params: {
               expansion,
               collector_number: collectorNumber ?? undefined,
               language: language !== "—" ? language : undefined,
+              blueprint_id: blueprintId && blueprintId > 0 ? blueprintId : undefined,
             },
           });
           return res.data as TcgdexResolveResponse;

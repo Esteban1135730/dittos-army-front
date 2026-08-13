@@ -393,19 +393,27 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
   const resolveQuery = useQuery({
     queryKey: [
       "ct0-incoming-batch-drafts-resolved",
-      baseDrafts.map((d) => `${d.packageKey}:${d.status}`).join("|"),
+      baseDrafts
+        .map(
+          (d) =>
+            `${d.packageKey}:${d.status}:${d.lines
+              .map((l) => `${l.ct0ItemId}:${l.blueprintId}`)
+              .join(",")}`,
+        )
+        .join("|"),
     ],
     enabled: baseDrafts.some((d) => d.status !== "already_registered") && !loading,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
       resolveCt0BatchDraftTcgdex(
         baseDrafts,
-        async ({ expansion, collectorNumber, language }) => {
+        async ({ expansion, collectorNumber, language, blueprintId }) => {
           const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
             params: {
               expansion,
               collector_number: collectorNumber ?? undefined,
               language: language !== "—" ? language : undefined,
+              blueprint_id: blueprintId && blueprintId > 0 ? blueprintId : undefined,
             },
           });
           return res.data as TcgdexResolveResponse;
