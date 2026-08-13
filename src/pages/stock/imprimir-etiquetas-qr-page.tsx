@@ -112,7 +112,7 @@ export default function ImprimirEtiquetasQrPage() {
   const [busqueda, setBusqueda] = useState("");
   const [addQtyById, setAddQtyById] = useState<Record<string, number>>({});
   const [imprimiendo, setImprimiendo] = useState<
-    "a4" | "thermal" | "openlabel" | "all-a4" | "all-thermal" | null
+    "a4" | "thermal" | "openlabel" | null
   >(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -353,6 +353,11 @@ export default function ImprimirEtiquetasQrPage() {
 
   const allEligibleIds = useMemo(() => [...eligibleIds], [eligibleIds]);
 
+  const missingEligibleCount = useMemo(
+    () => allEligibleIds.filter((id) => !queuedIds.has(id)).length,
+    [allEligibleIds, queuedIds],
+  );
+
   const handleAddAllEligible = () => {
     if (allEligibleIds.length === 0) {
       showSnackbar(
@@ -361,14 +366,13 @@ export default function ImprimirEtiquetasQrPage() {
       );
       return;
     }
-    const before = queuedIds.size;
+    if (missingEligibleCount === 0) {
+      showSnackbar("Todo el stock elegible ya está en la cola.", "warning");
+      return;
+    }
     addManyMissing(allEligibleIds);
-    const added = allEligibleIds.filter((id) => !queuedIds.has(id)).length;
-    const already = allEligibleIds.length - added;
     showSnackbar(
-      already > 0 && before > 0
-        ? `Cola: ${allEligibleIds.length} elegibles (${added} nuevas, ${already} ya estaban).`
-        : `Añadidas ${allEligibleIds.length} línea${allEligibleIds.length === 1 ? "" : "s"} elegibles a la cola.`,
+      `Añadidas ${missingEligibleCount} línea${missingEligibleCount === 1 ? "" : "s"} a la cola. Elige el método de impresión abajo.`,
     );
   };
 
@@ -378,46 +382,6 @@ export default function ImprimirEtiquetasQrPage() {
       mergedExportByStockId,
     );
     return { rows, omittedCount };
-  };
-
-  const handleImprimirTodoStock = async (mode: "a4" | "thermal") => {
-    if (qrExportRows.length === 0) {
-      showSnackbar(
-        "No hay líneas con PVP en stock vendible para imprimir QR.",
-        "error",
-      );
-      return;
-    }
-    const ok = window.confirm(
-      `¿Imprimir todo el stock elegible?\n\n` +
-        `• ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} QR\n` +
-        `• Formato: ${mode === "thermal" ? "térmica 50×25 mm" : "hoja A4 5×12"}\n\n` +
-        `Solo incluye líneas con PVP y estado imprimible (disponible / Colombia / reserva).`,
-    );
-    if (!ok) return;
-
-    try {
-      setImprimiendo(mode === "thermal" ? "all-thermal" : "all-a4");
-      const subtitle = `Todo el stock con PVP · ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} · ${
-        mode === "thermal" ? "térmica 50×25 mm" : "hoja A4 5×12"
-      }`;
-      if (mode === "thermal") {
-        await openStockQrLabelsThermalPrintWindow(qrExportRows, { subtitle });
-      } else {
-        await openStockQrLabelsPrintWindow(qrExportRows, { subtitle });
-      }
-      showSnackbar(
-        `Generadas ${qrExportRows.length} etiqueta${qrExportRows.length === 1 ? "" : "s"} de todo el stock.`,
-      );
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "No se pudieron generar las etiquetas QR.";
-      showSnackbar(msg, "error");
-    } finally {
-      setImprimiendo(null);
-    }
   };
 
   const handleImprimir = async (mode: "a4" | "thermal") => {
@@ -526,40 +490,18 @@ export default function ImprimirEtiquetasQrPage() {
             <p className="text-sm text-gray-600 mt-0.5">
               {loading
                 ? "Cargando elegibles…"
-                : `${qrExportRows.length} línea${qrExportRows.length === 1 ? "" : "s"} elegible${qrExportRows.length === 1 ? "" : "s"} (con PVP).`}
+                : `${allEligibleIds.length} línea${allEligibleIds.length === 1 ? "" : "s"} elegible${allEligibleIds.length === 1 ? "" : "s"} (con PVP). Añádelas a la cola y elige el método de impresión.`}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="contained"
-              disabled={loading || qrExportRows.length === 0 || imprimiendo !== null}
-              onClick={() => void handleImprimirTodoStock("a4")}
-            >
-              {imprimiendo === "all-a4" ? "Generando…" : "Imprimir todo (A4)"}
-            </Button>
-            <Button
-              variant="outlined"
-              disabled={loading || qrExportRows.length === 0 || imprimiendo !== null}
-              onClick={() => void handleImprimirTodoStock("thermal")}
-            >
-              {imprimiendo === "all-thermal"
-                ? "Generando…"
-                : "Imprimir todo (térmica)"}
-            </Button>
-            <Button
-              variant="outlined"
-              color="inherit"
-              disabled={
-                loading ||
-                allEligibleIds.length === 0 ||
-                (allEligibleIds.length > 0 &&
-                  allEligibleIds.every((id) => queuedIds.has(id)))
-              }
-              onClick={handleAddAllEligible}
-            >
-              Añadir todo a la cola
-            </Button>
-          </div>
+          <Button
+            variant="contained"
+            disabled={loading || missingEligibleCount === 0}
+            onClick={handleAddAllEligible}
+          >
+            {missingEligibleCount === 0 && allEligibleIds.length > 0
+              ? "Todo ya está en la cola"
+              : `Añadir todo a la cola${missingEligibleCount > 0 ? ` (${missingEligibleCount})` : ""}`}
+          </Button>
         </div>
       </section>
 
