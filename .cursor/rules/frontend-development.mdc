@@ -11,6 +11,7 @@ Antes de un incremento no trivial: skill **frontend-spec-driven** en `dittos-arm
 ## Panel (`dittos-army-front`)
 
 - Rutas en `src/app.route.tsx`; páginas bajo `src/pages/`; layout en `src/components/`.
+- **Design system**: rule **`design-system.mdc`** + `src/theme/` (`ditto-palette.ts`, `ditto-theme.ts`). No colores hex sueltos ni `grey.*` genérico; usar `theme.palette` y `theme.palette.ditto`.
 - **Datos**: Axios hacia `dittos-army-back`; conviene centralizar base URL (`import.meta.env.VITE_API_BASE_URL` u homólogo) en lugar de repetir `localhost:3000`.
 - **MUI + TanStack Query/Table**: mantener componentes de página delgados; hooks para lógica reutilizable.
 - **Cohesión**: seguir **module-authoring** (`dittos-army-front/.cursor/skills/module-authoring/` o `dittos-army-store/.cursor/skills/module-authoring/`) para límites claros al añadir módulos o capas nuevas.

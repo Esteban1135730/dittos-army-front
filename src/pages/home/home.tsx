@@ -24,7 +24,7 @@ const QUICK_LINKS = [
   { to: "/ventas", label: "Ventas" },
   { to: "/clientes", label: "Clientes" },
   { to: "/cardtrader-transit", label: "Tránsito CT" },
-  { to: "/incoming", label: "Compras en camino" },
+  { to: "/incoming-v2", label: "Homologación CT" },
   { to: "/ventas/escanear-qr", label: "Venta QR" },
 ] as const;
 
@@ -253,17 +253,6 @@ export default function Home() {
           sx={{ mb: 3 }}
         >
           No se pudo cargar el resumen del negocio.
-        </Alert>
-      ) : null}
-
-      {data?.sales.consistency_issue_count ? (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          {data.sales.consistency_issue_count} discrepancia
-          {data.sales.consistency_issue_count === 1 ? "" : "s"} entre stock vendido y ventas
-          activas.{" "}
-          <Button component={Link} to="/ventas/consistencia" size="small">
-            Revisar consistencia
-          </Button>
         </Alert>
       ) : null}
 

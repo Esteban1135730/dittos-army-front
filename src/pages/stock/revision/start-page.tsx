@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, CircularProgress } from "@mui/material";
 import axios from "axios";
+import { LoadingScreen } from "../../../components/loading";
 import {
   STOCK_TAG_LABEL,
   STOCK_TAG_VALUES,
@@ -81,9 +82,7 @@ export default function StockReviewStartPage() {
   };
 
   if (isLoading) {
-    return (
-      <p className="text-center text-gray-500 p-6">Cargando revisión...</p>
-    );
+    return <LoadingScreen message="Cargando revisión…" />;
   }
 
   return (

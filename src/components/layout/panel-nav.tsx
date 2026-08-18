@@ -7,7 +7,6 @@ import { isRouteAllowed } from "../../modules/owner/owner-acl";
 import { runOwnerChangeGuards } from "../../modules/owner/owner-change-guard";
 import {
   IconAlert,
-  IconBalance,
   IconBookmark,
   IconCart,
   IconCash,
@@ -79,34 +78,10 @@ const SECTIONS: NavSection[] = [
       { to: "/cardtrader-transit", label: "Tránsito", icon: IconTruck },
       { to: "/cardtrader-transit/import", label: "Importar CT Zero", icon: IconDownload },
       { to: "/cardtrader-receipt", label: "Recepción CT", icon: IconInbox },
-      { to: "/test-cardtrader", label: "Consolidado", icon: IconLayers },
+      { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
+      { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
       { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
       { to: "/cotizar/pedido-cliente", label: "Pedido CardTrader", icon: IconCart },
-    ],
-  },
-  {
-    id: "compras",
-    label: "Compras",
-    icon: IconPackage,
-    items: [
-      {
-        to: "/incoming",
-        label: "Compras en camino",
-        icon: IconPackage,
-        badge: "legacy",
-      },
-      {
-        to: "/incoming-v2",
-        label: "Homologación CT",
-        icon: IconLayers,
-        badge: "v2",
-      },
-      {
-        to: "/incoming/novedad-stock",
-        label: "Cartas con novedad",
-        icon: IconAlert,
-        badge: "legacy",
-      },
     ],
   },
   {
@@ -118,7 +93,6 @@ const SECTIONS: NavSection[] = [
       { to: "/metricas", label: "Métricas", icon: IconRates },
       { to: "/ventas/escanear-qr", label: "Venta asistida QR", icon: IconScan },
       { to: "/ventas/historico", label: "Histórico", icon: IconHistory },
-      { to: "/ventas/consistencia", label: "Consistencia", icon: IconBalance },
       { to: "/propiedad", label: "En propiedad", icon: IconBookmark },
     ],
   },

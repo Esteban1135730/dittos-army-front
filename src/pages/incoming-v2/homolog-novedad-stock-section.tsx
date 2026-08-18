@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { useExchangeRates } from '../../utils/tasa';
-import { NovedadStockPreviewPanel } from '../incoming/novedad-stock/novedad-stock-preview-panel';
+import { NovedadStockPreviewPanel } from './novedad-stock/novedad-stock-preview-panel';
 import {
   useNovedadStockList,
   useNovedadStockPreview,
   useNovedadStockMutations,
-} from '../incoming/novedad-stock/use-novedad-stock';
+} from './novedad-stock/use-novedad-stock';
 
 type HomologNovedadStockSectionProps = {
   orphanNovedadCount: number;
@@ -178,7 +178,7 @@ export function HomologNovedadStockSection({
             Deshacer stock de novedades
           </Button>
         ) : null}
-        <Button component={Link} to="/incoming/novedad-stock" size="small">
+        <Button component={Link} to="/incoming-v2/novedad-stock" size="small">
           Ver módulo completo
         </Button>
       </Stack>

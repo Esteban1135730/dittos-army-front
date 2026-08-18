@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import { LoadingScreen } from "../loading";
 import PanelNav from "./panel-nav";
 import { OwnerRouteGuard } from "../../modules/owner";
 
@@ -43,17 +44,20 @@ export default function SideLayout({ children }: { children: ReactNode }) {
 
   return (
     <OwnerRouteGuard>
-      <Box sx={{ display: "flex", height: "100vh", minHeight: 0, bgcolor: "grey.100" }}>
+      <Box sx={{ display: "flex", height: "100vh", minHeight: 0, bgcolor: "background.default" }}>
         <Box
           component="aside"
           aria-label="Navegación principal"
-          sx={{
+          sx={(theme) => ({
             display: { xs: "none", md: "flex" },
             flexDirection: "column",
             flexShrink: 0,
             width: DRAWER_WIDTH,
-            bgcolor: "grey.800",
-          }}
+            bgcolor: theme.palette.ditto.nav.bg,
+            backgroundImage: `linear-gradient(180deg, ${theme.palette.ditto.nav.bgTop} 0%, ${theme.palette.ditto.nav.bg} 100%)`,
+            borderRight: 1,
+            borderColor: theme.palette.ditto.nav.border,
+          })}
         >
           {sidebarContent}
         </Box>
@@ -67,7 +71,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": {
               width: DRAWER_WIDTH,
-              bgcolor: "grey.800",
+              bgcolor: (theme) => theme.palette.ditto.nav.bg,
               boxSizing: "border-box",
             },
           }}
@@ -89,7 +93,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             elevation={1}
             sx={{
               display: { xs: "block", md: "none" },
-              bgcolor: "grey.800",
+              bgcolor: (theme) => theme.palette.ditto.nav.bg,
             }}
           >
             <Toolbar sx={{ minHeight: { xs: 56 }, gap: 1 }}>
@@ -117,7 +121,9 @@ export default function SideLayout({ children }: { children: ReactNode }) {
               p: { xs: 1.5, sm: 2, md: 3 },
             }}
           >
-            {children}
+            <Suspense fallback={<LoadingScreen message="Cargando pantalla…" />}>
+              {children}
+            </Suspense>
           </Box>
         </Box>
       </Box>

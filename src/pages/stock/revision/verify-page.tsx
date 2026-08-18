@@ -14,6 +14,7 @@ import {
   TextField,
 } from "@mui/material";
 import axios from "axios";
+import { LoadingScreen } from "../../../components/loading";
 import { useLaserBarcodeInput } from "../../../components/barcode-scanner/use-laser-barcode-input";
 import { parseStockQrPayload } from "../../../modules/stock-barcode";
 import {
@@ -340,9 +341,7 @@ export default function StockReviewVerifyPage() {
   };
 
   if (isLoading) {
-    return (
-      <p className="text-center text-gray-500 p-6">Cargando sesión...</p>
-    );
+    return <LoadingScreen message="Cargando sesión…" />;
   }
 
   if (isError || !session) {

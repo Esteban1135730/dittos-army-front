@@ -1,39 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
-import {
-  buildEtiquetasReservaItemsFromPedidos,
-  EtiquetasReservaPrintArea,
-  preloadEtiquetaReservaImage,
-  useClearEtiquetasReservaPrintMode,
-} from "./etiquetas-reserva-print";
 import { paginatePedidoLineItems } from "./pedido-print-sheets";
 import { mergePedidoSelection } from "./pedido-print-selection";
-import { API_CLIENT, API_RESERVA, API_STOCK } from "./cliente-types";
-import { abrirWhatsAppConTexto } from "./mensaje-reserva-pedido";
-
-type ClientItem = {
-  _id: string;
-  nombre: string;
-  tienda_entrega: string;
-  celular?: string;
-  metodo_contacto: string;
-};
-
-type ReservaItem = {
-  _id: string;
-  client_id: string;
-  stock_id: string;
-  precio: number;
-  currency: string;
-};
+import { API_CLIENT, API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
+import { API_PEDIDO, type PedidoItem } from "./pedido-types";
+import { abrirWhatsAppConTexto, buildWhatsAppPedidoText } from "./mensaje-reserva-pedido";
+import { descripcionEntrega, formatFechaTentativa } from "./pedido-entrega-label";
+import { reservaLineQuantity } from "./clientes-resumen-pedidos";
 
 type StockItem = Pick<StockListItem, "_id" | "card_name">;
 
 type PedidoCard = {
+  key: string;
   client: ClientItem;
+  entregaLabel: string;
+  fechaTentativa: string;
   items: { nombre: string; precio: number }[];
   total: number;
 };
@@ -45,10 +29,6 @@ export default function ImprimirPedidosPage() {
   const printRef = useRef<HTMLDivElement>(null);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const seenPedidoIdsRef = useRef<Set<string> | null>(null);
-  const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
-  const [errorEtiquetas, setErrorEtiquetas] = useState<string | null>(null);
-
-  useClearEtiquetasReservaPrintMode();
 
   useEffect(() => {
     const clear = () => {
@@ -98,29 +78,80 @@ export default function ImprimirPedidosPage() {
     return map;
   }, [clientes]);
 
-  const pedidos: PedidoCard[] = useMemo(() => {
-    const byClient: Record<string, ReservaItem[]> = {};
+  const reservaGroups = useMemo(() => {
+    const map = new Map<string, { clientId: string; pedidoId?: string; items: ReservaItem[] }>();
     reservas.forEach((r) => {
-      if (!byClient[r.client_id]) byClient[r.client_id] = [];
-      byClient[r.client_id].push(r);
+      const pedidoId = r.pedido_id?.trim();
+      const key = pedidoId || `legacy-${r.client_id}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(r);
+      } else {
+        map.set(key, { clientId: r.client_id, pedidoId, items: [r] });
+      }
     });
-    return Object.entries(byClient)
-      .map(([clientId, items]) => {
-        const client = clientesMap[clientId];
+    return [...map.entries()];
+  }, [reservas]);
+
+  const pedidoIds = useMemo(
+    () =>
+      reservaGroups
+        .map(([, g]) => g.pedidoId)
+        .filter((id): id is string => Boolean(id)),
+    [reservaGroups],
+  );
+
+  const pedidoQueries = useQueries({
+    queries: pedidoIds.map((id) => ({
+      queryKey: ["pedido", id],
+      queryFn: async () => {
+        const res = await axios.get<PedidoItem>(`${API_PEDIDO}/${id}`);
+        return res.data;
+      },
+    })),
+  });
+
+  const pedidoById = useMemo(() => {
+    const map: Record<string, PedidoItem> = {};
+    pedidoQueries.forEach((q, i) => {
+      if (q.data) map[pedidoIds[i]] = q.data;
+    });
+    return map;
+  }, [pedidoQueries, pedidoIds]);
+
+  const pedidos: PedidoCard[] = useMemo(() => {
+    return reservaGroups
+      .map(([key, group]) => {
+        const client = clientesMap[group.clientId];
         if (!client) return null;
-        const rows = items.map((r) => ({
-          nombre: stockMap[r.stock_id] ?? `Stock ${r.stock_id.slice(-4)}`,
-          precio: r.precio,
-        }));
+        const pedido = group.pedidoId ? pedidoById[group.pedidoId] : undefined;
+        const rows = group.items.map((r) => {
+          const units = reservaLineQuantity(r.quantity);
+          return {
+            nombre: stockMap[r.stock_id] ?? `Stock ${r.stock_id.slice(-4)}`,
+            precio: r.precio * units,
+          };
+        });
         const total = rows.reduce((sum, i) => sum + i.precio, 0);
-        return { client, items: rows, total };
+        return {
+          key,
+          client,
+          entregaLabel: pedido
+            ? descripcionEntrega(pedido)
+            : "Sin datos de entrega (pedido no migrado)",
+          fechaTentativa: pedido
+            ? formatFechaTentativa(pedido.fecha_tentativa_entrega)
+            : "—",
+          items: rows,
+          total,
+        };
       })
       .filter((p): p is PedidoCard => p !== null);
-  }, [reservas, clientesMap, stockMap]);
+  }, [reservaGroups, clientesMap, stockMap, pedidoById]);
 
   // Primera carga: marcar todos. Luego solo auto-marcar clientes nuevos con reservas.
   useEffect(() => {
-    const ids = pedidos.map((p) => p.client._id);
+    const ids = pedidos.map((p) => p.key);
     if (ids.length === 0) return;
     const previouslySeen = seenPedidoIdsRef.current;
     setSeleccionados((prev) => {
@@ -133,20 +164,20 @@ export default function ImprimirPedidosPage() {
     seenPedidoIdsRef.current = new Set(ids);
   }, [pedidos]);
 
-  const toggleCliente = (clientId: string) => {
+  const toggleCliente = (key: string) => {
     setSeleccionados((prev) => {
       const next = new Set(prev);
-      if (next.has(clientId)) next.delete(clientId);
-      else next.add(clientId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const seleccionarTodos = () => setSeleccionados(new Set(pedidos.map((p) => p.client._id)));
+  const seleccionarTodos = () => setSeleccionados(new Set(pedidos.map((p) => p.key)));
   const deseleccionarTodos = () => setSeleccionados(new Set());
 
   const pedidosAImprimir = useMemo(
-    () => pedidos.filter((p) => seleccionados.has(p.client._id)),
+    () => pedidos.filter((p) => seleccionados.has(p.key)),
     [pedidos, seleccionados]
   );
 
@@ -154,16 +185,11 @@ export default function ImprimirPedidosPage() {
     () =>
       pedidosAImprimir.flatMap((pedido) =>
         paginatePedidoLineItems(pedido.items).map((sheet) => ({
-          key: `${pedido.client._id}-${sheet.sheetIndex}`,
+          key: `${pedido.key}-${sheet.sheetIndex}`,
           pedido,
           sheet,
         })),
       ),
-    [pedidosAImprimir],
-  );
-
-  const etiquetasAImprimir = useMemo(
-    () => buildEtiquetasReservaItemsFromPedidos(pedidosAImprimir),
     [pedidosAImprimir],
   );
 
@@ -172,43 +198,21 @@ export default function ImprimirPedidosPage() {
     window.print();
   };
 
-  const handleImprimirEtiquetas = async () => {
-    if (etiquetasAImprimir.length === 0) return;
-    setErrorEtiquetas(null);
-    setImprimiendoEtiquetas(true);
-    try {
-      await preloadEtiquetaReservaImage();
-      document.body.classList.add("print-etiquetas-mode");
-      window.print();
-    } catch {
-      setErrorEtiquetas("No se pudo cargar la imagen de la etiqueta.");
-    } finally {
-      setImprimiendoEtiquetas(false);
-    }
-  };
-
-  /** Mensaje de texto del pedido para WhatsApp */
-  const mensajePedidoWhatsApp = (pedido: PedidoCard): string => {
-    const lineas: string[] = [
-      "¡Hola!",
-      "",
-      "Te envío el resumen de tu pedido:",
-      "",
-      `*Pedido — ${pedido.client.nombre}*`,
-      `Tienda de entrega: ${pedido.client.tienda_entrega}`,
-      "",
-      "Cartas reservadas:",
-      ...pedido.items.map((i) => `• ${i.nombre}: ${formatCOP(i.precio)}`),
-      "",
-      `*Total: ${formatCOP(pedido.total)}*`,
-      "",
-      "Cualquier duda me escribes. ¡Gracias!",
-    ];
-    return lineas.join("\n");
-  };
+  const mensajePedidoWhatsApp = async (pedido: PedidoCard): Promise<string> =>
+    buildWhatsAppPedidoText({
+      clientName: pedido.client.nombre,
+      descripcionEntrega: pedido.entregaLabel,
+      lines: pedido.items.map((i) => ({
+        card_id: "",
+        card_name: i.nombre,
+        precio: i.precio,
+      })),
+    });
 
   const enviarPedidoPorWhatsApp = (pedido: PedidoCard) => {
-    abrirWhatsAppConTexto(pedido.client.celular, mensajePedidoWhatsApp(pedido));
+    void mensajePedidoWhatsApp(pedido).then((texto) =>
+      abrirWhatsAppConTexto(pedido.client.celular, texto),
+    );
   };
 
   return (
@@ -242,14 +246,14 @@ export default function ImprimirPedidosPage() {
           <ul className="space-y-2 mb-6">
             {pedidos.map((p) => (
               <li
-                key={p.client._id}
+                key={p.key}
                 className="flex items-center gap-3 bg-white border border-gray-200 rounded px-4 py-2"
               >
                 <label className="flex items-center gap-2 cursor-pointer flex-1">
                   <input
                     type="checkbox"
-                    checked={seleccionados.has(p.client._id)}
-                    onChange={() => toggleCliente(p.client._id)}
+                    checked={seleccionados.has(p.key)}
+                    onChange={() => toggleCliente(p.key)}
                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="font-medium">{p.client.nombre}</span>
@@ -282,22 +286,7 @@ export default function ImprimirPedidosPage() {
                 ? "Selecciona al menos un pedido"
                 : `Imprimir ${tarjetasPedidoAImprimir.length} tarjeta${tarjetasPedidoAImprimir.length !== 1 ? "s" : ""}`}
             </button>
-            <button
-              type="button"
-              onClick={handleImprimirEtiquetas}
-              disabled={etiquetasAImprimir.length === 0 || imprimiendoEtiquetas}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
-            >
-              {imprimiendoEtiquetas
-                ? "Preparando etiquetas…"
-                : etiquetasAImprimir.length === 0
-                  ? "Selecciona al menos un pedido"
-                  : `Imprimir ${etiquetasAImprimir.length} etiqueta${etiquetasAImprimir.length !== 1 ? "s" : ""} de reserva`}
-            </button>
           </div>
-          {errorEtiquetas ? (
-            <p className="no-print text-red-600 text-sm mb-4">{errorEtiquetas}</p>
-          ) : null}
         </>
       )}
 
@@ -335,7 +324,8 @@ export default function ImprimirPedidosPage() {
             {pedido.client.celular ? (
               <div className="mb-1">Cel: {pedido.client.celular}</div>
             ) : null}
-            <div className="mb-2">Tienda: {pedido.client.tienda_entrega}</div>
+            <div className="mb-1">Entrega: {pedido.entregaLabel}</div>
+            <div className="mb-2">Fecha tentativa: {pedido.fechaTentativa}</div>
             {sheet.sheetCount > 1 ? (
               <div className="mb-1 font-semibold" style={{ fontSize: "7px" }}>
                 Tarjeta {sheet.sheetIndex} de {sheet.sheetCount}
@@ -372,8 +362,6 @@ export default function ImprimirPedidosPage() {
           </div>
         ))}
       </div>
-
-      <EtiquetasReservaPrintArea labels={etiquetasAImprimir} />
 
       <style>{`
         @media print {

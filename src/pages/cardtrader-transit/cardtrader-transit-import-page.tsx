@@ -8,7 +8,7 @@ import {
   type IncomingBatchBundleForCt0Draft,
   pricingFieldsFromOpenIncomingBatch,
 } from "../../utils/ct0-incoming-batch-draft";
-import Ct0IncomingRegisterPanel from "../test-cardtrader/ct0-incoming-register-panel";
+import Ct0IncomingRegisterPanel from "./ct0-incoming-register-panel";
 import Ct0ComplementosRegisterPanel from "./ct0-complementos-register-panel";
 import Ct0NoLlegadasRegisterPanel from "./ct0-no-llegadas-register-panel";
 import { API_INCOMING } from "../clientes/cliente-types";

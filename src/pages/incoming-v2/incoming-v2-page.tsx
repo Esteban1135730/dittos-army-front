@@ -58,7 +58,7 @@ import {
   countOrphanNovedadUnits,
   HomologNovedadStockSection,
 } from './homolog-novedad-stock-section';
-import { useNovedadStockList } from '../incoming/novedad-stock/use-novedad-stock';
+import { useNovedadStockList } from './novedad-stock/use-novedad-stock';
 import { useExchangeRates } from '../../utils/tasa';
 
 const API_CARDTRADER = apiUrl('/cardtrader');
@@ -462,7 +462,7 @@ export default function IncomingV2Page() {
         cards,
       });
       if (res.round_id) {
-        navigate(`/incoming/ship-round/${res.round_id}`);
+        navigate(`/incoming-v2/ship-round/${res.round_id}`);
       } else {
         await queryClient.invalidateQueries({ queryKey: ['incoming-homolog-active'] });
       }
@@ -483,7 +483,7 @@ export default function IncomingV2Page() {
     return (
       <Box maxWidth={720} mx="auto">
         <Typography variant="h5" fontWeight={700} gutterBottom>
-          Compras en camino v2
+          Homologación CT
         </Typography>
         <Typography color="text.secondary" paragraph>
           Homologa cada carta <strong>sent</strong> de CardTrader contra tu inventario en
@@ -530,7 +530,7 @@ export default function IncomingV2Page() {
           {session.ship_round_id ? (
             <Button
               component={Link}
-              to={`/incoming/ship-round/${session.ship_round_id}`}
+              to={`/incoming-v2/ship-round/${session.ship_round_id}`}
               variant="contained"
             >
               Ir a revisar tanda
@@ -564,7 +564,7 @@ export default function IncomingV2Page() {
       >
         <Box>
           <Typography variant="h5" fontWeight={700}>
-            Compras en camino v2
+            Homologación CT
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Homologación 1:1 · solo pedidos <strong>sent</strong>
@@ -1101,7 +1101,7 @@ export default function IncomingV2Page() {
               <Typography variant="subtitle2" fontWeight={600}>
                 Novedades en registro ({novedades.length})
               </Typography>
-              <Button component={Link} to="/incoming/novedad-stock" size="small">
+              <Button component={Link} to="/incoming-v2/novedad-stock" size="small">
                 Cartas con novedad
               </Button>
             </Stack>

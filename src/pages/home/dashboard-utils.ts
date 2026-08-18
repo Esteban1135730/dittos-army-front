@@ -136,7 +136,6 @@ export function normalizeDashboardOverview(raw: unknown): DashboardOverviewRespo
     active_estimated_profit_cop: 0,
     closed_last_30_days_count: 0,
     closed_last_30_days_amount_cop: 0,
-    consistency_issue_count: 0,
   };
   const clients = r.clients_reservations ?? {
     clients_count: 0,

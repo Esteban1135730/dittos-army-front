@@ -1,4 +1,5 @@
-import type { CSSProperties, MouseEventHandler } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEventHandler } from "react";
+import CircularProgress from "@mui/material/CircularProgress";
 
 export type CardThumbSize = "sm" | "md" | "lg" | "xl";
 
@@ -23,6 +24,8 @@ type CardThumbProps = {
   className?: string;
   style?: CSSProperties;
   loading?: "lazy" | "eager";
+  /** Datos de carta aún en tránsito (API / enriquecimiento). */
+  pending?: boolean;
   onClick?: MouseEventHandler<HTMLElement>;
   /** Show a larger preview on hover (CSS scale). */
   enlargeOnHover?: boolean;
@@ -40,6 +43,7 @@ export function CardThumb({
   className = "",
   style,
   loading = "lazy",
+  pending = false,
   onClick,
   enlargeOnHover = false,
 }: CardThumbProps) {
@@ -47,12 +51,20 @@ export function CardThumb({
   const width = widthProp ?? preset.width;
   const height = heightProp ?? preset.height;
   const trimmed = typeof src === "string" ? src.trim() : "";
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  useEffect(() => {
+    setImgLoaded(false);
+  }, [trimmed]);
+
+  const waitingImage = trimmed.length > 0 && !imgLoaded;
+  const showSpinner = pending || waitingImage;
 
   return (
     <span
       className={[
         "relative inline-flex shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-100",
-        enlargeOnHover
+        enlargeOnHover && !showSpinner
           ? "overflow-visible transition-transform hover:z-30 hover:scale-[1.75] hover:shadow-xl"
           : "overflow-hidden",
         onClick ? "cursor-zoom-in" : "",
@@ -74,19 +86,42 @@ export function CardThumb({
             }
           : undefined
       }
+      aria-busy={showSpinner ? true : undefined}
+      aria-label={showSpinner ? "Cargando carta" : undefined}
     >
       {trimmed ? (
-        <img
-          src={trimmed}
-          alt={alt}
-          loading={loading}
-          className={[
-            "block h-full w-full bg-white object-contain",
-            enlargeOnHover ? "rounded-md" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          draggable={false}
+        <>
+          <img
+            src={trimmed}
+            alt={alt}
+            loading={loading}
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgLoaded(true)}
+            className={[
+              "block h-full w-full bg-white object-contain transition-opacity duration-200",
+              enlargeOnHover && imgLoaded ? "rounded-md" : "",
+              showSpinner ? "opacity-0" : "opacity-100",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            draggable={false}
+          />
+          {showSpinner ? (
+            <CircularProgress
+              size={Math.max(20, Math.round(Math.min(width, height) * 0.32))}
+              aria-hidden
+              sx={{
+                position: "absolute",
+                color: "primary.main",
+              }}
+            />
+          ) : null}
+        </>
+      ) : pending ? (
+        <CircularProgress
+          size={Math.max(20, Math.round(Math.min(width, height) * 0.32))}
+          aria-hidden
+          sx={{ color: "primary.main" }}
         />
       ) : (
         <span className="px-1 text-center text-[10px] leading-tight text-gray-400">

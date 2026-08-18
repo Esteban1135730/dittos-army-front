@@ -1,0 +1,62 @@
+---
+description: Paleta y patrones visuales Ditto Army (panel MUI). Obligatorio en UI nueva o rediseños.
+globs: dittos-army-front/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# Design system — Ditto Army panel
+
+## Fuente de verdad
+
+- Tokens: `src/theme/ditto-palette.ts`
+- Tema MUI: `src/theme/ditto-theme.ts` (montado en `main.tsx` con `ThemeProvider`)
+- Layouts de página (clientes): `src/pages/clientes/clientes-page-layout.ts`
+
+## Paleta (no usar grises MUI genéricos ni hex sueltos)
+
+| Rol | Token | Uso |
+|-----|-------|-----|
+| Marca / CTA | `primary` → lilac `#6D5CE8` | Botones principales, links activos |
+| Acento | `secondary` → blush `#E879A8` | Badges suaves, acentos secundarios |
+| Fondo página | `background.default` → parchment `#F7F5F2` | Canvas del panel |
+| Superficie | `background.paper` | Cards, papers |
+| Superficie muted | `theme.palette.ditto.surface.muted` | Headers de sección, KPIs |
+| Texto | `text.primary` / `text.secondary` | Cuerpo y labels |
+| Éxito / pago | `success` → moss `#2A9D8F` | Pagado, WhatsApp enviado |
+| Alerta / reserva | `warning` → honey `#D4890A` | Pedido reservado, urgencia |
+| Error / urgente | `error` → ember `#DC4A4A` | Crítico, cancelar |
+| Info | `info` → `#5B7FD4` | Messenger, avisos neutros |
+| Nav lateral | `theme.palette.ditto.nav.*` | Sidebar ink `#1E1B2E` |
+
+## Reglas de implementación
+
+```tsx
+// ✅ Usar theme
+<Box sx={{ bgcolor: "background.default" }} />
+<Box sx={(t) => ({ borderColor: t.palette.ditto.semantic.successBorder })} />
+
+// ❌ Evitar
+<Box sx={{ bgcolor: "#f5f5f5" }} />
+<Box sx={{ bgcolor: "grey.100" }} />  // solo si grey está mapeado al token
+```
+
+- **Botones**: `textTransform: "none"`, `fontWeight: 600` (ya en tema). Labels en español, verbo + objeto: «Registrar pago», «Ver ficha».
+- **Labels KPI**: mayúsculas pequeñas vía `clientesMutedLabelSx` o equivalente.
+- **Semántica**: filas urgentes → `ditto.semantic.warningBg` / `errorBg`, no rgba inventados.
+- **Desktop first**: layouts para laptop (≥1280), 2K (1680), 4K (2200). No optimizar móvil salvo sidebar existente.
+- **Nuevas páginas**: reutilizar tokens; si hay patrón repetido (section header + body), extraer sx compartido junto al theme.
+
+## Componentes compartidos
+
+- Carga de página / sección: `src/components/loading/loading-screen.tsx` (`LoadingScreen`, variantes `page` | `fullscreen` | `inline`).
+
+## Tipografía
+
+- Fuente: **DM Sans** (cargada en `index.html`).
+- Títulos de página: `h4`/`h6` con peso 700–800.
+
+## Extender el sistema
+
+1. Añadir token en `ditto-palette.ts`.
+2. Mapear en `ditto-theme.ts` si aplica a `palette.*` o `components`.
+3. Documentar en esta rule si es un patrón reutilizable.

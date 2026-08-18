@@ -13,6 +13,7 @@ import {
   type StockTagId,
 } from "../../../constants/stock-tags";
 import { API_BASE } from "../../../config/api";
+import { LoadingScreen } from "../../../components/loading";
 
 export default function ModificarStock() {
   const { id } = useParams();
@@ -188,7 +189,7 @@ export default function ModificarStock() {
     mutation.mutate(payload);
   };
 
-  if (isLoading) return <p className="text-center">⏳ Cargando datos...</p>;
+  if (isLoading) return <LoadingScreen message="Cargando carta…" />;
   if (error || !data)
     return <p className="text-center text-red-500">❌ Error al cargar</p>;
 

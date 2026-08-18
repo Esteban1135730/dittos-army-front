@@ -19,7 +19,6 @@ export type DashboardOverviewResponse = {
     active_estimated_profit_cop: number;
     closed_last_30_days_count: number;
     closed_last_30_days_amount_cop: number;
-    consistency_issue_count: number;
   };
   clients_reservations: {
     clients_count: number;
