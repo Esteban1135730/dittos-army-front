@@ -4,10 +4,60 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
     <title>Dittos Army</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-boot-loader" role="status" aria-live="polite" aria-label="Cargando Dittos Army">
+        <div class="app-boot-loader__ring" aria-hidden="true"></div>
+        <p class="app-boot-loader__title">Dittos Army</p>
+        <p class="app-boot-loader__message">Cargando panel…</p>
+      </div>
+    </div>
+    <style>
+      .app-boot-loader {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        background: #f7f5f2;
+        color: #1a1625;
+        font-family: "DM Sans", system-ui, sans-serif;
+      }
+      .app-boot-loader__ring {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        border: 3px solid rgba(109, 92, 232, 0.18);
+        border-top-color: #6d5ce8;
+        animation: app-boot-spin 0.9s linear infinite;
+        margin-bottom: 0.5rem;
+      }
+      .app-boot-loader__title {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .app-boot-loader__message {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #6b6578;
+      }
+      @keyframes app-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

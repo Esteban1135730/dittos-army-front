@@ -9,10 +9,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   Paper,
   Snackbar,
@@ -37,9 +33,20 @@ import {
   compareIncomingLinesByOldest,
   incomingVariantGroupKey,
   weightedAverageUnitCostCop,
-} from "../incoming/incoming-variant-group";
+} from "../../utils/incoming-variant-group";
 import { CardThumb } from "../../components/card-thumb";
 import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
+import ClienteFormDialog from "./cliente-form-dialog";
+import NuevoPedidoDialog from "./nuevo-pedido-dialog";
+import PedidoContextBar from "./pedido-context-bar";
+import { extractAxiosErrorMessage } from "./extract-axios-error";
+import {
+  API_PEDIDO,
+  canReservarStock,
+  findPedidoReservado,
+  pedidoId,
+  type PedidoItem,
+} from "./pedido-types";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 
@@ -93,13 +100,7 @@ export default function ReservarCartasPage() {
   const [aplicandoPvpId, setAplicandoPvpId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
-  const [editNombre, setEditNombre] = useState("");
-  const [editTienda, setEditTienda] = useState("");
-  const [editCelular, setEditCelular] = useState("");
-  const [editMetodoContacto, setEditMetodoContacto] = useState<"whatsapp" | "facebook">("whatsapp");
-  const [editFacebookUsuario, setEditFacebookUsuario] = useState("");
-  const [editNotas, setEditNotas] = useState("");
-  const [guardandoCliente, setGuardandoCliente] = useState(false);
+  const [pedidoDialog, setPedidoDialog] = useState<"create" | "edit" | null>(null);
   const [importWaOpen, setImportWaOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -119,52 +120,20 @@ export default function ReservarCartasPage() {
     enabled: !!clientId,
   });
 
-  const abrirModalEditar = () => {
-    if (client) {
-      setEditNombre(client.nombre);
-      setEditTienda(client.tienda_entrega);
-      setEditCelular(client.celular ?? "");
-      setEditMetodoContacto((client.metodo_contacto as "whatsapp" | "facebook") || "whatsapp");
-      setEditFacebookUsuario(client.facebook_usuario ?? "");
-      setEditNotas(client.notas ?? "");
-      setModalEditarCliente(true);
-    }
-  };
+  const { data: pedidos = [] } = useQuery<PedidoItem[]>({
+    queryKey: ["pedidos", clientId],
+    queryFn: async () => {
+      const res = await axios.get(`${API_PEDIDO}/client/${clientId}`);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: !!clientId,
+  });
 
+  const pedidoReservado = findPedidoReservado(pedidos);
+  const pedidoPagado = pedidos.find((p) => p.status === "pagado");
+
+  const abrirModalEditar = () => setModalEditarCliente(true);
   const cerrarModalEditar = () => setModalEditarCliente(false);
-
-  const guardarCliente = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clientId || !client) return;
-    if (!editNombre.trim() || !editTienda.trim()) {
-      toast("Nombre y tienda de entrega son obligatorios.", "error");
-      return;
-    }
-    if (editMetodoContacto === "facebook" && !editFacebookUsuario.trim()) {
-      toast("Usuario de Facebook es obligatorio para contacto Facebook.", "error");
-      return;
-    }
-    setGuardandoCliente(true);
-    try {
-      await axios.put(`${API_CLIENT}/${clientId}`, {
-        nombre: editNombre.trim(),
-        tienda_entrega: editTienda.trim(),
-        celular: editCelular.trim() || undefined,
-        metodo_contacto: editMetodoContacto,
-        facebook_usuario:
-          editMetodoContacto === "facebook" ? editFacebookUsuario.trim() : undefined,
-        notas: editNotas.trim() || undefined,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["client", clientId] });
-      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      toast("Datos del cliente actualizados.", "success");
-      cerrarModalEditar();
-    } catch {
-      toast("Error al guardar los datos del cliente.", "error");
-    } finally {
-      setGuardandoCliente(false);
-    }
-  };
 
   const { data: stockRaw = [], isLoading: loadingStock } = useQuery<StockItem[]>({
     queryKey: ["stock"],
@@ -391,7 +360,7 @@ export default function ReservarCartasPage() {
   };
 
   const handleReservar = async (item: StockItem) => {
-    if (!clientId || !client) return;
+    if (!clientId || !client || !pedidoReservado) return;
     const precio = getPrecioReserva(item._id, item);
     if (precio <= 0) {
       toast("Ingresa un precio mayor a 0.", "error");
@@ -404,6 +373,7 @@ export default function ReservarCartasPage() {
         stock_id: item._id,
         precio: Math.round(precio),
         currency: "COP",
+        pedido_id: pedidoId(pedidoReservado),
       });
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
@@ -414,9 +384,11 @@ export default function ReservarCartasPage() {
       setPrecios(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
+      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
       toast(`«${item.card_name}» añadida al pedido.`, "success");
-    } catch {
-      toast("Error al reservar la carta.", "error");
+    } catch (err) {
+      toast(extractAxiosErrorMessage(err, "Error al reservar la carta."), "error");
     } finally {
       setReservandoId(null);
     }
@@ -435,6 +407,7 @@ export default function ReservarCartasPage() {
       setPreciosReservadas(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
       toast("Línea quitada del pedido.", "success");
     } catch {
       toast("Error al quitar la reserva.", "error");
@@ -778,7 +751,7 @@ export default function ReservarCartasPage() {
             variant="contained"
             size="small"
             onClick={() => handleReservar(item)}
-            disabled={loading}
+            disabled={loading || !canReservarStock(pedidoReservado)}
             sx={{ textTransform: "none", minWidth: 96 }}
           >
             {loading ? "…" : "Añadir"}
@@ -823,38 +796,16 @@ export default function ReservarCartasPage() {
         </Typography>
       </Stack>
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
-          <Stack spacing={0.5} flex={1}>
-            <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
-              <Chip label={client.tienda_entrega} size="small" variant="outlined" />
-              {client.celular ? (
-                <Typography variant="body2" color="text.secondary">
-                  {client.celular}
-                </Typography>
-              ) : null}
-            </Stack>
-            {client.notas?.trim() ? (
-              <Alert severity="info" icon={false} sx={{ py: 0.5, mt: 1 }}>
-                <Typography variant="caption" component="span" fontWeight={600}>
-                  Notas:{" "}
-                </Typography>
-                <Typography variant="body2" component="span" sx={{ whiteSpace: "pre-wrap" }}>
-                  {client.notas.trim()}
-                </Typography>
-              </Alert>
-            ) : null}
-          </Stack>
-          <Stack direction="row" spacing={1} sx={{ alignSelf: "flex-start" }}>
-            <Button variant="outlined" size="small" onClick={() => setImportWaOpen(true)}>
-              Importar desde WhatsApp
-            </Button>
-            <Button variant="outlined" size="small" onClick={abrirModalEditar}>
-              Datos del cliente
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
+      <PedidoContextBar
+        client={client}
+        pedidoReservado={pedidoReservado}
+        pedidoPagado={pedidoPagado}
+        onNuevoPedido={() => setPedidoDialog("create")}
+        onEditEntrega={() => setPedidoDialog("edit")}
+        onEditCliente={abrirModalEditar}
+        onImportWhatsApp={() => setImportWaOpen(true)}
+        canImport={canReservarStock(pedidoReservado)}
+      />
 
       <ImportWhatsAppPedidoDialog
         open={importWaOpen}
@@ -864,17 +815,35 @@ export default function ReservarCartasPage() {
           await queryClient.invalidateQueries({ queryKey: ["stock"] });
           if (clientId) {
             await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+            await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
           }
           toast(summary, "success");
         }}
       />
 
+      {clientId ? (
+        <NuevoPedidoDialog
+          open={pedidoDialog != null}
+          mode={pedidoDialog === "edit" ? "edit" : "create"}
+          clientId={clientId}
+          pedido={pedidoReservado}
+          onClose={() => setPedidoDialog(null)}
+        />
+      ) : null}
+
+      <ClienteFormDialog
+        open={modalEditarCliente}
+        mode="edit"
+        client={client}
+        onClose={cerrarModalEditar}
+      />
+
       <Paper
         variant="outlined"
-        sx={{ p: 2.5, borderRadius: 2, bgcolor: "warning.50", borderColor: "warning.light" }}
+        sx={{ p: 2.5, borderRadius: 2, borderColor: "warning.light", borderWidth: 1 }}
       >
-        <Typography variant="subtitle1" fontWeight={700} color="warning.dark" gutterBottom>
-          Pedido actual
+        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+          Líneas reservadas
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Líneas reservadas para este cliente. Ajusta precios aquí o quita líneas.
@@ -1218,73 +1187,6 @@ export default function ReservarCartasPage() {
           </Box>
         )}
       </Paper>
-
-      <Dialog open={modalEditarCliente} onClose={guardandoCliente ? undefined : cerrarModalEditar} maxWidth="sm" fullWidth>
-        <form onSubmit={guardarCliente}>
-          <DialogTitle>Datos del cliente</DialogTitle>
-          <DialogContent dividers>
-            <Stack spacing={2} sx={{ pt: 0.5 }}>
-              <TextField
-                label="Nombre"
-                required
-                fullWidth
-                value={editNombre}
-                onChange={(e) => setEditNombre(e.target.value)}
-              />
-              <TextField
-                label="Tienda de entrega"
-                required
-                fullWidth
-                value={editTienda}
-                onChange={(e) => setEditTienda(e.target.value)}
-              />
-              <TextField
-                label="WhatsApp (número o @nick)"
-                fullWidth
-                value={editCelular}
-                onChange={(e) => setEditCelular(e.target.value)}
-                helperText="Número o usuario @{nick}"
-              />
-              <TextField
-                select
-                label="Canal"
-                fullWidth
-                value={editMetodoContacto}
-                onChange={(e) => setEditMetodoContacto(e.target.value as "whatsapp" | "facebook")}
-                SelectProps={{ native: true }}
-              >
-                <option value="whatsapp">WhatsApp</option>
-                <option value="facebook">Facebook</option>
-              </TextField>
-              {editMetodoContacto === "facebook" && (
-                <TextField
-                  label="Usuario Facebook"
-                  required
-                  fullWidth
-                  value={editFacebookUsuario}
-                  onChange={(e) => setEditFacebookUsuario(e.target.value)}
-                />
-              )}
-              <TextField
-                label="Notas internas"
-                fullWidth
-                multiline
-                minRows={3}
-                value={editNotas}
-                onChange={(e) => setEditNotas(e.target.value)}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2 }}>
-            <Button onClick={cerrarModalEditar} disabled={guardandoCliente} color="inherit">
-              Cancelar
-            </Button>
-            <Button type="submit" variant="contained" disabled={guardandoCliente}>
-              {guardandoCliente ? "Guardando…" : "Guardar"}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
 
       <Snackbar
         open={snackbar.open}

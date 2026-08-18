@@ -4,6 +4,7 @@ import { apiUrl } from "../../../config/api";
 import type { StockLostRow } from "../revision/types";
 import { operationalRarezaLabel } from "../../../constants/item-rareza";
 import { CardThumb } from "../../../components/card-thumb";
+import { LoadingScreen } from "../../../components/loading";
 
 export default function StockLostCardsPage() {
   const { data, isLoading, error } = useQuery<{ items: StockLostRow[] }>({
@@ -15,9 +16,7 @@ export default function StockLostCardsPage() {
   });
 
   if (isLoading) {
-    return (
-      <p className="text-center text-gray-500 p-6">Cargando cartas perdidas...</p>
-    );
+    return <LoadingScreen message="Cargando cartas perdidas…" />;
   }
 
   if (error || !data) {

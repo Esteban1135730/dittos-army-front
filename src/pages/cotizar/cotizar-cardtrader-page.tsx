@@ -53,7 +53,7 @@ import {
   CARDTRADER_SHIPPING_ONLY_COP,
   computeCardtraderUnitCostCop,
 } from "../../utils/cardtrader-cotizar-pricing";
-import { resolveUsdCopRate } from "../incoming/simulate-real-card-price";
+import { resolveUsdCopRate } from "../../utils/simulate-real-card-price";
 import { useExchangeRates } from "../../utils/tasa";
 import {
   Alert,

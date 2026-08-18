@@ -1,22 +1,23 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   Alert,
   Box,
   Button,
-  Chip,
-  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Snackbar,
   Stack,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import type { StockListItem } from "../../types/stock";
+import { LoadingScreen } from "../../components/loading";
 import { formatCOP } from "../../utils/convert";
-import { CardThumb } from "../../components/card-thumb";
 import ClienteFormDialog from "./cliente-form-dialog";
 import {
   API_CLIENT,
@@ -34,13 +35,33 @@ import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
-import { useEtiquetasReservaPrint } from "./etiquetas-reserva-print";
 import { downloadVentaClientePdf } from "./venta-cliente-pdf";
 import {
   aggregateReservasTotales,
-  gananciaEstimadaReservaCop,
 } from "./clientes-resumen-pedidos";
 import { useExchangeRates } from "../../utils/tasa";
+import { extractAxiosErrorMessage } from "./extract-axios-error";
+import NuevoPedidoDialog from "./nuevo-pedido-dialog";
+import PedidoActivoPanel from "./pedido-activo-panel";
+import PedidoHistorialSection from "./pedido-historial-section";
+import { buildHistorialClienteView } from "./cliente-historial-merge";
+import { API_PEDIDO, findPedidoAbierto, findPedidoReservado, pedidoId, type PedidoItem } from "./pedido-types";
+import {
+  descripcionEntrega,
+  formatFechaTentativa,
+} from "./pedido-entrega-label";
+import { normalizeClientItem } from "./cliente-id";
+import { fetchPedidosByClient, isPedidoApiLikelyMissing } from "./fetch-pedidos";
+import {
+  clientesActionRowSx,
+  clientesDetailGridSx,
+  clientesMutedLabelSx,
+  clientesPageSx,
+  clientesSectionBodySx,
+  clientesSectionHeaderSx,
+  clientesSectionPaperSx,
+  clientesToolbarSx,
+} from "./clientes-page-layout";
 
 function formatFechaReserva(iso?: string): string {
   if (!iso) return "—";
@@ -54,14 +75,19 @@ function formatFechaReserva(iso?: string): string {
 
 export default function ClienteDetallePage() {
   const { clientId } = useParams<{ clientId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { convert } = useExchangeRates();
   const [formOpen, setFormOpen] = useState(false);
+  const [pedidoDialog, setPedidoDialog] = useState<"create" | "edit" | null>(null);
+  const [pedidoEditTarget, setPedidoEditTarget] = useState<PedidoItem | null>(null);
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    body: string;
+    action: () => Promise<void>;
+  } | null>(null);
   const [finalizando, setFinalizando] = useState(false);
   const [waBusy, setWaBusy] = useState(false);
   const [copiandoTexto, setCopiandoTexto] = useState(false);
-  const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
   const [generandoPdfVenta, setGenerandoPdfVenta] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -72,14 +98,33 @@ export default function ClienteDetallePage() {
   const show = (message: string, severity: "success" | "error" = "success") =>
     setSnackbar({ open: true, message, severity });
 
-  const { data: client, isLoading, isError } = useQuery<ClientItem>({
+  const { data: client, isLoading, isError, error: clientError } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
     queryFn: async () => {
       const res = await axios.get(`${API_CLIENT}/${clientId}`);
-      return res.data;
+      const normalized = normalizeClientItem(res.data);
+      if (!normalized) {
+        throw new Error("Cliente no encontrado en el servidor.");
+      }
+      return normalized;
     },
     enabled: !!clientId,
+    retry: false,
   });
+
+  const {
+    data: pedidos = [],
+    isError: pedidosApiError,
+    error: pedidosError,
+  } = useQuery<PedidoItem[]>({
+    queryKey: ["pedidos", clientId],
+    queryFn: () => fetchPedidosByClient(clientId!),
+    enabled: !!clientId,
+    retry: false,
+  });
+
+  const pedidoAbierto = findPedidoAbierto(pedidos);
+  const pedidoReservado = findPedidoReservado(pedidos);
 
   const { data: reservas = [] } = useQuery<ReservaItem[]>({
     queryKey: ["reservas", clientId],
@@ -89,12 +134,6 @@ export default function ClienteDetallePage() {
     },
     enabled: !!clientId,
   });
-
-  const { imprimir: ejecutarImpresionEtiquetasReserva, printArea: etiquetasReservaPrintArea } =
-    useEtiquetasReservaPrint({
-      clientName: client?.nombre ?? "",
-      labelCount: reservas.length,
-    });
 
   const { data: incomingCliente = [] } = useQuery<ReservaIncomingItem[]>({
     queryKey: ["reservas-incoming", clientId],
@@ -124,13 +163,18 @@ export default function ClienteDetallePage() {
   const { data: historialVentas = [], isLoading: historialLoading } = useQuery<VentaClienteRow[]>({
     queryKey: ["ventas-cliente", clientId],
     queryFn: async () => {
-      const res = await axios.get(`${API_SALES}/by-client/${clientId}`, { params: { limit: 100 } });
+      const res = await axios.get(`${API_SALES}/by-client/${clientId}`, { params: { limit: 200 } });
       const d = res.data;
       if (Array.isArray(d)) return d;
-      throw new Error("Historial no disponible");
+      return [];
     },
     enabled: !!clientId,
   });
+
+  const historialCompleto = useMemo(
+    () => buildHistorialClienteView(pedidos, historialVentas, clientId ?? ""),
+    [pedidos, historialVentas, clientId],
+  );
 
   const reservasConStock = useMemo(
     () =>
@@ -179,19 +223,20 @@ export default function ClienteDetallePage() {
     }));
     return buildWhatsAppPedidoText({
       clientName: client.nombre,
-      tiendaEntrega: client.tienda_entrega,
+      descripcionEntrega: descripcionEntrega(pedidoAbierto),
       lines,
       incomingLines: incomingLines.length ? incomingLines : undefined,
     });
   };
 
   const enviarWhatsApp = async () => {
-    if (!client) return;
+    if (!client || !clientId) return;
     setWaBusy(true);
     try {
       const texto = await construirTextoPedido();
       if (texto == null) return;
       abrirWhatsAppConTexto(client.celular, texto);
+      show("Se abrió WhatsApp con el resumen del pedido.", "success");
     } finally {
       setWaBusy(false);
     }
@@ -243,18 +288,6 @@ export default function ClienteDetallePage() {
     window.open(`https://m.me/${encodeURIComponent(u)}`, "_blank", "noopener,noreferrer");
   };
 
-  const imprimirEtiquetasReserva = async () => {
-    if (reservas.length === 0) return;
-    setImprimiendoEtiquetas(true);
-    try {
-      await ejecutarImpresionEtiquetasReserva();
-    } catch {
-      show("No se pudo cargar la imagen de la etiqueta.", "error");
-    } finally {
-      setImprimiendoEtiquetas(false);
-    }
-  };
-
   const generarPdfVenta = async () => {
     if (!client || reservas.length === 0) return;
     setGenerandoPdfVenta(true);
@@ -279,7 +312,8 @@ export default function ClienteDetallePage() {
       });
       const { imageFailures } = await downloadVentaClientePdf({
         clientName: client.nombre,
-        tiendaEntrega: client.tienda_entrega,
+        descripcionEntrega: descripcionEntrega(pedidoAbierto),
+        fechaTentativa: formatFechaTentativa(pedidoAbierto?.fecha_tentativa_entrega),
         reservas: reservas.map((r) => ({
           stock_id: r.stock_id,
           precio: r.precio,
@@ -298,28 +332,54 @@ export default function ClienteDetallePage() {
     }
   };
 
-  const finalizarVenta = async () => {
+  const invalidarPedidoQueries = async () => {
+    if (!clientId) return;
+    await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
+    await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+    await queryClient.invalidateQueries({ queryKey: ["reservas"] });
+    await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+    await queryClient.invalidateQueries({ queryKey: ["stock"] });
+    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+    await queryClient.invalidateQueries({ queryKey: ["ventas-cliente", clientId] });
+  };
+
+  const pagarPedido = async (pedido: PedidoItem) => {
     if (!clientId) return;
     setFinalizando(true);
     try {
-      const res = await axios.post<{ success: boolean; vendidas?: number; error?: string }>(
-        `${API_RESERVA}/client/${clientId}/finalizar-venta`,
-      );
-      const data = res.data;
-      if (data.success) {
-        show(`Venta finalizada: ${data.vendidas ?? 0} carta(s).`, "success");
-        await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-        await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
-        await queryClient.invalidateQueries({ queryKey: ["reservas"] });
-        await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-        await queryClient.invalidateQueries({ queryKey: ["stock"] });
-        await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-        await queryClient.invalidateQueries({ queryKey: ["ventas-cliente", clientId] });
-      } else {
-        show(data.error ?? "Error al finalizar.", "error");
-      }
-    } catch {
-      show("Error al finalizar la venta.", "error");
+      await axios.post(`${API_PEDIDO}/${pedidoId(pedido)}/pagar`);
+      show(`Pedido marcado como pagado (${pedido.lines.length} línea(s)).`, "success");
+      await invalidarPedidoQueries();
+    } catch (err) {
+      show(extractAxiosErrorMessage(err, "Error al marcar pagado."), "error");
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
+  const entregarPedido = async (pedido: PedidoItem) => {
+    if (!clientId) return;
+    setFinalizando(true);
+    try {
+      await axios.post(`${API_PEDIDO}/${pedidoId(pedido)}/entregar`);
+      show("Pedido marcado como entregado.", "success");
+      await invalidarPedidoQueries();
+    } catch (err) {
+      show(extractAxiosErrorMessage(err, "Error al marcar entregado."), "error");
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
+  const cancelarPedido = async (pedido: PedidoItem) => {
+    if (!clientId) return;
+    setFinalizando(true);
+    try {
+      await axios.delete(`${API_PEDIDO}/${pedidoId(pedido)}`);
+      show("Pedido cancelado y stock liberado.", "success");
+      await invalidarPedidoQueries();
+    } catch (err) {
+      show(extractAxiosErrorMessage(err, "Error al cancelar el pedido."), "error");
     } finally {
       setFinalizando(false);
     }
@@ -330,17 +390,30 @@ export default function ClienteDetallePage() {
   }
 
   if (isLoading) {
-    return (
-      <Stack alignItems="center" py={6}>
-        <Alert severity="info">Cargando cliente…</Alert>
-      </Stack>
-    );
+    return <LoadingScreen message="Cargando cliente…" />;
   }
 
   if (isError || !client) {
+    const detail = extractAxiosErrorMessage(
+      clientError,
+      clientError instanceof Error ? clientError.message : "No se encontró el cliente.",
+    );
     return (
-      <Stack spacing={2} sx={{ p: 3 }}>
-        <Alert severity="error">No se encontró el cliente.</Alert>
+      <Stack spacing={2} sx={{ p: 3, maxWidth: 560, mx: "auto" }}>
+        <Alert severity="error">
+          {detail}
+          {clientId ? (
+            <>
+              {" "}
+              (id: <code>{clientId}</code>)
+            </>
+          ) : null}
+        </Alert>
+        <Typography variant="body2" color="text.secondary">
+          El modelo de cliente no cambió: solo dejó de usarse <strong>tienda_entrega</strong> a nivel
+          cliente (ahora va en cada pedido). Si ves este error, revisa que el backend esté corriendo y
+          que el id en la URL sea válido.
+        </Typography>
         <Button component={Link} to="/clientes" variant="outlined">
           Volver al listado
         </Button>
@@ -349,18 +422,37 @@ export default function ClienteDetallePage() {
   }
 
   return (
-    <Stack spacing={3} sx={{ maxWidth: 900, mx: "auto", p: { xs: 2, sm: 3 } }}>
-      <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
-        <Button component={Link} to="/clientes" color="inherit" size="small">
-          ← Clientes
-        </Button>
-        <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>
-          {client.nombre}
-        </Typography>
-        <Button variant="outlined" size="small" onClick={() => setFormOpen(true)}>
-          Editar datos
-        </Button>
-      </Stack>
+    <Stack spacing={3} sx={clientesPageSx}>
+      <Box sx={clientesToolbarSx}>
+        <Stack direction="row" alignItems="center" gap={2} minWidth={0}>
+          <Button
+            component={Link}
+            to="/clientes"
+            color="inherit"
+            sx={{ textTransform: "none", fontWeight: 600, flexShrink: 0 }}
+          >
+            ← Listado
+          </Button>
+          <Box minWidth={0}>
+            <Typography variant="h4" component="h1" fontWeight={800} letterSpacing="-0.02em" noWrap>
+              {client.nombre}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Ficha de cliente · pedidos y reservas
+            </Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" alignItems="center" gap={1.5} flexShrink={0}>
+          <Button variant="outlined" onClick={() => setFormOpen(true)} sx={{ textTransform: "none", fontWeight: 600 }}>
+            Editar cliente
+          </Button>
+          {!pedidoAbierto ? (
+            <Button variant="contained" onClick={() => setPedidoDialog("create")} sx={{ textTransform: "none", fontWeight: 600 }}>
+              Crear pedido
+            </Button>
+          ) : null}
+        </Stack>
+      </Box>
 
       {alertaPedido && (
         <Alert severity={alertaPedido === "critico" ? "error" : "warning"}>
@@ -368,246 +460,157 @@ export default function ClienteDetallePage() {
         </Alert>
       )}
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          Datos principales
-        </Typography>
-        <Stack spacing={1}>
-          <Typography>
-            <strong>Tienda de entrega:</strong> {client.tienda_entrega}
-          </Typography>
-          <Typography>
-            <strong>WhatsApp:</strong> {client.celular?.trim() || "—"}
-          </Typography>
-          <Typography>
-            <strong>Canal:</strong>{" "}
-            {client.metodo_contacto === "whatsapp" ? "WhatsApp" : "Facebook / Messenger"}
-            {client.metodo_contacto === "facebook" && client.facebook_usuario
-              ? ` · @${client.facebook_usuario.replace(/^@+/, "")}`
-              : null}
-          </Typography>
-        </Stack>
-        <Divider sx={{ my: 2 }} />
-        <Stack direction="row" flexWrap="wrap" gap={1}>
-          <Button
-            variant="contained"
-            color="success"
-            disabled={(reservas.length === 0 && incomingCliente.length === 0) || waBusy}
-            onClick={enviarWhatsApp}
-          >
-            {waBusy ? "…" : "WhatsApp (resumen pedido)"}
-          </Button>
-          <Button
-            variant="outlined"
-            disabled={(reservas.length === 0 && incomingCliente.length === 0) || copiandoTexto}
-            onClick={copiarPedidoAlPortapapeles}
-          >
-            {copiandoTexto ? "…" : "Copiar texto"}
-          </Button>
-          {client.metodo_contacto === "facebook" && (
-            <Button
-              variant="contained"
-              disabled={!client.facebook_usuario?.trim()}
-              onClick={abrirMessenger}
-              sx={{ bgcolor: "#1565c0" }}
-            >
-              Messenger
-            </Button>
-          )}
-        </Stack>
-      </Paper>
+      {pedidosApiError && isPedidoApiLikelyMissing(pedidosError) ? (
+        <Alert severity="warning">
+          El API de pedidos no está disponible (¿backend sin desplegar el módulo{" "}
+          <code>/pedido</code>?). Puedes ver al cliente, pero crear pedidos con entrega fallará hasta
+          actualizar el backend.
+        </Alert>
+      ) : null}
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          Notas internas
-        </Typography>
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "text.primary" }}>
-          {client.notas?.trim() || "Sin notas."}
-        </Typography>
-      </Paper>
-
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} mb={2}>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Reserva actual
-          </Typography>
-          <Stack direction="row" flexWrap="wrap" gap={1}>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => navigate(`/clientes/${clientId}/reservar`)}
-            >
-              Editar reserva
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              color="warning"
-              component={Link}
-              to={`/clientes/${clientId}/reservar?camino=1`}
-            >
-              Cartas en camino
-            </Button>
-            <Tooltip title={reservas.length === 0 ? "Sin reservas en stock" : ""}>
-              <span>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={reservas.length === 0 || imprimiendoEtiquetas}
-                  onClick={imprimirEtiquetasReserva}
-                >
-                  {imprimiendoEtiquetas ? "…" : "Imprimir etiquetas de reserva"}
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip title={reservas.length === 0 ? "Sin reservas en stock" : ""}>
-              <span>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={reservas.length === 0 || generandoPdfVenta}
-                  onClick={generarPdfVenta}
-                >
-                  {generandoPdfVenta ? "…" : "Generar PDF de venta"}
-                </Button>
-              </span>
-            </Tooltip>
-            <Button
-              variant="contained"
-              color="success"
-              size="small"
-              disabled={reservas.length === 0 || finalizando}
-              onClick={finalizarVenta}
-            >
-              {finalizando ? "…" : "Finalizar venta"}
-            </Button>
-          </Stack>
-        </Stack>
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={2}
-          sx={{
-            mb: 2,
-            px: 2,
-            py: 1.25,
-            borderRadius: 2,
-            border: 1,
-            borderColor: "divider",
-            bgcolor: "grey.50",
-          }}
-        >
-          <Box>
-            <Typography variant="caption" color="text.secondary" display="block">
-              Ventas esperadas
-            </Typography>
-            <Typography variant="body2" fontWeight={600}>
-              {formatCOP(Math.round(resumenReserva.ventasEsperadasCop))}
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="caption" color="text.secondary" display="block">
-              Ganancia estimada
-            </Typography>
-            <Typography
-              variant="body2"
-              fontWeight={600}
-              color={
-                resumenReserva.gananciaEstimadaCop > 0
-                  ? "success.main"
-                  : resumenReserva.gananciaEstimadaCop < 0
-                    ? "error.main"
-                    : "text.primary"
+      <Box sx={clientesDetailGridSx}>
+        <Stack spacing={3}>
+          {pedidoAbierto ? (
+            <PedidoActivoPanel
+              pedido={pedidoAbierto}
+              clientId={clientId}
+              reservasConStock={reservasConStock}
+              resumen={resumenReserva}
+              incomingCount={incomingCliente.reduce((s, x) => s + x.quantity, 0)}
+              finalizando={finalizando}
+              generandoPdfVenta={generandoPdfVenta}
+              convert={convert}
+              onEditEntrega={() => {
+                setPedidoEditTarget(pedidoAbierto);
+                setPedidoDialog("edit");
+              }}
+              onPagar={() =>
+                setConfirm({
+                  title: "Marcar pagado",
+                  body: "¿Confirmas que el cliente pagó este pedido? Las cartas pasarán a vendidas.",
+                  action: () => pagarPedido(pedidoAbierto),
+                })
               }
-            >
-              {formatCOP(Math.round(resumenReserva.gananciaEstimadaCop))}
-            </Typography>
-          </Box>
-        </Stack>
-        {reservasConStock.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">
-            No hay líneas en el pedido. Usa «Editar reserva» para agregar cartas.
-          </Typography>
-        ) : (
-          <Stack spacing={2}>
-            {reservasConStock.map(({ reserva: r, stock: st }) => {
-              const gananciaLinea = gananciaEstimadaReservaCop(
-                r.precio,
-                r.currency ?? "COP",
-                st,
-                convert,
-              );
-              return (
-              <Box
-                key={r._id}
-                sx={{
-                  display: "flex",
-                  gap: 2,
-                  flexWrap: "wrap",
-                  alignItems: "flex-start",
-                  py: 1.5,
-                  borderBottom: 1,
-                  borderColor: "divider",
-                  "&:last-of-type": { borderBottom: 0 },
-                }}
-              >
-                <CardThumb
-                  src={st?.image_url}
-                  alt={st?.card_name ?? "Carta"}
-                  size="md"
-                  enlargeOnHover
-                />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
-                    <Typography fontWeight={600}>{st?.card_name ?? "Carta"}</Typography>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={
-                        gananciaLinea > 0 ? "success" : gananciaLinea < 0 ? "error" : "default"
-                      }
-                      label={`Ganancia: ${formatCOP(Math.round(gananciaLinea))}`}
-                    />
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    {st?.card_id}
-                    {st?.rareza ? ` · ${st.rareza}` : ""}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>
-                    {formatCOP(r.precio)}
-                    {r.currency && r.currency !== "COP" ? ` (${r.currency})` : ""}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                    Reservado: {formatFechaReserva(r.created_at)}
-                  </Typography>
-                </Box>
-              </Box>
-              );
-            })}
-          </Stack>
-        )}
-      </Paper>
+              onEntregar={() =>
+                setConfirm({
+                  title: "Marcar entregado",
+                  body: "¿Confirmas que el pedido ya se entregó al cliente?",
+                  action: () => entregarPedido(pedidoAbierto),
+                })
+              }
+              onCancelar={() =>
+                setConfirm({
+                  title: "Cancelar pedido",
+                  body: "Se liberará el stock reservado en este pedido.",
+                  action: () => cancelarPedido(pedidoAbierto),
+                })
+              }
+              onGenerarPdf={generarPdfVenta}
+              formatFechaReserva={formatFechaReserva}
+            />
+          ) : (
+            <Paper variant="outlined" sx={{ ...clientesSectionPaperSx, ...clientesSectionBodySx, textAlign: "center" }}>
+              <Typography variant="h6" fontWeight={700} gutterBottom>
+                Sin pedido activo
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 480, mx: "auto" }}>
+                Crea un pedido con lugar y fecha de entrega antes de reservar cartas del inventario.
+              </Typography>
+              <Button variant="contained" onClick={() => setPedidoDialog("create")} sx={{ textTransform: "none", fontWeight: 600 }}>
+                Crear pedido
+              </Button>
+            </Paper>
+          )}
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          Historial de pedidos (ventas)
-        </Typography>
-        {historialLoading ? (
-          <Typography color="text.secondary">Cargando…</Typography>
-        ) : historialVentas.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Sin ventas enlazadas a este cliente (solo ventas registradas tras el enlace en sistema).
-          </Typography>
-        ) : (
-          <Stack spacing={1} divider={<Divider flexItem />}>
-            {historialVentas.map((v) => (
-              <Stack key={v._id} direction="row" justifyContent="space-between" alignItems="baseline">
-                <Typography variant="body2">{new Date(v.created_at).toLocaleString("es-CO")}</Typography>
-                <Chip label={formatCOP(v.amount_cop)} size="small" />
+          <PedidoHistorialSection
+            items={historialCompleto}
+            excludePedidoId={pedidoAbierto ? pedidoId(pedidoAbierto) : undefined}
+            onEditEntrega={(p) => {
+              if (p.historicoSource === "ventas") return;
+              setPedidoEditTarget(p);
+              setPedidoDialog("edit");
+            }}
+          />
+
+          {historialLoading && historialCompleto.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+              <Typography color="text.secondary">Cargando historial de ventas…</Typography>
+            </Paper>
+          ) : null}
+        </Stack>
+
+        <Stack spacing={2.5}>
+          <Paper variant="outlined" sx={clientesSectionPaperSx}>
+            <Box sx={clientesSectionHeaderSx}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Contacto
+              </Typography>
+            </Box>
+            <Stack spacing={2} sx={clientesSectionBodySx}>
+              <Box>
+                <Typography sx={clientesMutedLabelSx}>WhatsApp / teléfono</Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {client.celular?.trim() || "—"}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={clientesMutedLabelSx}>Canal preferido</Typography>
+                <Typography variant="body1">
+                  {client.metodo_contacto === "whatsapp" ? "WhatsApp" : "Facebook Messenger"}
+                  {client.metodo_contacto === "facebook" && client.facebook_usuario
+                    ? ` · @${client.facebook_usuario.replace(/^@+/, "")}`
+                    : null}
+                </Typography>
+              </Box>
+              <Stack spacing={1}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  fullWidth
+                  disabled={(reservas.length === 0 && incomingCliente.length === 0) || waBusy}
+                  onClick={enviarWhatsApp}
+                  sx={{ textTransform: "none", fontWeight: 600 }}
+                >
+                  {waBusy ? "Enviando…" : "Enviar resumen por WhatsApp"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  disabled={(reservas.length === 0 && incomingCliente.length === 0) || copiandoTexto}
+                  onClick={copiarPedidoAlPortapapeles}
+                  sx={{ textTransform: "none", fontWeight: 600 }}
+                >
+                  {copiandoTexto ? "Copiando…" : "Copiar mensaje del pedido"}
+                </Button>
+                {client.metodo_contacto === "facebook" && (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    disabled={!client.facebook_usuario?.trim()}
+                    onClick={abrirMessenger}
+                    sx={{ bgcolor: "info.main", textTransform: "none", fontWeight: 600 }}
+                  >
+                    Abrir Messenger
+                  </Button>
+                )}
               </Stack>
-            ))}
-          </Stack>
-        )}
-      </Paper>
+            </Stack>
+          </Paper>
+
+          <Paper variant="outlined" sx={clientesSectionPaperSx}>
+            <Box sx={clientesSectionHeaderSx}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Notas internas
+              </Typography>
+            </Box>
+            <Box sx={clientesSectionBodySx}>
+              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "text.primary", lineHeight: 1.6 }}>
+                {client.notas?.trim() || "Sin notas registradas."}
+              </Typography>
+            </Box>
+          </Paper>
+        </Stack>
+      </Box>
 
       <ClienteFormDialog
         open={formOpen}
@@ -616,7 +619,41 @@ export default function ClienteDetallePage() {
         onClose={() => setFormOpen(false)}
       />
 
-      {etiquetasReservaPrintArea}
+      {clientId ? (
+        <NuevoPedidoDialog
+          open={pedidoDialog != null}
+          mode={pedidoDialog === "edit" ? "edit" : "create"}
+          clientId={clientId}
+          pedido={pedidoDialog === "edit" ? pedidoEditTarget ?? pedidoReservado : null}
+          onClose={() => {
+            setPedidoDialog(null);
+            setPedidoEditTarget(null);
+          }}
+        />
+      ) : null}
+
+      <Dialog open={confirm != null} onClose={() => (finalizando ? undefined : setConfirm(null))}>
+        <DialogTitle>{confirm?.title}</DialogTitle>
+        <DialogContent>
+          <Typography>{confirm?.body}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={finalizando}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            disabled={finalizando}
+            onClick={async () => {
+              if (!confirm) return;
+              await confirm.action();
+              setConfirm(null);
+            }}
+          >
+            Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}

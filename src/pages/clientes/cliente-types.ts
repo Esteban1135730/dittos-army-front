@@ -5,7 +5,8 @@ import { apiUrl } from "../../config/api";
 export type ClientItem = {
   _id: string;
   nombre: string;
-  tienda_entrega: string;
+  /** Legado; la entrega vive en cada Pedido. */
+  tienda_entrega?: string;
   celular?: string;
   facebook_usuario?: string;
   metodo_contacto: "whatsapp" | "facebook";
@@ -18,6 +19,7 @@ export type ReservaItem = {
   stock_id: string;
   precio: number;
   currency: string;
+  pedido_id?: string;
   /** Fecha de creación de la reserva (puede faltar en documentos antiguos). */
   created_at?: string;
 };
@@ -26,14 +28,17 @@ export type VentaClienteRow = {
   _id: string;
   stock_id: string;
   card_id: string;
+  card_name?: string;
+  image_url?: string;
   amount_cop: number;
   notes?: string;
   created_at: string;
+  cycle_closed_at?: string | null;
+  client_id?: string;
 };
 
 export type ClienteFormState = {
   nombre: string;
-  tiendaEntrega: string;
   celular: string;
   facebookUsuario: string;
   metodoContacto: "whatsapp" | "facebook";
@@ -42,7 +47,6 @@ export type ClienteFormState = {
 
 export const emptyClienteForm = (): ClienteFormState => ({
   nombre: "",
-  tiendaEntrega: "",
   celular: "",
   facebookUsuario: "",
   metodoContacto: "whatsapp",
@@ -51,7 +55,6 @@ export const emptyClienteForm = (): ClienteFormState => ({
 
 export const formFromClient = (c: ClientItem): ClienteFormState => ({
   nombre: c.nombre,
-  tiendaEntrega: c.tienda_entrega,
   celular: c.celular ?? "",
   facebookUsuario: c.facebook_usuario ?? "",
   metodoContacto: c.metodo_contacto,

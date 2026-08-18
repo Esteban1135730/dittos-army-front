@@ -6,6 +6,7 @@ import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
 import { API_BASE, apiUrl } from "../../../config/api";
 import { CardThumb } from "../../../components/card-thumb";
+import { LoadingScreen } from "../../../components/loading";
 
 type SaleHistoryItem = {
   _id: string;
@@ -288,9 +289,7 @@ export default function SalesHistory() {
   ];
 
   if (isLoading)
-    return (
-      <p className="text-center text-gray-500">Cargando histórico de ventas...</p>
-    );
+    return <LoadingScreen message="Cargando histórico de ventas…" />;
 
   if (error)
     return (

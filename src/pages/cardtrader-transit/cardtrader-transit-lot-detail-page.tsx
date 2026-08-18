@@ -168,13 +168,7 @@ export default function CardtraderTransitLotDetailPage() {
             </div>
             {lotMeta?.legacy_incoming_batch_id ? (
               <p className="text-xs text-amber-700 mt-3">
-                Referencia legacy:{" "}
-                <Link
-                  to={`/incoming/batch/${lotMeta.legacy_incoming_batch_id}`}
-                  className="underline"
-                >
-                  {lotMeta.legacy_incoming_batch_id}
-                </Link>
+                Referencia legacy: {lotMeta.legacy_incoming_batch_id}
                 {lotMeta.legacy_incoming_cop_hint
                   ? ` · COP sugerido ${Math.round(lotMeta.legacy_incoming_cop_hint).toLocaleString("es-CO")}`
                   : ""}

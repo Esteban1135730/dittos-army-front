@@ -6,7 +6,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  CircularProgress,
   Divider,
   Paper,
   Stack,
@@ -18,6 +17,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiBase, apiUrl } from '../../config/api';
+import { LoadingScreen } from '../../components/loading';
 import {
   buildCreateTandaCardsPayload,
   rankPanelCandidates,
@@ -656,7 +656,7 @@ export default function CardtraderReceiptPage() {
       ]);
       // Legacy ship-round path: still allow deep-link, but CT receipt continues wizard.
       if (res.round_id && refs.length === 0) {
-        navigate(`/incoming/ship-round/${res.round_id}`);
+        navigate(`/incoming-v2/ship-round/${res.round_id}`);
         return;
       }
       setWizardStep(3);
@@ -773,9 +773,7 @@ export default function CardtraderReceiptPage() {
       <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 4, px: { xs: 1, sm: 0 } }}>
         {pageHeader}
         {stepper}
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <LoadingScreen variant="inline" message="Cargando sesión…" minHeight={280} />
       </Box>
     );
   }

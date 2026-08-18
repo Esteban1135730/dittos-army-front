@@ -67,12 +67,6 @@ export default function CardtraderTransitListPage() {
           >
             Importar desde CT Zero
           </Link>
-          <Link
-            to="/test-cardtrader"
-            className="text-blue-600 hover:underline font-medium text-sm"
-          >
-            Consolidado tránsito
-          </Link>
         </div>
       </div>
 

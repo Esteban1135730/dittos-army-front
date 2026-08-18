@@ -14,8 +14,7 @@ const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/clientes", feature: "clientes" },
   { prefix: "/cotizar", feature: "cotizar" },
   { prefix: "/cardtrader", feature: "cardtrader" },
-  { prefix: "/test-cardtrader", feature: "cardtrader" },
-  { prefix: "/incoming", feature: "incoming" },
+  { prefix: "/incoming-v2", feature: "incoming" },
   { prefix: "/", feature: "inicio" },
 ];
 

@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   expansionFromCardDto,
   pathDestinoWhatsApp,
   resolverDestinoWhatsApp,
   urlWhatsAppConTexto,
+  buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
 
 describe("expansionFromCardDto", () => {
@@ -68,5 +69,37 @@ describe("urlWhatsAppConTexto", () => {
   it("abre wa.me sin destino si no hay contacto", () => {
     expect(urlWhatsAppConTexto(undefined, "hola")).toBe("https://wa.me/?text=hola");
     expect(urlWhatsAppConTexto("   ", "hola")).toBe("https://wa.me/?text=hola");
+  });
+});
+
+vi.mock("axios", () => ({
+  default: {
+    get: vi.fn().mockRejectedValue(new Error("offline")),
+    defaults: { headers: { common: {} } },
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() },
+    },
+  },
+}));
+
+describe("buildWhatsAppPedidoText", () => {
+  it("incluye entrega de tienda", async () => {
+    const text = await buildWhatsAppPedidoText({
+      clientName: "Ana",
+      descripcionEntrega: "Valhalla — Cl. 150 #16-56",
+      lines: [{ card_id: "a", card_name: "Pikachu", precio: 1000 }],
+    });
+    expect(text).toContain("Entrega: Valhalla — Cl. 150 #16-56");
+    expect(text).not.toContain("Tienda de entrega:");
+  });
+
+  it("omite línea de entrega si no hay pedido", async () => {
+    const text = await buildWhatsAppPedidoText({
+      clientName: "Ana",
+      lines: [{ card_id: "a", card_name: "Pikachu", precio: 1000 }],
+    });
+    expect(text).not.toContain("Entrega:");
+    expect(text).not.toContain("Tienda de entrega:");
   });
 });

@@ -15,6 +15,10 @@ describe("owner ACL helpers", () => {
     expect(routeToFeature("/ventas/escanear-qr")).toBe("venta-asistida-qr");
   });
 
+  it("routeToFeature /incoming-v2 → incoming", () => {
+    expect(routeToFeature("/incoming-v2/novedad-stock")).toBe("incoming");
+  });
+
   it("parseStoredOwner inválido → pablo", () => {
     expect(parseStoredOwner(null)).toBe("pablo");
     expect(parseStoredOwner("nope")).toBe("pablo");

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { formatCOP } from "../../utils/convert";
-
 import { apiUrl } from "../../config/api";
+import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
 
 const API_TCG = apiUrl("/tcg-dex/card/find");
 
@@ -23,12 +23,18 @@ export function expansionFromCardDto(card: TcgCardLite | null | undefined): stri
 }
 
 export async function fetchExpansionForCard(cardId: string): Promise<string | undefined> {
-  try {
-    const res = await axios.get<TcgCardLite>(`${API_TCG}/${encodeURIComponent(cardId)}`);
-    return expansionFromCardDto(res.data);
-  } catch {
-    return undefined;
+  const candidates = buildTcgdexCardIdLookupCandidates(cardId);
+  const toTry = candidates.length > 0 ? candidates : [cardId.trim()];
+  for (const id of toTry) {
+    try {
+      const res = await axios.get<TcgCardLite>(`${API_TCG}/${encodeURIComponent(id)}`);
+      const exp = expansionFromCardDto(res.data);
+      if (exp) return exp;
+    } catch {
+      /* siguiente variante */
+    }
   }
+  return undefined;
 }
 
 export type PedidoLineInput = {
@@ -48,7 +54,7 @@ export type PedidoIncomingLineInput = {
 
 export async function buildWhatsAppPedidoText(opts: {
   clientName: string;
-  tiendaEntrega: string;
+  descripcionEntrega?: string;
   lines: PedidoLineInput[];
   incomingLines?: PedidoIncomingLineInput[];
 }): Promise<string> {
@@ -86,9 +92,11 @@ export async function buildWhatsAppPedidoText(opts: {
     "Te envío el resumen de tu pedido:",
     "",
     `*Pedido — ${opts.clientName}*`,
-    `Tienda de entrega: ${opts.tiendaEntrega}`,
-    "",
   ];
+  if (opts.descripcionEntrega?.trim()) {
+    parts.push(`Entrega: ${opts.descripcionEntrega.trim()}`);
+  }
+  parts.push("");
 
   if (opts.lines.length > 0) {
     parts.push("Cartas reservadas:", ...lineasStock, "", `*Total: ${formatCOP(total)}*`, "");

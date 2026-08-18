@@ -168,7 +168,8 @@ function drawPlaceholder(doc: jsPDF, x: number, y: number, width: number, height
 
 export async function downloadVentaClientePdf(opts: {
   clientName: string;
-  tiendaEntrega: string;
+  descripcionEntrega?: string;
+  fechaTentativa?: string;
   reservas: VentaPdfReservaLine[];
   stockById: Record<string, VentaPdfStockMeta | undefined>;
   convert?: VentaPdfCurrencyConverter;
@@ -209,8 +210,15 @@ export async function downloadVentaClientePdf(opts: {
   doc.setFontSize(10);
   doc.text(`Cliente: ${opts.clientName}`, margin, y);
   y += 5;
-  doc.text(`Tienda de entrega: ${opts.tiendaEntrega}`, margin, y);
-  y += 8;
+  if (opts.descripcionEntrega?.trim()) {
+    doc.text(`Entrega: ${opts.descripcionEntrega.trim()}`, margin, y);
+    y += 5;
+  }
+  if (opts.fechaTentativa?.trim()) {
+    doc.text(`Fecha tentativa: ${opts.fechaTentativa.trim()}`, margin, y);
+    y += 5;
+  }
+  y += 3;
 
   const body = groups.map((group) => [
     "",

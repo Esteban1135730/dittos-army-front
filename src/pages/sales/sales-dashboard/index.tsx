@@ -7,6 +7,7 @@ import { useExchangeRates } from "../../../utils/tasa";
 import type { StockListItem } from "../../../types/stock";
 import { API_BASE, apiUrl } from "../../../config/api";
 import { CardThumb } from "../../../components/card-thumb";
+import { LoadingScreen } from "../../../components/loading";
 
 type SaleWithStock = {
   _id: string;
@@ -526,9 +527,7 @@ export default function SalesDashboard() {
   ];
 
   if (isLoading)
-    return (
-      <p className="text-center text-gray-500">Cargando dashboard de ventas...</p>
-    );
+    return <LoadingScreen message="Cargando dashboard de ventas…" />;
 
   if (error)
     return (

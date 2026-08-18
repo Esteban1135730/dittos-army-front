@@ -47,8 +47,8 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    if (!form.nombre.trim() || !form.tiendaEntrega.trim()) {
-      setErrorMsg("Nombre y tienda de entrega son obligatorios.");
+    if (!form.nombre.trim()) {
+      setErrorMsg("El nombre es obligatorio.");
       return;
     }
     if (form.metodoContacto === "facebook" && !form.facebookUsuario.trim()) {
@@ -59,7 +59,6 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
     try {
       const body = {
         nombre: form.nombre.trim(),
-        tienda_entrega: form.tiendaEntrega.trim(),
         celular: form.celular.trim() || undefined,
         metodo_contacto: form.metodoContacto,
         facebook_usuario:
@@ -107,22 +106,13 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
             </Alert>
           ) : null}
           <Stack spacing={3}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                label="Nombre"
-                required
-                fullWidth
-                value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-              />
-              <TextField
-                label="Tienda de entrega"
-                required
-                fullWidth
-                value={form.tiendaEntrega}
-                onChange={(e) => setForm((f) => ({ ...f, tiendaEntrega: e.target.value }))}
-              />
-            </Stack>
+            <TextField
+              label="Nombre"
+              required
+              fullWidth
+              value={form.nombre}
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+            />
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
                 label="WhatsApp (número o @nick)"

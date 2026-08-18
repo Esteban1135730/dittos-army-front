@@ -29,6 +29,7 @@ import {
   resolveStockImageUrl,
 } from "../../../constants/bulk-product";
 import { CardThumb } from "../../../components/card-thumb";
+import { LoadingScreen } from "../../../components/loading";
 import { ensureBulkProduct } from "../../../api/ensure-bulk";
 import { PvpInlineCell } from "./pvp-inline-cell";
 import { API_BASE, apiUrl } from "../../../config/api";
@@ -965,7 +966,7 @@ export default function StockGrid() {
   };
 
   if (isLoading)
-    return <p className="text-center text-gray-500">Cargando stock...</p>;
+    return <LoadingScreen message="Cargando stock…" />;
 
   if (error)
     return (

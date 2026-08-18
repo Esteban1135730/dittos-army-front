@@ -3,536 +3,452 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
+  Alert,
+  Box,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
 } from "@mui/material";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
-import type { StockListItem } from "../../../types/stock";
-import { API_BASE, apiUrl } from "../../../config/api";
+import { apiUrl, API_BASE } from "../../../config/api";
+import { LoadingScreen } from "../../../components/loading";
+import PropertyCard from "./property-card";
+import {
+  PropertyDeleteDialog,
+  PropertyNotesDialog,
+  PropertyReturnDialog,
+  cardNameForSale,
+} from "./property-dialogs";
+import {
+  propertyCardsGridSx,
+  propertyHighlightPanelSx,
+  propertyKpiCardSx,
+  propertyKpiGridSx,
+  propertyMutedLabelSx,
+  propertyPageSx,
+  propertySectionPaperSx,
+  propertyStatValueSx,
+  propertyToolbarSx,
+} from "./property-page-layout";
+import type { KeepSale, PropertySortKey, PropertyStockItem } from "./property-types";
+import { extractAxiosMessage, propertyCostInCop } from "./property-utils";
 
-type KeepSale = {
-  _id: string;
-  stock_id: string;
-  card_id: string;
-  amount_cop: number;
-  notes?: string;
-  created_at: string;
+const SORT_LABELS: Record<PropertySortKey, string> = {
+  fecha: "Fecha · más reciente",
+  nombre: "Nombre · A–Z",
+  costo: "Costo · mayor primero",
 };
-
-type StockItem = Pick<
-  StockListItem,
-  "_id" | "card_name" | "image_url" | "card_cost" | "currency" | "card_state"
->;
-
-type SortKey = "fecha" | "nombre" | "costo";
-
-function costInCop(
-  stock: StockItem | undefined,
-  convert: {
-    toCopFromEur: (n: number) => number | null;
-    toCopFromUsd: (n: number) => number | null;
-  },
-): number {
-  if (!stock?.card_cost) return 0;
-  const moneda = stock.currency;
-  if (moneda === "COP") return stock.card_cost;
-  if (moneda === "EUR") return convert.toCopFromEur(stock.card_cost) ?? 0;
-  if (moneda === "USD") return convert.toCopFromUsd(stock.card_cost) ?? 0;
-  return 0;
-}
 
 export default function PropertyList() {
   const { convert } = useExchangeRates();
   const queryClient = useQueryClient();
-  const [stockData, setStockData] = useState<Record<string, StockItem>>({});
-  const [busqueda, setBusqueda] = useState("");
-  const [orden, setOrden] = useState<SortKey>("fecha");
 
-  const [deshaciendoId, setDeshaciendoId] = useState<string | null>(null);
-  const [errorAccion, setErrorAccion] = useState("");
+  const [stockData, setStockData] = useState<Record<string, PropertyStockItem>>({});
+  const [stockLoadingIds, setStockLoadingIds] = useState<Set<string>>(() => new Set());
+  const [stockFailedIds, setStockFailedIds] = useState<Set<string>>(() => new Set());
+  const [busqueda, setBusqueda] = useState("");
+  const [orden, setOrden] = useState<PropertySortKey>("fecha");
+
+  const [returnTarget, setReturnTarget] = useState<KeepSale | null>(null);
+  const [returnLoading, setReturnLoading] = useState(false);
+  const [returnError, setReturnError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<KeepSale | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [deleteDeleting, setDeleteDeleting] = useState(false);
 
-  const [notasTarget, setNotasTarget] = useState<KeepSale | null>(null);
-  const [notasEditadas, setNotasEditadas] = useState("");
-  const [notasError, setNotasError] = useState("");
-  const [notasGuardando, setNotasGuardando] = useState(false);
+  const [notesTarget, setNotesTarget] = useState<KeepSale | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState("");
 
-  const { data: keepCards = [], isLoading } = useQuery<KeepSale[]>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string }>({
+    open: false,
+    message: "",
+  });
+
+  const { data: keepCards = [], isLoading, isError } = useQuery<KeepSale[]>({
     queryKey: ["property-cards"],
     queryFn: async () => {
       const res = await axios.get(apiUrl("/sales/keep"));
-      return res.data;
+      return Array.isArray(res.data) ? res.data : [];
     },
   });
 
   useEffect(() => {
-    const fetchStocks = async () => {
-      const pendingIds = keepCards
-        .map((sale) => sale.stock_id)
-        .filter((id) => !stockData[id]);
+    const pendingIds = keepCards
+      .map((sale) => sale.stock_id)
+      .filter(
+        (id) =>
+          id &&
+          !stockData[id] &&
+          !stockFailedIds.has(id) &&
+          !stockLoadingIds.has(id),
+      );
+    if (pendingIds.length === 0) return;
 
-      if (pendingIds.length === 0) return;
+    setStockLoadingIds((prev) => {
+      const next = new Set(prev);
+      pendingIds.forEach((id) => next.add(id));
+      return next;
+    });
 
-      try {
-        const requests = pendingIds.map((id) =>
-          axios.get(`${API_BASE}/stock/${id}`),
-        );
-        const responses = await Promise.allSettled(requests);
-        const updated: Record<string, StockItem> = {};
-        responses.forEach((res) => {
-          if (res.status === "fulfilled" && res.value?.data?._id) {
-            updated[res.value.data._id] = res.value.data;
-          }
-        });
-        if (Object.keys(updated).length > 0) {
-          setStockData((prev) => ({ ...prev, ...updated }));
+    void (async () => {
+      const responses = await Promise.allSettled(
+        pendingIds.map((id) => axios.get(`${API_BASE}/stock/${id}`)),
+      );
+      const updated: Record<string, PropertyStockItem> = {};
+      const failed: string[] = [];
+
+      responses.forEach((res, index) => {
+        const stockId = pendingIds[index];
+        if (res.status === "fulfilled" && res.value?.data?._id) {
+          updated[res.value.data._id] = res.value.data;
+        } else {
+          failed.push(stockId);
         }
-      } catch {
-        console.log("No se pudo cargar información de algunas cartas.");
-      }
-    };
+      });
 
-    if (keepCards.length > 0) {
-      void fetchStocks();
-    }
-    // stockData omitido a propósito: solo cargar ids pendientes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keepCards]);
+      if (Object.keys(updated).length > 0) {
+        setStockData((prev) => ({ ...prev, ...updated }));
+      }
+
+      setStockLoadingIds((prev) => {
+        const next = new Set(prev);
+        pendingIds.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      if (failed.length > 0) {
+        setStockFailedIds((prev) => {
+          const next = new Set(prev);
+          failed.forEach((id) => next.add(id));
+          return next;
+        });
+      }
+    })();
+  }, [keepCards, stockData, stockFailedIds, stockLoadingIds]);
 
   const filasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     let rows = keepCards.filter((sale) => {
       if (!q) return true;
-      const name =
-        stockData[sale.stock_id]?.card_name?.toLowerCase() ??
-        sale.card_id.toLowerCase();
-      return name.includes(q);
+      const stock = stockData[sale.stock_id];
+      const name = stock?.card_name?.toLowerCase() ?? sale.card_id.toLowerCase();
+      const id = (stock?.card_id ?? sale.card_id).toLowerCase();
+      return name.includes(q) || id.includes(q);
     });
 
     rows = [...rows].sort((a, b) => {
       if (orden === "fecha") {
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
       if (orden === "nombre") {
-        const na =
-          stockData[a.stock_id]?.card_name?.toLowerCase() ?? a.card_id;
-        const nb =
-          stockData[b.stock_id]?.card_name?.toLowerCase() ?? b.card_id;
+        const na = stockData[a.stock_id]?.card_name?.toLowerCase() ?? a.card_id;
+        const nb = stockData[b.stock_id]?.card_name?.toLowerCase() ?? b.card_id;
         return na.localeCompare(nb, "es");
       }
-      // costo en COP convertido
-      const ca = costInCop(stockData[a.stock_id], convert);
-      const cb = costInCop(stockData[b.stock_id], convert);
-      return cb - ca;
+      return (
+        propertyCostInCop(stockData[b.stock_id], convert) -
+        propertyCostInCop(stockData[a.stock_id], convert)
+      );
     });
 
     return rows;
   }, [keepCards, stockData, busqueda, orden, convert]);
 
-  const valorInvertidoCOP = useMemo(() => {
-    let total = 0;
-    filasFiltradas.forEach((sale) => {
-      total += costInCop(stockData[sale.stock_id], convert);
-    });
-    return total;
-  }, [filasFiltradas, stockData, convert]);
+  const valorInvertidoCOP = useMemo(
+    () =>
+      filasFiltradas.reduce(
+        (total, sale) => total + propertyCostInCop(stockData[sale.stock_id], convert),
+        0,
+      ),
+    [filasFiltradas, stockData, convert],
+  );
 
   const invalidateProperty = async () => {
     await queryClient.invalidateQueries({ queryKey: ["property-cards"] });
     await queryClient.invalidateQueries({ queryKey: ["stock"] });
+    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
   };
 
-  const handleDeshacer = async (sale: KeepSale) => {
-    const name =
-      stockData[sale.stock_id]?.card_name || sale.card_id;
-    const confirmar = window.confirm(
-      `¿Devolver «${name}» al inventario?\n\nLa carta saldrá de propiedad y quedará disponible en stock.`,
-    );
-    if (!confirmar) return;
+  const showSuccess = (message: string) => setSnackbar({ open: true, message });
 
+  const handleConfirmReturn = async () => {
+    if (!returnTarget) return;
+    setReturnLoading(true);
+    setReturnError("");
     try {
-      setDeshaciendoId(sale._id);
-      setErrorAccion("");
       const res = await axios.delete<{ success: boolean; message?: string }>(
-        apiUrl(`/sales/${sale._id}`),
+        apiUrl(`/sales/${returnTarget._id}`),
       );
       if (res.data?.success === false) {
-        setErrorAccion(
-          res.data.message || "No se pudo devolver la carta al stock.",
-        );
+        setReturnError(res.data.message || "No se pudo devolver la carta al stock.");
         return;
       }
+      setReturnTarget(null);
+      showSuccess("Carta devuelta al inventario.");
       await invalidateProperty();
     } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { message?: string } } })?.response
-          ?.data?.message ||
-        "No se pudo devolver la carta al stock. Intenta más tarde.";
-      setErrorAccion(msg);
+      setReturnError(extractAxiosMessage(error, "No se pudo devolver la carta al stock."));
     } finally {
-      setDeshaciendoId(null);
+      setReturnLoading(false);
     }
-  };
-
-  const handleOpenDelete = (sale: KeepSale) => {
-    setDeleteTarget(sale);
-    setDeleteError("");
-  };
-
-  const handleCloseDelete = () => {
-    if (deleteDeleting) return;
-    setDeleteTarget(null);
-    setDeleteError("");
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setDeleteError("");
     try {
-      setDeleteDeleting(true);
-      setDeleteError("");
       const res = await axios.delete<{ success: boolean; message?: string }>(
         apiUrl(`/sales/keep/${deleteTarget._id}`),
       );
       if (res.data?.success === false) {
-        setDeleteError(
-          res.data.message || "No se pudo eliminar la carta.",
-        );
+        setDeleteError(res.data.message || "No se pudo eliminar la carta.");
         return;
       }
       setDeleteTarget(null);
+      showSuccess("Carta eliminada del inventario.");
       await invalidateProperty();
     } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { message?: string } } })?.response
-          ?.data?.message ||
-        "No se pudo eliminar la carta. Intenta más tarde.";
-      setDeleteError(msg);
+      setDeleteError(extractAxiosMessage(error, "No se pudo eliminar la carta."));
     } finally {
-      setDeleteDeleting(false);
+      setDeleteLoading(false);
     }
   };
 
-  const handleOpenNotas = (sale: KeepSale) => {
-    setNotasTarget(sale);
-    setNotasEditadas(sale.notes ?? "");
-    setNotasError("");
-  };
-
-  const handleCloseNotas = () => {
-    if (notasGuardando) return;
-    setNotasTarget(null);
-    setNotasEditadas("");
-    setNotasError("");
-  };
-
-  const handleGuardarNotas = async () => {
-    if (!notasTarget) return;
+  const handleSaveNotes = async () => {
+    if (!notesTarget) return;
+    setNotesLoading(true);
+    setNotesError("");
     try {
-      setNotasGuardando(true);
-      setNotasError("");
       const res = await axios.put<{ success: boolean; message?: string }>(
-        apiUrl(`/sales/${notasTarget._id}`),
-        { notes: notasEditadas },
+        apiUrl(`/sales/${notesTarget._id}`),
+        { notes: notesDraft },
       );
       if (res.data?.success === false) {
-        setNotasError(res.data.message || "No se pudieron guardar las notas.");
+        setNotesError(res.data.message || "No se pudieron guardar las notas.");
         return;
       }
-      setNotasTarget(null);
+      setNotesTarget(null);
+      setNotesDraft("");
+      showSuccess("Notas actualizadas.");
       await invalidateProperty();
     } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { message?: string } } })?.response
-          ?.data?.message ||
-        "No se pudieron guardar las notas. Intenta más tarde.";
-      setNotasError(msg);
+      setNotesError(extractAxiosMessage(error, "No se pudieron guardar las notas."));
     } finally {
-      setNotasGuardando(false);
+      setNotesLoading(false);
     }
   };
-
-  if (isLoading) {
-    return <p className="text-center text-gray-500">Cargando cartas...</p>;
-  }
 
   const hayKeeps = keepCards.length > 0;
   const sinCoincidencias = hayKeeps && filasFiltradas.length === 0;
+  const globalBusy = returnLoading || deleteLoading || notesLoading;
+
+  if (isLoading) {
+    return <LoadingScreen message="Cargando cartas en propiedad…" />;
+  }
 
   return (
-    <div className="max-w-5xl mx-auto mt-10 bg-white shadow rounded-lg p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Cartas marcadas como propiedad
-        </h1>
-        <p className="text-sm text-gray-500">
+    <Stack spacing={3} sx={propertyPageSx}>
+      <Box sx={propertyToolbarSx}>
+        <Box>
+          <Typography variant="h4" component="h1" fontWeight={800} letterSpacing="-0.02em">
+            En propiedad
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Cartas retenidas del inventario vendible — devuélvelas a stock o elimínalas si ya no
+            aplican.
+          </Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" flexShrink={0}>
           {hayKeeps
-            ? `Mostrando ${filasFiltradas.length} de ${keepCards.length} ${
-                keepCards.length === 1 ? "carta" : "cartas"
-              }`
-            : "Total: 0 cartas"}
-        </p>
-      </div>
+            ? `${filasFiltradas.length} de ${keepCards.length} carta${keepCards.length === 1 ? "" : "s"}`
+            : "Sin registros"}
+        </Typography>
+      </Box>
 
-      {hayKeeps && (
+      {isError ? (
+        <Alert severity="error">No se pudo cargar la lista. Verifica que el backend esté activo.</Alert>
+      ) : null}
+
+      {hayKeeps ? (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[220px] max-w-md">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre de carta…"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <svg
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden
+          <Box sx={propertyKpiGridSx}>
+            <Paper variant="outlined" sx={propertyKpiCardSx}>
+              <Typography sx={propertyMutedLabelSx}>Cartas retenidas</Typography>
+              <Typography variant="h5" sx={propertyStatValueSx}>
+                {keepCards.length}
+              </Typography>
+            </Paper>
+            <Paper variant="outlined" sx={propertyKpiCardSx}>
+              <Typography sx={propertyMutedLabelSx}>Visibles (filtro)</Typography>
+              <Typography variant="h5" sx={propertyStatValueSx}>
+                {filasFiltradas.length}
+              </Typography>
+            </Paper>
+            <Paper variant="outlined" sx={[propertyKpiCardSx, propertyHighlightPanelSx]}>
+              <Typography sx={propertyMutedLabelSx}>Costo acumulado visible</Typography>
+              <Typography variant="h5" sx={propertyStatValueSx}>
+                {sinCoincidencias ? "—" : formatCOP(Math.round(valorInvertidoCOP))}
+              </Typography>
+              {!sinCoincidencias ? (
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                  EUR {convert.toEurFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"} · USD{" "}
+                  {convert.toUsdFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"}
+                </Typography>
+              ) : null}
+            </Paper>
+            <Paper variant="outlined" sx={propertyKpiCardSx}>
+              <Typography sx={propertyMutedLabelSx}>Acceso rápido</Typography>
+              <Typography variant="body2" sx={{ mt: 0.75 }}>
+                Marca cartas desde{" "}
+                <Link to="/stock" style={{ fontWeight: 600 }}>
+                  inventario
+                </Link>{" "}
+                o revisión de stock.
+              </Typography>
+            </Paper>
+          </Box>
+
+          <Paper variant="outlined" sx={{ ...propertySectionPaperSx, p: 2.5 }}>
+            <Stack direction="row" alignItems="center" gap={2}>
+              <TextField
+                size="small"
+                label="Buscar carta"
+                placeholder="Nombre o ID TCGdex…"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                sx={{ width: 360, flexShrink: 0 }}
+              />
+              <FormControl size="small" sx={{ minWidth: 220 }}>
+                <InputLabel id="orden-propiedad-label">Ordenar por</InputLabel>
+                <Select
+                  labelId="orden-propiedad-label"
+                  label="Ordenar por"
+                  value={orden}
+                  onChange={(e) => setOrden(e.target.value as PropertySortKey)}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-                {busqueda && (
-                  <button
-                    type="button"
-                    onClick={() => setBusqueda("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    aria-label="Limpiar búsqueda"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="orden-propiedad" className="text-sm text-gray-600">
-                Orden:
-              </label>
-              <select
-                id="orden-propiedad"
-                value={orden}
-                onChange={(e) => setOrden(e.target.value as SortKey)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="fecha">Fecha (más reciente)</option>
-                <option value="nombre">Nombre (A–Z)</option>
-                <option value="costo">Costo (mayor → menor)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 shadow-sm">
-            <p className="text-sm text-gray-600 mb-1">
-              Valor invertido (filas visibles)
-            </p>
-            <p className="text-xl font-bold text-gray-800">
-              {sinCoincidencias
-                ? "—"
-                : `COP ${formatCOP(valorInvertidoCOP.toFixed(0))}`}
-            </p>
-            {!sinCoincidencias && (
-              <p className="text-xs text-gray-500 mt-1">
-                EUR{" "}
-                {convert.toEurFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"}{" "}
-                / USD{" "}
-                {convert.toUsdFromCop(valorInvertidoCOP)?.toFixed(2) ?? "0.00"}
-              </p>
-            )}
-          </div>
+                  {(Object.keys(SORT_LABELS) as PropertySortKey[]).map((key) => (
+                    <MenuItem key={key} value={key}>
+                      {SORT_LABELS[key]}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+          </Paper>
         </>
-      )}
-
-      {errorAccion && (
-        <p className="mb-4 text-sm text-red-600 text-center">{errorAccion}</p>
-      )}
+      ) : null}
 
       {!hayKeeps ? (
-        <p className="text-center text-gray-500">
-          No tienes cartas marcadas como propiedad.
-        </p>
+        <Paper variant="outlined" sx={{ ...propertySectionPaperSx, p: 6, textAlign: "center" }}>
+          <Typography variant="h6" fontWeight={700} gutterBottom>
+            Sin cartas en propiedad
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 480, mx: "auto" }}>
+            Cuando retengas cartas del inventario aparecerán aquí con opciones para devolverlas a
+            stock, anotar el motivo o eliminarlas del sistema.
+          </Typography>
+        </Paper>
       ) : sinCoincidencias ? (
-        <p className="text-center text-gray-500">
-          Ninguna carta coincide con «{busqueda.trim()}»
-        </p>
+        <Alert severity="info">Ninguna carta coincide con «{busqueda.trim()}».</Alert>
       ) : (
-        <div className="space-y-4">
+        <Box sx={propertyCardsGridSx}>
           {filasFiltradas.map((sale) => {
-            const stock = stockData[sale.stock_id];
-            const cardName = stock?.card_name || sale.card_id;
             const busy =
-              deshaciendoId === sale._id ||
-              (deleteDeleting && deleteTarget?._id === sale._id);
+              globalBusy &&
+              (returnTarget?._id === sale._id ||
+                deleteTarget?._id === sale._id ||
+                notesTarget?._id === sale._id);
 
             return (
-              <div
+              <PropertyCard
                 key={sale._id}
-                className="flex flex-wrap items-center gap-4 border rounded-lg p-4 shadow-sm bg-rose-50"
-              >
-                <img
-                  src={stock?.image_url}
-                  alt={cardName}
-                  className="w-20 h-28 object-contain rounded border bg-white"
-                />
-                <div className="flex-1 min-w-[180px]">
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    {cardName}
-                  </h2>
-                  <p className="text-sm text-gray-600">
-                    Precio compra:{" "}
-                    {stock
-                      ? `${stock.currency} ${stock.card_cost.toFixed(2)}`
-                      : "N/A"}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Nota: {sale.notes?.trim() ? sale.notes : "—"}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Fecha: {new Date(sale.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 min-w-[160px]">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleDeshacer(sale)}
-                    className="px-3 py-1.5 text-sm rounded border border-amber-600 text-amber-800 bg-amber-50 hover:bg-amber-100 disabled:opacity-50"
-                  >
-                    {deshaciendoId === sale._id
-                      ? "Devolviendo…"
-                      : "Devolver a stock"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleOpenDelete(sale)}
-                    className="px-3 py-1.5 text-sm rounded border border-red-600 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
-                  >
-                    Eliminar definitivamente
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleOpenNotas(sale)}
-                    className="px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Editar notas
-                  </button>
-                  <Link
-                    to={`/stock/update/${sale.stock_id}`}
-                    className="px-3 py-1.5 text-sm text-center rounded border border-blue-500 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                  >
-                    Editar stock
-                  </Link>
-                </div>
-              </div>
+                sale={sale}
+                stock={stockData[sale.stock_id]}
+                stockLoading={stockLoadingIds.has(sale.stock_id)}
+                costCop={propertyCostInCop(stockData[sale.stock_id], convert)}
+                busy={!!busy}
+                onReturn={() => {
+                  setReturnTarget(sale);
+                  setReturnError("");
+                }}
+                onDelete={() => {
+                  setDeleteTarget(sale);
+                  setDeleteError("");
+                }}
+                onEditNotes={() => {
+                  setNotesTarget(sale);
+                  setNotesDraft(sale.notes ?? "");
+                  setNotesError("");
+                }}
+              />
             );
           })}
-        </div>
+        </Box>
       )}
 
-      <Dialog
-        open={deleteTarget !== null}
-        onClose={handleCloseDelete}
-        aria-labelledby="delete-keep-title"
-      >
-        <DialogTitle id="delete-keep-title">
-          Eliminar definitivamente
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText component="div">
-            {deleteTarget && (
-              <>
-                <p className="mb-2">
-                  Vas a eliminar de forma irreversible esta carta de propiedad y
-                  del inventario:
-                </p>
-                <p className="font-medium text-gray-900">
-                  {stockData[deleteTarget.stock_id]?.card_name ||
-                    deleteTarget.card_id}
-                </p>
-                <p className="mt-3 text-sm text-gray-600">
-                  No podrás deshacer esta acción. La carta no volverá a stock ni
-                  a propiedad.
-                </p>
-              </>
-            )}
-            {deleteError ? (
-              <p className="mt-3 text-sm text-red-600">{deleteError}</p>
-            ) : null}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDelete} disabled={deleteDeleting}>
-            Cancelar
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={() => void handleConfirmDelete()}
-            disabled={deleteDeleting || !deleteTarget}
-          >
-            {deleteDeleting ? "Eliminando…" : "Eliminar definitivamente"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <PropertyReturnDialog
+        open={returnTarget !== null}
+        cardName={cardNameForSale(returnTarget, stockData)}
+        loading={returnLoading}
+        error={returnError}
+        onClose={() => {
+          if (returnLoading) return;
+          setReturnTarget(null);
+          setReturnError("");
+        }}
+        onConfirm={() => void handleConfirmReturn()}
+      />
 
-      <Dialog
-        open={notasTarget !== null}
-        onClose={handleCloseNotas}
-        aria-labelledby="edit-notes-title"
-        fullWidth
-        maxWidth="sm"
+      <PropertyDeleteDialog
+        open={deleteTarget !== null}
+        cardName={cardNameForSale(deleteTarget, stockData)}
+        loading={deleteLoading}
+        error={deleteError}
+        onClose={() => {
+          if (deleteLoading) return;
+          setDeleteTarget(null);
+          setDeleteError("");
+        }}
+        onConfirm={() => void handleConfirmDelete()}
+      />
+
+      <PropertyNotesDialog
+        open={notesTarget !== null}
+        cardName={cardNameForSale(notesTarget, stockData)}
+        notes={notesDraft}
+        loading={notesLoading}
+        error={notesError}
+        onChange={setNotesDraft}
+        onClose={() => {
+          if (notesLoading) return;
+          setNotesTarget(null);
+          setNotesDraft("");
+          setNotesError("");
+        }}
+        onSave={() => void handleSaveNotes()}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <DialogTitle id="edit-notes-title">Editar notas</DialogTitle>
-        <DialogContent>
-          {notasTarget && (
-            <p className="mb-3 text-sm text-gray-600">
-              {stockData[notasTarget.stock_id]?.card_name ||
-                notasTarget.card_id}
-            </p>
-          )}
-          <textarea
-            value={notasEditadas}
-            onChange={(e) => setNotasEditadas(e.target.value)}
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Notas del keep…"
-            disabled={notasGuardando}
-          />
-          {notasError ? (
-            <p className="mt-2 text-sm text-red-600">{notasError}</p>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseNotas} disabled={notasGuardando}>
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleGuardarNotas()}
-            disabled={notasGuardando || !notasTarget}
-          >
-            {notasGuardando ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </div>
+        <Alert severity="success" variant="filled" onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Stack>
   );
 }
