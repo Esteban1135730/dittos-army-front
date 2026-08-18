@@ -79,6 +79,17 @@ describe("aggregateReservasTotales", () => {
     expect(result.gananciaEstimadaCop).toBe(-3_000);
   });
 
+  it("multiplica por quantity en productos bulk", () => {
+    const result = aggregateReservasTotales(
+      [{ stock_id: "bulk", precio: 2_000, currency: "COP", quantity: 3 }],
+      { bulk: { card_cost: 0, currency: "COP" } },
+      convert,
+    );
+
+    expect(result.ventasEsperadasCop).toBe(6_000);
+    expect(result.gananciaEstimadaCop).toBe(6_000);
+  });
+
   it("devuelve ceros sin reservas", () => {
     expect(aggregateReservasTotales([], {}, convert)).toEqual({
       ventasEsperadasCop: 0,

@@ -64,6 +64,17 @@ describe("groupReservasForVentaPdf", () => {
     });
   });
 
+  it("usa quantity de una reserva bulk", () => {
+    const groups = groupReservasForVentaPdf(
+      [{ stock_id: "s2", precio: 2_000, currency: "COP", quantity: 4 }],
+      stockById,
+    );
+    expect(groups[0]).toMatchObject({
+      quantity: 4,
+      lineTotalCop: 8_000,
+    });
+  });
+
   it("no agrupa la misma carta con precios distintos", () => {
     const groups = groupReservasForVentaPdf(
       [

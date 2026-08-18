@@ -42,6 +42,16 @@ import { CardThumb } from "../../components/card-thumb";
 import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
+import {
+  isQuantityProduct,
+  resolveStockImageUrl,
+} from "../../constants/bulk-product";
+import { ensureBulkProduct } from "../../api/ensure-bulk";
+import {
+  filterStockInReservaCatalog,
+  sortReservaCatalogRows,
+} from "../../utils/stock-reserva-catalog";
+import { reservaLineQuantity } from "./clientes-resumen-pedidos";
 
 type StockItem = StockListItem;
 
@@ -92,6 +102,7 @@ export default function ReservarCartasPage() {
   const [actualizandoPrecioId, setActualizandoPrecioId] = useState<string | null>(null);
   const [aplicandoPvpId, setAplicandoPvpId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [cantidadStock, setCantidadStock] = useState<Record<string, string>>({});
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [editNombre, setEditNombre] = useState("");
   const [editTienda, setEditTienda] = useState("");
@@ -173,6 +184,18 @@ export default function ReservarCartasPage() {
       return Array.isArray(res.data) ? res.data : [];
     },
   });
+
+  useEffect(() => {
+    void ensureBulkProduct().then((r) => {
+      if (!r.ok) {
+        toast(r.error ?? "No se pudo asegurar el SKU bulk", "error");
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+      }
+    });
+    // Solo al montar la pantalla de reserva.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: reservasRaw = [], isLoading: loadingReservas } = useQuery<ReservaItem[]>({
     queryKey: ["reservas", clientId],
@@ -313,13 +336,7 @@ export default function ReservarCartasPage() {
   }, [searchParams]);
 
   const stockDisponible = useMemo(
-    () =>
-      stockRaw.filter(
-        (s) =>
-          s.card_state !== "vendida" &&
-          s.card_state !== "propiedad" &&
-          s.card_state !== "reserva",
-      ),
+    () => sortReservaCatalogRows(filterStockInReservaCatalog(stockRaw)),
     [stockRaw],
   );
 
@@ -397,6 +414,23 @@ export default function ReservarCartasPage() {
       toast("Ingresa un precio mayor a 0.", "error");
       return;
     }
+    const isQty = isQuantityProduct({
+      product_kind: item.product_kind,
+      card_id: item.card_id,
+    });
+    const qty = isQty
+      ? Math.max(
+          1,
+          Math.floor(Number((cantidadStock[item._id] ?? "1").replace(",", ".")) || 1),
+        )
+      : 1;
+    if (isQty) {
+      const available = typeof item.quantity === "number" ? item.quantity : 0;
+      if (qty > available) {
+        toast(`Stock insuficiente (disponible: ${available}).`, "error");
+        return;
+      }
+    }
     setReservandoId(item._id);
     try {
       const res = await axios.post(API_RESERVA, {
@@ -404,6 +438,7 @@ export default function ReservarCartasPage() {
         stock_id: item._id,
         precio: Math.round(precio),
         currency: "COP",
+        ...(isQty ? { quantity: qty } : {}),
       });
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
@@ -412,9 +447,17 @@ export default function ReservarCartasPage() {
       const next = { ...precios };
       delete next[item._id];
       setPrecios(next);
+      if (isQty) {
+        setCantidadStock((prev) => ({ ...prev, [item._id]: "1" }));
+      }
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      toast(`«${item.card_name}» añadida al pedido.`, "success");
+      toast(
+        isQty
+          ? `«${item.card_name}» ×${qty} añadido al pedido.`
+          : `«${item.card_name}» añadida al pedido.`,
+        "success",
+      );
     } catch {
       toast("Error al reservar la carta.", "error");
     } finally {
@@ -425,7 +468,9 @@ export default function ReservarCartasPage() {
   const handleQuitarReserva = async (stockId: string) => {
     setQuitandoId(stockId);
     try {
-      const res = await axios.delete(`${API_RESERVA}/stock/${stockId}`);
+      const res = await axios.delete(`${API_RESERVA}/stock/${stockId}`, {
+        params: clientId ? { client_id: clientId } : undefined,
+      });
       if ((res.data as { success?: boolean }).success !== true) {
         toast((res.data as { error?: string }).error ?? "Error al quitar reserva.", "error");
         return;
@@ -448,10 +493,14 @@ export default function ReservarCartasPage() {
     if (Number.isNaN(n) || n < 0) return;
     setActualizandoPrecioId(stockId);
     try {
-      const res = await axios.put(`${API_RESERVA}/stock/${stockId}`, {
-        precio: Math.round(n),
-        currency: "COP",
-      });
+      const res = await axios.put(
+        `${API_RESERVA}/stock/${stockId}`,
+        {
+          precio: Math.round(n),
+          currency: "COP",
+        },
+        { params: clientId ? { client_id: clientId } : undefined },
+      );
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
         return;
@@ -475,10 +524,14 @@ export default function ReservarCartasPage() {
     if (precioCop <= 0) return;
     setAplicandoPvpId(stockId);
     try {
-      const res = await axios.put(`${API_RESERVA}/stock/${stockId}`, {
-        precio: precioCop,
-        currency: "COP",
-      });
+      const res = await axios.put(
+        `${API_RESERVA}/stock/${stockId}`,
+        {
+          precio: precioCop,
+          currency: "COP",
+        },
+        { params: clientId ? { client_id: clientId } : undefined },
+      );
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
         return;
@@ -682,14 +735,17 @@ export default function ReservarCartasPage() {
       headerName: "",
       width: 100,
       sortable: false,
-      renderCell: (params) => (
-        <CardThumb
-          src={params.value as string}
-          alt=""
-          size="md"
-          enlargeOnHover
-        />
-      ),
+      renderCell: (params) => {
+        const item = params.row as StockItem;
+        return (
+          <CardThumb
+            src={resolveStockImageUrl(item.card_id, params.value as string)}
+            alt=""
+            size="md"
+            enlargeOnHover
+          />
+        );
+      },
     },
     {
       field: "card_name",
@@ -698,6 +754,32 @@ export default function ReservarCartasPage() {
       minWidth: 160,
     },
     { field: "card_id", headerName: "ID", width: 110 },
+    {
+      field: "quantity",
+      headerName: "Cant.",
+      width: 80,
+      sortable: false,
+      renderCell: (params) => {
+        const item = params.row as StockItem;
+        if (
+          !isQuantityProduct({
+            product_kind: item.product_kind,
+            card_id: item.card_id,
+          })
+        ) {
+          return (
+            <Typography variant="body2" color="text.disabled">
+              —
+            </Typography>
+          );
+        }
+        return (
+          <Typography variant="body2" fontWeight={600}>
+            {typeof item.quantity === "number" ? item.quantity : 0}
+          </Typography>
+        );
+      },
+    },
     {
       field: "rareza",
       headerName: "Rareza",
@@ -768,21 +850,41 @@ export default function ReservarCartasPage() {
     {
       field: "reservar",
       headerName: "",
-      width: 112,
+      width: 220,
       sortable: false,
       renderCell: (params) => {
         const item = params.row as StockItem;
         const loading = reservandoId === item._id;
+        const isQty = isQuantityProduct({
+          product_kind: item.product_kind,
+          card_id: item.card_id,
+        });
+        const available = typeof item.quantity === "number" ? item.quantity : 0;
         return (
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => handleReservar(item)}
-            disabled={loading}
-            sx={{ textTransform: "none", minWidth: 96 }}
-          >
-            {loading ? "…" : "Añadir"}
-          </Button>
+          <Stack direction="row" spacing={1} alignItems="center">
+            {isQty ? (
+              <TextField
+                size="small"
+                type="text"
+                inputMode="numeric"
+                value={cantidadStock[item._id] ?? "1"}
+                onChange={(e) =>
+                  setCantidadStock((prev) => ({ ...prev, [item._id]: e.target.value }))
+                }
+                sx={{ width: 64, "& .MuiInputBase-input": { py: 0.75 } }}
+                disabled={available <= 0}
+              />
+            ) : null}
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => handleReservar(item)}
+              disabled={loading || (isQty && available <= 0)}
+              sx={{ textTransform: "none", minWidth: 96 }}
+            >
+              {loading ? "…" : "Añadir"}
+            </Button>
+          </Stack>
         );
       },
     },
@@ -947,12 +1049,14 @@ export default function ReservarCartasPage() {
                 }
                 return r.precio;
               })();
-              const gananciaLinea = gananciaEstimadaReservaCop(
-                precioLinea,
-                r.currency ?? "COP",
-                stockLine,
-                convert,
-              );
+              const units = reservaLineQuantity(r.quantity);
+              const gananciaLinea =
+                gananciaEstimadaReservaCop(
+                  precioLinea,
+                  r.currency ?? "COP",
+                  stockLine,
+                  convert,
+                ) * units;
               return (
                 <Stack
                   key={r._id}
@@ -961,16 +1065,17 @@ export default function ReservarCartasPage() {
                   alignItems={{ sm: "center" }}
                   py={2}
                 >
-                  <Box
-                    component="img"
-                    src={r.image_url}
-                    alt=""
-                    sx={{ width: 52, height: 72, objectFit: "contain", borderRadius: 1, bgcolor: "background.paper" }}
+                  <CardThumb
+                    src={resolveStockImageUrl(r.card_id, r.image_url)}
+                    alt={r.card_name}
+                    size="md"
+                    enlargeOnHover
                   />
                   <Box flex={1} minWidth={0}>
                     <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
                       <Typography fontWeight={600} noWrap title={r.card_name}>
                         {r.card_name}
+                        {units > 1 ? ` ×${units}` : ""}
                       </Typography>
                       {r.rareza?.trim() ? (
                         <Chip
@@ -990,6 +1095,7 @@ export default function ReservarCartasPage() {
                     </Stack>
                     <Typography variant="caption" color="text.secondary" display="block">
                       {r.card_id}
+                      {units > 1 ? ` · ${formatCOP(Math.round(precioLinea))} c/u` : ""}
                     </Typography>
                     {fechaTxt ? (
                       <Typography variant="caption" color="text.secondary">

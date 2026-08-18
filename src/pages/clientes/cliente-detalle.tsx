@@ -39,8 +39,10 @@ import { downloadVentaClientePdf } from "./venta-cliente-pdf";
 import {
   aggregateReservasTotales,
   gananciaEstimadaReservaCop,
+  reservaLineQuantity,
 } from "./clientes-resumen-pedidos";
 import { useExchangeRates } from "../../utils/tasa";
+import { resolveStockImageUrl } from "../../constants/bulk-product";
 
 function formatFechaReserva(iso?: string): string {
   if (!iso) return "—";
@@ -169,6 +171,7 @@ export default function ClienteDetallePage() {
         card_name: st?.card_name ?? "Carta",
         precio: r.precio,
         rareza: st?.rareza,
+        quantity: reservaLineQuantity(r.quantity),
       };
     });
     const incomingLines = incomingCliente.map((x) => ({
@@ -273,7 +276,9 @@ export default function ClienteDetallePage() {
         stockById[r.stock_id] = {
           card_id: st?.card_id ?? "",
           card_name: st?.card_name ?? "Carta",
-          image_url: st?.image_url,
+          image_url: st?.image_url
+            ? resolveStockImageUrl(st.card_id, st.image_url)
+            : resolveStockImageUrl(st?.card_id, undefined),
           rareza: st?.rareza,
         };
       });
@@ -284,6 +289,7 @@ export default function ClienteDetallePage() {
           stock_id: r.stock_id,
           precio: r.precio,
           currency: r.currency,
+          quantity: reservaLineQuantity(r.quantity),
         })),
         stockById,
         convert,
@@ -530,12 +536,14 @@ export default function ClienteDetallePage() {
         ) : (
           <Stack spacing={2}>
             {reservasConStock.map(({ reserva: r, stock: st }) => {
-              const gananciaLinea = gananciaEstimadaReservaCop(
-                r.precio,
-                r.currency ?? "COP",
-                st,
-                convert,
-              );
+              const units = reservaLineQuantity(r.quantity);
+              const gananciaLinea =
+                gananciaEstimadaReservaCop(
+                  r.precio,
+                  r.currency ?? "COP",
+                  st,
+                  convert,
+                ) * units;
               return (
               <Box
                 key={r._id}
@@ -551,7 +559,7 @@ export default function ClienteDetallePage() {
                 }}
               >
                 <CardThumb
-                  src={st?.image_url}
+                  src={resolveStockImageUrl(st?.card_id, st?.image_url)}
                   alt={st?.card_name ?? "Carta"}
                   size="md"
                   enlargeOnHover
@@ -570,10 +578,12 @@ export default function ClienteDetallePage() {
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {st?.card_id}
+                    {units > 1 ? ` · Cant.: ${units}` : ""}
                     {st?.rareza ? ` · ${st.rareza}` : ""}
                   </Typography>
                   <Typography variant="body2" sx={{ mt: 0.5 }}>
-                    {formatCOP(r.precio)}
+                    {formatCOP(r.precio * units)}
+                    {units > 1 ? ` (${formatCOP(r.precio)} c/u)` : ""}
                     {r.currency && r.currency !== "COP" ? ` (${r.currency})` : ""}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>

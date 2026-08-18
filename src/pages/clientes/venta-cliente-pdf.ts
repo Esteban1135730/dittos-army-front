@@ -13,6 +13,7 @@ export type VentaPdfReservaLine = {
   stock_id: string;
   precio: number;
   currency: string;
+  quantity?: number;
 };
 
 export type VentaPdfCurrencyConverter = {
@@ -91,10 +92,16 @@ export function groupReservasForVentaPdf(
     const rareza = normalizeRareza(stock?.rareza);
     const unitPriceCop = reservaPrecioToCop(reserva.precio, reserva.currency, convert);
     const key = buildReservaGroupKey(cardId, rareza, reserva.precio, reserva.currency, convert);
+    const units =
+      typeof reserva.quantity === "number" &&
+      Number.isInteger(reserva.quantity) &&
+      reserva.quantity >= 1
+        ? reserva.quantity
+        : 1;
     const existing = grouped.get(key);
 
     if (existing) {
-      existing.quantity += 1;
+      existing.quantity += units;
       existing.lineTotalCop = existing.quantity * existing.unitPriceCop;
       continue;
     }
@@ -104,9 +111,9 @@ export function groupReservasForVentaPdf(
       card_name: cardName,
       rareza,
       image_url: stock?.image_url,
-      quantity: 1,
+      quantity: units,
       unitPriceCop,
-      lineTotalCop: unitPriceCop,
+      lineTotalCop: unitPriceCop * units,
     });
   }
 

@@ -31,7 +31,7 @@ import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
 } from "./mensaje-reserva-pedido";
-import { aggregateReservasTotales } from "./clientes-resumen-pedidos";
+import { aggregateReservasTotales, reservaLineQuantity } from "./clientes-resumen-pedidos";
 import { formatCOP } from "../../utils/convert";
 import { useExchangeRates } from "../../utils/tasa";
 
@@ -181,6 +181,7 @@ export default function ClientesPage() {
           card_name: st?.card_name ?? "Carta",
           precio: r.precio,
           rareza: st?.rareza,
+          quantity: reservaLineQuantity(r.quantity),
         };
       });
       const incomingLines = incomingCliente.map((x) => ({

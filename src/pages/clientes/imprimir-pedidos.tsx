@@ -10,6 +10,7 @@ import {
   useClearEtiquetasReservaPrintMode,
 } from "./etiquetas-reserva-print";
 import { paginatePedidoLineItems } from "./pedido-print-sheets";
+import { mergePedidoSelection } from "./pedido-print-selection";
 import { API_CLIENT, API_RESERVA, API_STOCK } from "./cliente-types";
 import { abrirWhatsAppConTexto } from "./mensaje-reserva-pedido";
 
@@ -43,6 +44,7 @@ const CARD_HEIGHT_MM = 88;
 export default function ImprimirPedidosPage() {
   const printRef = useRef<HTMLDivElement>(null);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const seenPedidoIdsRef = useRef<Set<string> | null>(null);
   const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
   const [errorEtiquetas, setErrorEtiquetas] = useState<string | null>(null);
 
@@ -116,21 +118,19 @@ export default function ImprimirPedidosPage() {
       .filter((p): p is PedidoCard => p !== null);
   }, [reservas, clientesMap, stockMap]);
 
-  // Por defecto marcar todos los pedidos al cargar (y al añadir nuevos clientes con reservas)
+  // Primera carga: marcar todos. Luego solo auto-marcar clientes nuevos con reservas.
   useEffect(() => {
-    if (pedidos.length > 0) {
-      setSeleccionados((prev) => {
-        const next = new Set(prev);
-        let changed = false;
-        pedidos.forEach((p) => {
-          if (!next.has(p.client._id)) {
-            next.add(p.client._id);
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
-      });
-    }
+    const ids = pedidos.map((p) => p.client._id);
+    if (ids.length === 0) return;
+    const previouslySeen = seenPedidoIdsRef.current;
+    setSeleccionados((prev) => {
+      const { selected } = mergePedidoSelection(prev, ids, previouslySeen);
+      if (selected.size === prev.size && [...selected].every((id) => prev.has(id))) {
+        return prev;
+      }
+      return selected;
+    });
+    seenPedidoIdsRef.current = new Set(ids);
   }, [pedidos]);
 
   const toggleCliente = (clientId: string) => {

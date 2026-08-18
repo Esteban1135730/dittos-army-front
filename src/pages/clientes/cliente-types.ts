@@ -18,6 +18,8 @@ export type ReservaItem = {
   stock_id: string;
   precio: number;
   currency: string;
+  /** Unidades; ausente en reservas unitarias legacy (= 1). */
+  quantity?: number;
   /** Fecha de creación de la reserva (puede faltar en documentos antiguos). */
   created_at?: string;
 };

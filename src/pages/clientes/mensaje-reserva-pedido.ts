@@ -36,6 +36,7 @@ export type PedidoLineInput = {
   card_name: string;
   precio: number;
   rareza?: string | null;
+  quantity?: number;
 };
 
 /** Líneas en camino (sin precio en el mensaje). */
@@ -67,10 +68,21 @@ export async function buildWhatsAppPedidoText(opts: {
     const exp = expansions.get(l.card_id);
     const rare = l.rareza?.trim() ? ` — Rareza: ${l.rareza}` : "";
     const exps = exp ? ` — Expansión: ${exp}` : "";
-    return `• ${l.card_name}${rare}${exps}: ${formatCOP(l.precio)}`;
+    const units =
+      typeof l.quantity === "number" && Number.isInteger(l.quantity) && l.quantity >= 1
+        ? l.quantity
+        : 1;
+    const qty = units > 1 ? ` ×${units}` : "";
+    return `• ${l.card_name}${qty}${rare}${exps}: ${formatCOP(l.precio * units)}`;
   });
 
-  const total = opts.lines.reduce((s, l) => s + l.precio, 0);
+  const total = opts.lines.reduce((s, l) => {
+    const units =
+      typeof l.quantity === "number" && Number.isInteger(l.quantity) && l.quantity >= 1
+        ? l.quantity
+        : 1;
+    return s + l.precio * units;
+  }, 0);
 
   const lineasIncoming = (opts.incomingLines ?? []).map((l) => {
     const exp = expansions.get(l.card_id);

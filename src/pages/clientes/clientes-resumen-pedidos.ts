@@ -22,6 +22,13 @@ export function amountToCop(
   return amount;
 }
 
+export function reservaLineQuantity(quantity?: number | null): number {
+  if (typeof quantity === "number" && Number.isInteger(quantity) && quantity >= 1) {
+    return quantity;
+  }
+  return 1;
+}
+
 export function gananciaEstimadaReservaCop(
   precio: number,
   currency: string,
@@ -34,7 +41,7 @@ export function gananciaEstimadaReservaCop(
 }
 
 export function aggregateReservasTotales(
-  reservas: Pick<ReservaItem, "stock_id" | "precio" | "currency">[],
+  reservas: Pick<ReservaItem, "stock_id" | "precio" | "currency" | "quantity">[],
   stockById: Record<string, Pick<StockListItem, "currency" | "card_cost"> | undefined>,
   convert: CurrencyConverter,
 ): ReservasTotales {
@@ -42,14 +49,16 @@ export function aggregateReservasTotales(
   let gananciaEstimadaCop = 0;
 
   for (const reserva of reservas) {
+    const units = reservaLineQuantity(reserva.quantity);
     const precioCop = amountToCop(reserva.precio, reserva.currency ?? "COP", convert);
-    ventasEsperadasCop += precioCop;
-    gananciaEstimadaCop += gananciaEstimadaReservaCop(
-      reserva.precio,
-      reserva.currency ?? "COP",
-      stockById[reserva.stock_id],
-      convert,
-    );
+    ventasEsperadasCop += precioCop * units;
+    gananciaEstimadaCop +=
+      gananciaEstimadaReservaCop(
+        reserva.precio,
+        reserva.currency ?? "COP",
+        stockById[reserva.stock_id],
+        convert,
+      ) * units;
   }
 
   return { ventasEsperadasCop, gananciaEstimadaCop };
