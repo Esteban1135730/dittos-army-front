@@ -43,7 +43,6 @@ type Props = {
   clientId: string;
   reservasConStock: ReservaConStock[];
   resumen: ResumenFinanciero;
-  incomingCount: number;
   finalizando: boolean;
   generandoPdfVenta: boolean;
   convert: (amount: number, from: string) => number;
@@ -60,7 +59,6 @@ export default function PedidoActivoPanel({
   clientId,
   reservasConStock,
   resumen,
-  incomingCount,
   finalizando,
   generandoPdfVenta,
   convert,
@@ -163,14 +161,6 @@ export default function PedidoActivoPanel({
                 <Button variant="outlined" onClick={onEditEntrega}>
                   Editar entrega
                 </Button>
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  component={Link}
-                  to={`/clientes/${clientId}/reservar?camino=1`}
-                >
-                  Incoming{incomingCount > 0 ? ` (${incomingCount})` : ""}
-                </Button>
                 <Tooltip title={pedido.lines.length === 0 ? "Agrega cartas antes de registrar el pago" : ""}>
                   <span>
                     <Button
@@ -215,12 +205,12 @@ export default function PedidoActivoPanel({
 
         <Box>
           <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-            Cartas reservadas
+            Cartas del pedido
           </Typography>
           {reservasConStock.length === 0 ? (
             <Stack spacing={1.5} alignItems="flex-start">
               <Typography variant="body2" color="text.secondary">
-                No hay cartas apartadas. Usa «Gestionar cartas» para agregar stock.
+                No hay cartas de stock en este pedido. Usa «Gestionar cartas» para agregar inventario.
               </Typography>
               {pedido.lines.length > 0 ? <PedidoLineasList lines={pedido.lines} dense /> : null}
             </Stack>

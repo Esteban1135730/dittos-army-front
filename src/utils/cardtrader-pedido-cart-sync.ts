@@ -57,10 +57,13 @@ export function allocatePedidoAddedFromCart(
   const out: Record<string, number> = {};
 
   for (const line of lines) {
-    const avail = remaining.get(line.blueprintId) ?? 0;
+    const avail =
+      line.blueprintId > 0 ? remaining.get(line.blueprintId) ?? 0 : 0;
     const alloc = Math.min(line.quantity, Math.max(0, avail));
     out[line.id] = alloc;
-    remaining.set(line.blueprintId, Math.max(0, avail - alloc));
+    if (line.blueprintId > 0) {
+      remaining.set(line.blueprintId, Math.max(0, avail - alloc));
+    }
   }
 
   return out;

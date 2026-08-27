@@ -16,10 +16,16 @@ import axios from 'axios';
 import { apiUrl } from '../../config/api';
 import type { StockListItem } from '../../types/stock';
 import { useExchangeRates } from '../../utils/tasa';
+import { formatCOP } from '../../utils/convert';
 import { CardThumb } from '../../components/card-thumb';
 import { resolvePanelImageSrc } from '../incoming-v2/use-homolog-blueprint-images';
 import { OWNERS_CONFIG, type OwnerKey } from '../../config/owners';
 import type { CreatedStockRef } from '../incoming-v2/use-incoming-homolog';
+import {
+  gananciaCopFromPvp,
+  parseDraftPvpCop,
+  stockCostCop,
+} from './receipt-pvp-ganancia';
 
 function rarezaFromStock(item: StockListItem): string | null {
   const rz =
@@ -63,6 +69,11 @@ function ReceiptPvpRow({ item, owner, sessionId, onOutcome }: PvpRowProps) {
   const hasPvp = storedCop > 0;
   const returnPath = `/cardtrader-receipt?step=3&session=${encodeURIComponent(sessionId)}`;
   const imageSrc = resolvePanelImageSrc(item.image_url) || item.image_url;
+  const livePvp = parseDraftPvpCop(draft) || storedCop;
+  const ganancia = gananciaCopFromPvp(
+    livePvp,
+    stockCostCop(item, convert),
+  );
 
   const savePvp = async () => {
     if (busy) return;
@@ -167,6 +178,14 @@ function ReceiptPvpRow({ item, owner, sessionId, onOutcome }: PvpRowProps) {
           sx={{ width: 120 }}
           placeholder="Sin asignar"
         />
+        {ganancia != null ? (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={ganancia > 0 ? 'success' : ganancia < 0 ? 'error' : 'default'}
+            label={`Ganancia: ${formatCOP(Math.round(ganancia))}`}
+          />
+        ) : null}
         {busy && <CircularProgress size={18} />}
         <Button
           size="small"

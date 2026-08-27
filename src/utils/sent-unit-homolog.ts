@@ -24,6 +24,8 @@ const NAME_STOPWORDS = new Set([
 export type PanelHomologItem = {
   transit_line_id: string;
   transit_lot_id: string;
+  /** Dueño del lote de tránsito (037). Default pablo si el API no lo envía. */
+  owner?: 'pablo' | 'esteban';
   card_id: string;
   card_name: string;
   image_url: string;

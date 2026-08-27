@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   downloadCardtraderCartClientePdf,
   type CotizarCartPdfLine,
@@ -112,6 +113,24 @@ type CtBlueprint = {
   };
   image_url?: string | null;
 };
+
+type NameSearchItem = {
+  blueprint_id: number;
+  expansion_id: number;
+  expansion_name?: string;
+  name?: string;
+  collector_number?: string;
+  image_url?: string | null;
+  locale?: string;
+};
+
+function nameSearchLocaleChip(locale?: string): string | null {
+  const loc = String(locale ?? "").trim().toLowerCase();
+  if (loc === "ja") return "JP";
+  if (loc === "zh-cn" || loc === "zh-tw" || loc === "zh") return "ZH";
+  if (loc === "en") return "EN";
+  return loc ? loc.toUpperCase() : null;
+}
 
 type CtProduct = {
   id: number;
@@ -632,6 +651,35 @@ export default function CotizarCardtraderPage() {
     () => normalizeExpansions(expansionsQuery.data),
     [expansionsQuery.data],
   );
+
+  const [submittedNameQ, setSubmittedNameQ] = useState("");
+  const submitNameSearch = useCallback(() => {
+    if (expansion) return;
+    setSubmittedNameQ(blueprintFilter.trim());
+    setBlueprintPage(1);
+  }, [expansion, blueprintFilter]);
+
+  const nameSearchQuery = useQuery({
+    queryKey: ["cardtrader", "blueprints", "search", submittedNameQ],
+    enabled: !expansion && submittedNameQ.length >= 2,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const res = await axios.get(`${API_BASE}/cardtrader/blueprints/search`, {
+        params: { q: submittedNameQ, game_id: CARDTRADER_POKEMON_GAME_ID },
+      });
+      const items = Array.isArray((res.data as { items?: unknown })?.items)
+        ? ((res.data as { items: NameSearchItem[] }).items)
+        : [];
+      return items.filter(
+        (x) =>
+          x &&
+          typeof x.blueprint_id === "number" &&
+          typeof x.expansion_id === "number",
+      );
+    },
+  });
+
+  const nameSearchItems = nameSearchQuery.data ?? [];
 
   const blueprintsQuery = useQuery({
     queryKey: ["cardtrader", "blueprints", expansion?.id],
@@ -1484,9 +1532,25 @@ export default function CotizarCardtraderPage() {
           border: (theme) => `1px solid ${theme.palette.divider}`,
         }}
       >
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
-          Cotizar (CardTrader)
-        </Typography>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          alignItems={{ sm: "flex-start" }}
+          spacing={1}
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="h5" fontWeight={700}>
+            Cotizar (CardTrader)
+          </Typography>
+          <Button
+            component={RouterLink}
+            to="/cotizar/pedido-cliente"
+            variant="outlined"
+            size="small"
+          >
+            Pegar lista WhatsApp
+          </Button>
+        </Stack>
         <Stack
           direction={{ xs: "column", md: "row" }}
           spacing={2}
@@ -1512,6 +1576,7 @@ export default function CotizarCardtraderPage() {
                   setExpansion(v);
                   setBlueprint(null);
                   setBlueprintFilter("");
+                  setSubmittedNameQ("");
                   resetBlueprintCatalogFilters();
                   setBlueprintPage(1);
                   setOffersPage(1);
@@ -1533,15 +1598,21 @@ export default function CotizarCardtraderPage() {
             )}
           </Box>
           <Box sx={{ flex: 1, width: "100%" }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
             <TextField
               fullWidth
               label="Buscar carta por nombre o ID"
-              placeholder={expansion ? "Ej. Articuno" : "Elige una expansión primero"}
+              placeholder={expansion ? "Ej. Articuno" : "Ej. Pikachu, ピカチュウ…"}
               value={blueprintFilter}
-              disabled={!expansion}
               onChange={(e) => {
                 setBlueprintFilter(e.target.value);
                 setBlueprintPage(1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !expansion) {
+                  e.preventDefault();
+                  submitNameSearch();
+                }
               }}
               size="medium"
               slotProps={{
@@ -1554,6 +1625,22 @@ export default function CotizarCardtraderPage() {
                 },
               }}
             />
+            {!expansion && (
+              <Button
+                variant="contained"
+                onClick={submitNameSearch}
+                disabled={blueprintFilter.trim().length < 2 || nameSearchQuery.isFetching}
+                sx={{ flexShrink: 0, height: 56, px: 2.5 }}
+              >
+                {nameSearchQuery.isFetching ? "Buscando…" : "Buscar"}
+              </Button>
+            )}
+            </Stack>
+            {!expansion && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH.
+              </Typography>
+            )}
           </Box>
         </Stack>
       </Paper>
@@ -1568,6 +1655,113 @@ export default function CotizarCardtraderPage() {
       <Stack direction={{ xs: "column", lg: "row" }} spacing={2} alignItems="flex-start">
         <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
           <Stack spacing={2}>
+            {!expansion && blueprintFilter.trim().length > 0 && blueprintFilter.trim().length < 2 && (
+              <Alert severity="info">Escribe al menos 2 caracteres y pulsa Buscar.</Alert>
+            )}
+            {!expansion &&
+              submittedNameQ.length >= 2 &&
+              blueprintFilter.trim() !== submittedNameQ && (
+                <Alert severity="info">Pulsa Buscar o Enter para actualizar los resultados.</Alert>
+              )}
+            {!expansion && submittedNameQ.length >= 2 && (
+              <Paper
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  border: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Resultados por nombre
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={`${nameSearchItems.length} cartas`}
+                    variant="outlined"
+                  />
+                </Stack>
+                {nameSearchQuery.isFetching ? (
+                  <CircularProgress size={28} />
+                ) : nameSearchQuery.isError ? (
+                  <Alert severity="error">No se pudo buscar en CardTrader.</Alert>
+                ) : nameSearchItems.length === 0 ? (
+                  <Alert severity="info">Sin coincidencias homologadas a CardTrader.</Alert>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                      gap: 1.5,
+                      maxHeight: 640,
+                      overflowY: "auto",
+                      pr: 0.5,
+                    }}
+                  >
+                    {nameSearchItems.map((item) => {
+                      const selected = blueprint?.id === item.blueprint_id;
+                      return (
+                        <Card
+                          key={item.blueprint_id}
+                          variant="outlined"
+                          sx={{
+                            cursor: "pointer",
+                            borderColor: selected ? "primary.main" : "divider",
+                            borderWidth: selected ? 2 : 1,
+                          }}
+                          onClick={() => {
+                            setExpansion({
+                              id: item.expansion_id,
+                              name_en: item.expansion_name,
+                            });
+                            setBlueprint({
+                              id: item.blueprint_id,
+                              name: item.name,
+                              name_en: item.name,
+                              image_url: item.image_url,
+                              fixed_properties: {
+                                collector_number: item.collector_number,
+                              },
+                            });
+                            setOffersPage(1);
+                            resetOfferFilters();
+                          }}
+                        >
+                          {item.image_url ? (
+                            <CardMedia
+                              component="img"
+                              height="150"
+                              image={item.image_url}
+                              alt=""
+                              sx={{ objectFit: "contain", bgcolor: "grey.100" }}
+                              onError={(ev) => {
+                                (ev.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <Box sx={{ height: 150, bgcolor: "grey.200" }} />
+                          )}
+                          <CardContent sx={{ py: 1.25, px: 1.25 }}>
+                            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.25 }}>
+                              <Typography variant="body2" noWrap fontWeight={selected ? 700 : 500} sx={{ flex: 1 }}>
+                                {item.name ?? `#${item.blueprint_id}`}
+                              </Typography>
+                              {nameSearchLocaleChip(item.locale) && (
+                                <Chip size="small" label={nameSearchLocaleChip(item.locale)} variant="outlined" />
+                              )}
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                              {item.expansion_name}
+                              {item.collector_number ? ` · #${item.collector_number}` : ""}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </Box>
+                )}
+              </Paper>
+            )}
             {expansion && (
               <Paper
                 sx={{

@@ -1,5 +1,18 @@
 /** Línea de pedido pegada desde WhatsApp / texto del cliente (URLs CardTrader). */
 
+export type PedidoLineSource = "url" | "quote";
+
+export type PedidoResolveStatus = "matched" | "ambiguous" | "not_found";
+
+export type PedidoQuoteCandidate = {
+  blueprintId: number;
+  expansionId: number;
+  expansionName: string;
+  name: string;
+  collectorNumber: string;
+  imageUrl: string | null;
+};
+
 export type ParsedPedidoLine = {
   id: string;
   lineNumber: number;
@@ -11,6 +24,19 @@ export type ParsedPedidoLine = {
   clientNotes: string;
   /** Límite USD inferido de notas tipo "menor de $7". */
   maxUsdHint: number | null;
+  source?: PedidoLineSource;
+  resolveStatus?: PedidoResolveStatus;
+  expansionId?: number;
+  expansionName?: string;
+  collectorNumber?: string;
+  pokemonLanguage?: string | null;
+  conditionFilter?: string | null;
+  imageUrl?: string | null;
+  candidates?: PedidoQuoteCandidate[];
+  /** Pick del operador (candidato o búsqueda manual). No borra `candidates`. */
+  selectedCandidate?: PedidoQuoteCandidate | null;
+  /** Blueprint del resolve original (`matched`); no cambia con el pick. */
+  resolvedBlueprintId?: number;
 };
 
 const CARDTRADER_URL_RE =
@@ -86,6 +112,7 @@ export function parseCardtraderPedidoPaste(raw: string): ParsedPedidoLine[] {
         url,
         clientNotes,
         maxUsdHint: parseMaxUsdFromNotes(clientNotes),
+        source: "url",
       });
     }
   }

@@ -59,6 +59,12 @@ describe("cardtrader-pedido-cart-sync", () => {
     expect(allocatePedidoAddedFromCart(lines, map)).toEqual({ a: 2, b: 1 });
   });
 
+  it("no reparte carrito a líneas sin blueprint (cotización sin match)", () => {
+    const lines = [line("a", 0, 1), line("b", 100, 2)];
+    const map = new Map([[100, 2]]);
+    expect(allocatePedidoAddedFromCart(lines, map)).toEqual({ a: 0, b: 2 });
+  });
+
   it("syncPedidoProgressFromCart marca in_cart al completar", () => {
     const lines = [line("a", 100, 2)];
     const result = syncPedidoProgressFromCart(lines, cart, {}, {});

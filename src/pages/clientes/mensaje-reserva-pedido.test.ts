@@ -5,6 +5,8 @@ import {
   resolverDestinoWhatsApp,
   urlWhatsAppConTexto,
   buildWhatsAppPedidoText,
+  formatStoreReservaCaminoLine,
+  buildWhatsAppReservaCaminoText,
 } from "./mensaje-reserva-pedido";
 
 describe("expansionFromCardDto", () => {
@@ -101,5 +103,41 @@ describe("buildWhatsAppPedidoText", () => {
     });
     expect(text).not.toContain("Entrega:");
     expect(text).not.toContain("Tienda de entrega:");
+  });
+});
+
+describe("formatStoreReservaCaminoLine", () => {
+  it("usa el formato de la tienda con PVP", async () => {
+    const line = formatStoreReservaCaminoLine(
+      {
+        card_id: "me05-066",
+        card_name: "Pikipek",
+        quantity: 2,
+        language: "en",
+        precio_cop: 4000,
+      },
+      "Pitch Black",
+    );
+    expect(line).toContain("ID: me05-066");
+    expect(line).toContain("Idioma: Inglés");
+    expect(line).toContain("x2");
+    expect(line).toMatch(/Precio:/);
+
+    const text = await buildWhatsAppReservaCaminoText({
+      clientName: "Julian Pabon",
+      lines: [
+        {
+          card_id: "me05-066",
+          card_name: "Pikipek",
+          quantity: 2,
+          language: "en",
+          precio_cop: 4000,
+        },
+      ],
+    });
+    expect(text).toContain("te confirmo tu reserva");
+    expect(text).toContain("A nombre de: Julian Pabon");
+    expect(text).toContain("ID: me05-066");
+    expect(text).toMatch(/Precio:/);
   });
 });

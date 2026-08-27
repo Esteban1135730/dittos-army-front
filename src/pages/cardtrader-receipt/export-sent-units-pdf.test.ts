@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildEstebanStockPdfFilename,
   buildSentUnitsPdfFilename,
   groupSentUnitsByBlueprint,
   totalUnitsFromRows,
@@ -65,6 +66,14 @@ describe("buildSentUnitsPdfFilename", () => {
   it("usa fecha fija", () => {
     expect(buildSentUnitsPdfFilename(new Date("2026-07-15T12:00:00Z"))).toBe(
       "cartas-en-envio-20260715.pdf",
+    );
+  });
+});
+
+describe("buildEstebanStockPdfFilename", () => {
+  it("usa prefijo cartas-esteban", () => {
+    expect(buildEstebanStockPdfFilename(new Date("2026-08-24T12:00:00Z"))).toBe(
+      "cartas-esteban-20260824.pdf",
     );
   });
 });

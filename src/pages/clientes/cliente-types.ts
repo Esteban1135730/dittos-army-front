@@ -77,11 +77,16 @@ export type ImportWhatsAppLineResult = {
     language: string;
     rareza: string | null;
     quantity: number;
+    unit_price_cop?: number | null;
+    card_name?: string | null;
   };
   requested: number;
   matched: number;
   stock_ids: string[];
   precio_cop_por_unidad: number[];
+  suggested_pvp_cop?: number | null;
+  card_name?: string;
+  image_url?: string | null;
   issues: string[];
 };
 
@@ -100,6 +105,52 @@ export type ImportWhatsAppPreviewResponse = {
 export type ImportWhatsAppImportResponse = ImportWhatsAppPreviewResponse & {
   created: { stock_id: string; reserva_id: string; precio: number; currency: string }[];
   skipped: { line_index: number; reason: string; requested: number; matched: number }[];
+  pvp_saved?: number;
+};
+
+export type ImportUpcomingWhatsAppVariant = {
+  rareza: string | null;
+  cupo: number;
+  card_name: string;
+  image_url: string;
+};
+
+export type ImportUpcomingWhatsAppLineResult = {
+  index: number;
+  raw: string;
+  parsed?: {
+    card_id: string;
+    language: string;
+    rareza: string | null;
+    quantity: number;
+    card_name: string | null;
+  };
+  requested: number;
+  matched: number;
+  resolved_rareza: string | null;
+  available_variants: ImportUpcomingWhatsAppVariant[];
+  suggested_pvp_cop: number | null;
+  card_name?: string;
+  image_url?: string;
+  issues: string[];
+};
+
+export type ImportUpcomingWhatsAppPreviewResponse = {
+  client_id: string;
+  client_name_from_message: string | null;
+  lines: ImportUpcomingWhatsAppLineResult[];
+  summary: {
+    lines_ok: number;
+    lines_partial: number;
+    lines_failed: number;
+    units_reserved: number;
+  };
+};
+
+export type ImportUpcomingWhatsAppImportResponse = ImportUpcomingWhatsAppPreviewResponse & {
+  created: { card_id: string; quantity: number; rareza: string | null }[];
+  skipped: { line_index: number; reason: string; requested: number; matched: number }[];
+  pvp_saved: number;
 };
 
 /** Línea de reserva pendiente (en camino), respuesta de GET /reserva/incoming */
@@ -116,6 +167,7 @@ export type ReservaIncomingItem = {
   rareza?: string;
   remaining_quantity?: number;
   language?: string;
+  precio_cop?: number | null;
 };
 
 export const ALERTA_HORAS_AMARILLO = 48;

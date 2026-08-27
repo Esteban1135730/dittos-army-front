@@ -55,7 +55,11 @@ import { NovedadDialog } from '../incoming-v2/novedad-dialog';
 import { HomologCreateTandaPanel } from '../incoming-v2/homolog-create-tanda-panel';
 import { useAutoVerifyByBlueprint } from './use-cardtrader-receipt-session';
 import { useArrivalTracking } from './use-arrival-tracking';
-import { exportSentUnitsByBlueprintToPdf } from './export-sent-units-pdf';
+import {
+  buildEstebanStockPdfFilename,
+  exportSentUnitsByBlueprintToPdf,
+} from './export-sent-units-pdf';
+import { filterSentUnitsByOwner } from './filter-sent-units-by-owner';
 import { ReceiptWizardLabelsStep } from './receipt-wizard-labels-step';
 import { ReceiptWizardPvpStep } from './receipt-wizard-pvp-step';
 import {
@@ -246,6 +250,7 @@ export default function CardtraderReceiptPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [novedadOpen, setNovedadOpen] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingEstebanPdf, setExportingEstebanPdf] = useState(false);
   const [appliedSentSearch, setAppliedSentSearch] = useState('');
   const [appliedTransitSearch, setAppliedTransitSearch] = useState('');
   const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'pending' | 'novedad'>(
@@ -547,6 +552,52 @@ export default function CardtraderReceiptPage() {
     }
   };
 
+  const handleExportEstebanStock = async () => {
+    setError(null);
+    setInfo(null);
+    if (units.length === 0) {
+      setError('No hay cartas en envío. Haz Sync CT primero.');
+      return;
+    }
+    const estebanUnits = filterSentUnitsByOwner(units, panelItems, 'esteban');
+    if (estebanUnits.length === 0) {
+      setError(
+        'Ninguna carta de este envío está marcada para Esteban (lote de tránsito).',
+      );
+      return;
+    }
+    setExportingEstebanPdf(true);
+    try {
+      const result = await exportSentUnitsByBlueprintToPdf(
+        estebanUnits.map((u) => ({
+          name: u.name,
+          language: u.language,
+          rareza: u.rareza,
+          blueprint_id: u.blueprint_id,
+          qty: 1,
+          imageUrl: resolveBlueprintImageSrc(u.blueprint_id, blueprintImages),
+        })),
+        {
+          title: 'Cartas Esteban (envío CardTrader)',
+          filename: buildEstebanStockPdfFilename(),
+          apiBase: apiBase(),
+          imageUrlByBlueprint: blueprintImages,
+        },
+      );
+      const imgNote =
+        result.imageFailures > 0
+          ? ` (${result.imageFailures} sin imagen)`
+          : '';
+      setInfo(
+        `PDF Esteban: ${result.rows} carta(s) · ${result.units} unidad(es)${imgNote}.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el PDF.');
+    } finally {
+      setExportingEstebanPdf(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     setError(null);
     setInfo(null);
@@ -736,6 +787,16 @@ export default function CardtraderReceiptPage() {
         </Typography>
       </Box>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => void handleExportEstebanStock()}
+          disabled={
+            exportingEstebanPdf || units.length === 0 || imagesLoading
+          }
+        >
+          {exportingEstebanPdf ? 'PDF Esteban…' : 'Exportar cartas Esteban'}
+        </Button>
         <Button component={Link} to="/cardtrader-transit" size="small" variant="text">
           Tránsito
         </Button>
@@ -794,6 +855,11 @@ export default function CardtraderReceiptPage() {
           {error ? (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
+            </Alert>
+          ) : null}
+          {info ? (
+            <Alert severity="success" sx={{ mb: 2 }} onClose={() => setInfo(null)}>
+              {info}
             </Alert>
           ) : null}
           <Button

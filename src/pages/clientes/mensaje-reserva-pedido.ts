@@ -2,6 +2,7 @@ import axios from "axios";
 import { formatCOP } from "../../utils/convert";
 import { apiUrl } from "../../config/api";
 import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
+import { operationalRarezaLabel } from "../../constants/item-rareza";
 
 const API_TCG = apiUrl("/tcg-dex/card/find");
 
@@ -45,13 +46,103 @@ export type PedidoLineInput = {
   quantity?: number;
 };
 
-/** Líneas en camino (sin precio en el mensaje). */
+/** Líneas en camino (PVP opcional, formato tienda). */
 export type PedidoIncomingLineInput = {
   card_id: string;
   card_name: string;
   quantity: number;
   rareza?: string | null;
+  language?: string;
+  precio_cop?: number | null;
 };
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  "no-importa": "No importa el idioma",
+  en: "Inglés",
+  es: "Español",
+  fr: "Francés",
+  de: "Alemán",
+  it: "Italiano",
+  pt: "Portugués",
+  ja: "Japonés",
+  ko: "Coreano",
+  zh: "Chino",
+  otro: "Otro",
+};
+
+function languageLabel(code?: string): string {
+  const key = (code ?? "").trim().toLowerCase();
+  if (!key) return "—";
+  return LANGUAGE_LABELS[key] ?? code!.trim();
+}
+
+function cardNumberFromCardId(cardId: string): string | undefined {
+  const id = (cardId ?? "").trim();
+  const dash = id.lastIndexOf("-");
+  return dash > 0 ? id.slice(dash + 1) : undefined;
+}
+
+function setIdFromCardId(cardId: string): string {
+  const id = (cardId ?? "").trim();
+  const dash = id.lastIndexOf("-");
+  return dash > 0 ? id.slice(0, dash) : id;
+}
+
+/** Misma forma que `formatStoreCardLine` en dittos-army-store. */
+export function formatStoreReservaCaminoLine(
+  line: PedidoIncomingLineInput,
+  expansion?: string,
+): string {
+  const lang = languageLabel(line.language);
+  const number = cardNumberFromCardId(line.card_id);
+  const expansionName = (expansion ?? "").trim() || setIdFromCardId(line.card_id);
+  const expansionPart = number
+    ? `Expansión: ${expansionName} (#${number})`
+    : `Expansión: ${expansionName}`;
+  const qty = Math.max(1, line.quantity || 1);
+  let pricePart = "";
+  if (line.precio_cop != null && line.precio_cop > 0) {
+    const unit = formatCOP(line.precio_cop);
+    pricePart =
+      qty > 1
+        ? ` | Precio: ${unit} c/u (${formatCOP(line.precio_cop * qty)} en esta línea)`
+        : ` | Precio: ${unit}`;
+  }
+  const rz = line.rareza?.trim();
+  const variant = rz ? ` — ${operationalRarezaLabel(rz)}` : "";
+  return `- ${line.card_name} | ID: ${line.card_id} | ${expansionPart} | Idioma: ${lang}${pricePart}${variant} x${qty}`;
+}
+
+export async function buildWhatsAppReservaCaminoText(opts: {
+  clientName: string;
+  lines: PedidoIncomingLineInput[];
+}): Promise<string> {
+  const uniqueIds = [...new Set(opts.lines.map((l) => l.card_id).filter(Boolean))];
+  const expansions = new Map<string, string | undefined>();
+  await Promise.all(
+    uniqueIds.map(async (id) => {
+      expansions.set(id, await fetchExpansionForCard(id));
+    }),
+  );
+  const formatted = opts.lines.map((l) =>
+    formatStoreReservaCaminoLine(l, expansions.get(l.card_id)),
+  );
+  const total = opts.lines.reduce((s, l) => {
+    const qty = Math.max(1, l.quantity || 1);
+    return s + (l.precio_cop != null && l.precio_cop > 0 ? l.precio_cop * qty : 0);
+  }, 0);
+  const parts = [
+    "Hola, te confirmo tu reserva de estas cartas en camino:",
+    "",
+    ...formatted,
+    "",
+  ];
+  if (total > 0) {
+    parts.push(`Total: ${formatCOP(total)}`);
+  }
+  parts.push(`A nombre de: ${opts.clientName}`);
+  return parts.join("\n");
+}
 
 export async function buildWhatsAppPedidoText(opts: {
   clientName: string;
@@ -90,13 +181,9 @@ export async function buildWhatsAppPedidoText(opts: {
     return s + l.precio * units;
   }, 0);
 
-  const lineasIncoming = (opts.incomingLines ?? []).map((l) => {
-    const exp = expansions.get(l.card_id);
-    const rare = l.rareza?.trim() ? ` — Rareza: ${l.rareza}` : "";
-    const exps = exp ? ` — Expansión: ${exp}` : "";
-    const qty = l.quantity > 1 ? ` ×${l.quantity}` : "";
-    return `• ${l.card_name}${qty}${rare}${exps}`;
-  });
+  const lineasIncoming = (opts.incomingLines ?? []).map((l) =>
+    formatStoreReservaCaminoLine(l, expansions.get(l.card_id)),
+  );
 
   const parts: string[] = [
     "¡Hola!",
@@ -115,7 +202,7 @@ export async function buildWhatsAppPedidoText(opts: {
   }
 
   if (opts.incomingLines && opts.incomingLines.length > 0) {
-    parts.push("Cartas en camino (a tu nombre, sin precio todavía):", ...lineasIncoming, "");
+    parts.push("Cartas en camino:", ...lineasIncoming, "");
   }
 
   parts.push("Cualquier duda me escribes. ¡Gracias!");

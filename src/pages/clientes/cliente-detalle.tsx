@@ -33,7 +33,10 @@ import {
 import {
   abrirWhatsAppConTexto,
   buildWhatsAppPedidoText,
+  buildWhatsAppReservaCaminoText,
 } from "./mensaje-reserva-pedido";
+import { incomingGroupPrecioCop } from "./incoming-pvp-field";
+import { incomingVariantGroupKey } from "../../utils/incoming-variant-group";
 import { downloadVentaClientePdf } from "./venta-cliente-pdf";
 import {
   aggregateReservasTotales,
@@ -44,7 +47,9 @@ import { resolveStockImageUrl } from "../../constants/bulk-product";
 import { extractAxiosErrorMessage } from "./extract-axios-error";
 import NuevoPedidoDialog from "./nuevo-pedido-dialog";
 import PedidoActivoPanel from "./pedido-activo-panel";
+import PedidoTiendaSection from "./pedido-tienda-section";
 import PedidoHistorialSection from "./pedido-historial-section";
+import ReservaActivoPanel from "./reserva-activo-panel";
 import { buildHistorialClienteView } from "./cliente-historial-merge";
 import { API_PEDIDO, findPedidoAbierto, findPedidoReservado, pedidoId, type PedidoItem } from "./pedido-types";
 import {
@@ -54,7 +59,6 @@ import {
 import { normalizeClientItem } from "./cliente-id";
 import { fetchPedidosByClient, isPedidoApiLikelyMissing } from "./fetch-pedidos";
 import {
-  clientesActionRowSx,
   clientesDetailGridSx,
   clientesMutedLabelSx,
   clientesPageSx,
@@ -80,6 +84,7 @@ export default function ClienteDetallePage() {
   const { convert } = useExchangeRates();
   const [formOpen, setFormOpen] = useState(false);
   const [pedidoDialog, setPedidoDialog] = useState<"create" | "edit" | null>(null);
+  const [pedidoCreateStoreId, setPedidoCreateStoreId] = useState<string | undefined>();
   const [pedidoEditTarget, setPedidoEditTarget] = useState<PedidoItem | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
@@ -222,6 +227,8 @@ export default function ClienteDetallePage() {
       card_name: x.card_name ?? "Carta",
       quantity: x.quantity,
       rareza: x.rareza,
+      language: x.language,
+      precio_cop: x.precio_cop,
     }));
     return buildWhatsAppPedidoText({
       clientName: client.nombre,
@@ -231,6 +238,73 @@ export default function ClienteDetallePage() {
     });
   };
 
+  const construirTextoReservaCamino = async (): Promise<string | null> => {
+    if (!client || incomingCliente.length === 0) return null;
+    const grouped = new Map<string, ReservaIncomingItem[]>();
+    for (const r of incomingCliente) {
+      const k = incomingVariantGroupKey(r.card_id ?? "", r.rareza, r.language ?? "");
+      const arr = grouped.get(k) ?? [];
+      arr.push(r);
+      grouped.set(k, arr);
+    }
+    return buildWhatsAppReservaCaminoText({
+      clientName: client.nombre,
+      lines: [...grouped.values()].map((rows) => ({
+        card_id: rows[0].card_id ?? "",
+        card_name: rows[0].card_name ?? "Carta",
+        quantity: rows.reduce((s, x) => s + x.quantity, 0),
+        language: rows[0].language,
+        rareza: rows[0].rareza,
+        precio_cop: incomingGroupPrecioCop(rows),
+      })),
+    });
+  };
+
+  const enviarReservaWhatsApp = async () => {
+    if (!client) return;
+    setWaBusy(true);
+    try {
+      const texto = await construirTextoReservaCamino();
+      if (texto == null) return;
+      abrirWhatsAppConTexto(client.celular, texto);
+      show("Se abrió WhatsApp con la reserva.", "success");
+    } finally {
+      setWaBusy(false);
+    }
+  };
+
+  const copiarReservaWhatsApp = async () => {
+    setCopiandoTexto(true);
+    try {
+      const texto = await construirTextoReservaCamino();
+      if (texto == null) return;
+      let copiado = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(texto);
+          copiado = true;
+        }
+      } catch {
+        copiado = false;
+      }
+      if (copiado) show("Mensaje de reserva copiado.", "success");
+      else show("No se pudo copiar al portapapeles.", "error");
+    } finally {
+      setCopiandoTexto(false);
+    }
+  };
+
+  const guardarPvpReserva = async (rows: ReservaIncomingItem[], cop: number | null) => {
+    for (const r of rows) {
+      await axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop });
+    }
+    if (clientId) {
+      await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
+    }
+    await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+    show(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
+  };
+
   const enviarWhatsApp = async () => {
     if (!client || !clientId) return;
     setWaBusy(true);
@@ -238,7 +312,7 @@ export default function ClienteDetallePage() {
       const texto = await construirTextoPedido();
       if (texto == null) return;
       abrirWhatsAppConTexto(client.celular, texto);
-      show("Se abrió WhatsApp con el resumen del pedido.", "success");
+      show("Se abrió WhatsApp con el resumen.", "success");
     } finally {
       setWaBusy(false);
     }
@@ -274,7 +348,7 @@ export default function ClienteDetallePage() {
         document.body.removeChild(ta);
       }
       if (copiado) {
-        show("Texto del pedido copiado al portapapeles.", "success");
+        show("Resumen copiado al portapapeles.", "success");
       } else {
         show("No se pudo copiar al portapapeles.", "error");
       }
@@ -443,19 +517,28 @@ export default function ClienteDetallePage() {
               {client.nombre}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Ficha de cliente · pedidos y reservas
+              Ficha de cliente · pedido y reserva
             </Typography>
           </Box>
         </Stack>
-        <Stack direction="row" alignItems="center" gap={1.5} flexShrink={0}>
+        <Stack direction="row" alignItems="center" gap={1.5} flexShrink={0} flexWrap="wrap" justifyContent="flex-end">
           <Button variant="outlined" onClick={() => setFormOpen(true)} sx={{ textTransform: "none", fontWeight: 600 }}>
             Editar cliente
           </Button>
           {!pedidoAbierto ? (
-            <Button variant="contained" onClick={() => setPedidoDialog("create")} sx={{ textTransform: "none", fontWeight: 600 }}>
+            <Button variant="contained" onClick={() => { setPedidoCreateStoreId(undefined); setPedidoDialog("create"); }} sx={{ textTransform: "none", fontWeight: 600 }}>
               Crear pedido
             </Button>
           ) : null}
+          <Button
+            variant={incomingCliente.length > 0 ? "outlined" : "contained"}
+            color={incomingCliente.length > 0 ? "inherit" : "info"}
+            component={Link}
+            to={`/clientes/${clientId}/reservar?camino=1`}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            {incomingCliente.length > 0 ? "Gestionar reserva" : "Crear reserva"}
+          </Button>
         </Stack>
       </Box>
 
@@ -475,13 +558,22 @@ export default function ClienteDetallePage() {
 
       <Box sx={clientesDetailGridSx}>
         <Stack spacing={3}>
+          {clientId ? (
+            <PedidoTiendaSection
+              clientId={clientId}
+              pedidoReservado={pedidoReservado}
+              onNeedCreatePedido={(storeId) => {
+                setPedidoCreateStoreId(storeId);
+                setPedidoDialog("create");
+              }}
+            />
+          ) : null}
           {pedidoAbierto ? (
             <PedidoActivoPanel
               pedido={pedidoAbierto}
               clientId={clientId}
               reservasConStock={reservasConStock}
               resumen={resumenReserva}
-              incomingCount={incomingCliente.reduce((s, x) => s + x.quantity, 0)}
               finalizando={finalizando}
               generandoPdfVenta={generandoPdfVenta}
               convert={convert}
@@ -514,15 +606,46 @@ export default function ClienteDetallePage() {
               formatFechaReserva={formatFechaReserva}
             />
           ) : (
-            <Paper variant="outlined" sx={{ ...clientesSectionPaperSx, ...clientesSectionBodySx, textAlign: "center" }}>
+            <Paper variant="outlined" sx={[clientesSectionPaperSx, clientesSectionBodySx, { textAlign: "center" }]}>
               <Typography variant="h6" fontWeight={700} gutterBottom>
                 Sin pedido activo
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 480, mx: "auto" }}>
-                Crea un pedido con lugar y fecha de entrega antes de reservar cartas del inventario.
+                Crea un pedido con lugar y fecha de entrega antes de agregar cartas del inventario.
               </Typography>
-              <Button variant="contained" onClick={() => setPedidoDialog("create")} sx={{ textTransform: "none", fontWeight: 600 }}>
+              <Button variant="contained" onClick={() => { setPedidoCreateStoreId(undefined); setPedidoDialog("create"); }} sx={{ textTransform: "none", fontWeight: 600 }}>
                 Crear pedido
+              </Button>
+            </Paper>
+          )}
+
+          {incomingCliente.length > 0 ? (
+            <ReservaActivoPanel
+              clientId={clientId!}
+              incoming={incomingCliente}
+              formatFechaReserva={formatFechaReserva}
+              onSavePvp={guardarPvpReserva}
+              onEnviarWhatsApp={() => void enviarReservaWhatsApp()}
+              onCopiarMensaje={() => void copiarReservaWhatsApp()}
+              waBusy={waBusy}
+              copiando={copiandoTexto}
+            />
+          ) : (
+            <Paper variant="outlined" sx={[clientesSectionPaperSx, clientesSectionBodySx, { textAlign: "center" }]}>
+              <Typography variant="h6" fontWeight={700} gutterBottom>
+                Sin reserva activa
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 480, mx: "auto" }}>
+                Aparta cartas que aún van en camino. La reserva no se mezcla con el pedido de stock.
+              </Typography>
+              <Button
+                variant="contained"
+                color="info"
+                component={Link}
+                to={`/clientes/${clientId}/reservar?camino=1`}
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
+                Crear reserva
               </Button>
             </Paper>
           )}
@@ -585,7 +708,7 @@ export default function ClienteDetallePage() {
                   onClick={copiarPedidoAlPortapapeles}
                   sx={{ textTransform: "none", fontWeight: 600 }}
                 >
-                  {copiandoTexto ? "Copiando…" : "Copiar mensaje del pedido"}
+                  {copiandoTexto ? "Copiando…" : "Copiar resumen"}
                 </Button>
                 {client.metodo_contacto === "facebook" && (
                   <Button
@@ -630,9 +753,11 @@ export default function ClienteDetallePage() {
           mode={pedidoDialog === "edit" ? "edit" : "create"}
           clientId={clientId}
           pedido={pedidoDialog === "edit" ? pedidoEditTarget ?? pedidoReservado : null}
+          initialStoreId={pedidoDialog === "create" ? pedidoCreateStoreId : undefined}
           onClose={() => {
             setPedidoDialog(null);
             setPedidoEditTarget(null);
+            setPedidoCreateStoreId(undefined);
           }}
         />
       ) : null}

@@ -8,7 +8,6 @@ import {
   Box,
   Button,
   Chip,
-  FormControlLabel,
   Paper,
   Snackbar,
   Stack,
@@ -40,7 +39,6 @@ import { clientItemId, normalizeClientList } from "./cliente-id";
 import { fetchPedidosByClient } from "./fetch-pedidos";
 import { entregaUrgenciaLabel } from "./pedido-ui-utils";
 import {
-  clientesActionRowSx,
   clientesDataGridSx,
   clientesKpiCardSx,
   clientesKpiGridSx,
@@ -54,7 +52,7 @@ import {
 
 export type { ClientItem } from "./cliente-types";
 
-type ListFilter = "todos" | "con_reserva" | "urgentes";
+type ListFilter = "todos" | "con_pedido" | "con_reserva" | "urgentes";
 
 export default function ClientesPage() {
   const navigate = useNavigate();
@@ -191,12 +189,13 @@ export default function ClientesPage() {
     if (termino) {
       list = list.filter((c) => (c.nombre ?? "").toLowerCase().includes(termino));
     }
-    if (listFilter === "con_reserva") {
-      list = list.filter(
-        (c) =>
-          (reservasPorCliente[clientItemId(c)] ?? 0) > 0 ||
-          (incomingUnitsPorCliente[clientItemId(c)] ?? 0) > 0,
-      );
+    if (listFilter === "con_pedido") {
+      list = list.filter((c) => {
+        const cid = clientItemId(c);
+        return Boolean(pedidoAbiertoPorCliente[cid]) || (reservasPorCliente[cid] ?? 0) > 0;
+      });
+    } else if (listFilter === "con_reserva") {
+      list = list.filter((c) => (incomingUnitsPorCliente[clientItemId(c)] ?? 0) > 0);
     } else if (listFilter === "urgentes") {
       list = list.filter((c) => alertLevelPorCliente(clientItemId(c)) != null);
     }
@@ -225,21 +224,25 @@ export default function ClientesPage() {
     busquedaNombre,
     listFilter,
     statsPorCliente,
+    pedidoAbiertoPorCliente,
     incomingUnitsPorCliente,
     reservasPorCliente,
     alertLevelPorCliente,
   ]);
 
   const listStats = useMemo(() => {
+    const conPedido = clientes.filter((c) => {
+      const cid = clientItemId(c);
+      return Boolean(pedidoAbiertoPorCliente[cid]) || (reservasPorCliente[cid] ?? 0) > 0;
+    }).length;
     const conReserva = clientes.filter(
-      (c) => (reservasPorCliente[clientItemId(c)] ?? 0) > 0,
+      (c) => (incomingUnitsPorCliente[clientItemId(c)] ?? 0) > 0,
     ).length;
     const urgentes = clientes.filter(
       (c) => alertLevelPorCliente(clientItemId(c)) != null,
     ).length;
-    const conPedidoAbierto = Object.values(pedidoAbiertoPorCliente).filter(Boolean).length;
-    return { conReserva, urgentes, conPedidoAbierto };
-  }, [clientes, reservasPorCliente, alertLevelPorCliente, pedidoAbiertoPorCliente]);
+    return { conPedido, conReserva, urgentes };
+  }, [clientes, reservasPorCliente, incomingUnitsPorCliente, alertLevelPorCliente, pedidoAbiertoPorCliente]);
 
   const getRowClassName = useCallback(
     (params: { id: string | number }) => {
@@ -274,6 +277,8 @@ export default function ClientesPage() {
         card_name: x.card_name ?? "Carta",
         quantity: x.quantity,
         rareza: x.rareza,
+        language: x.language,
+        precio_cop: x.precio_cop,
       }));
       const abierto =
         pedidoAbiertoPorCliente[cid] ??
@@ -285,7 +290,7 @@ export default function ClientesPage() {
         incomingLines: incomingLines.length ? incomingLines : undefined,
       });
       abrirWhatsAppConTexto(cliente.celular, texto);
-      showSnackbar("Se abrió WhatsApp con el resumen del pedido.", "success");
+      showSnackbar("Se abrió WhatsApp con el resumen.", "success");
     } finally {
       setContactoLoadingId(null);
     }
@@ -294,6 +299,11 @@ export default function ClientesPage() {
   const irReservar = (cliente: ClientItem, e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/clientes/${clientItemId(cliente)}/reservar`);
+  };
+
+  const irReservaCamino = (cliente: ClientItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/clientes/${clientItemId(cliente)}/reservar?camino=1`);
   };
 
   const irDetalle = (cliente: ClientItem, e?: React.MouseEvent) => {
@@ -329,21 +339,29 @@ export default function ClientesPage() {
               {c.metodo_contacto === "facebook" ? " · Messenger" : ""}
             </Typography>
             {n > 0 || inc > 0 ? (
-              <Chip
-                label={[
-                  n > 0 ? `${n} reservada${n === 1 ? "" : "s"}` : null,
-                  inc > 0 ? `${inc} incoming` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ mt: 0.5, height: 22 }}
-              />
+              <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                {n > 0 ? (
+                  <Chip
+                    label={`${n} en pedido`}
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ height: 22 }}
+                  />
+                ) : null}
+                {inc > 0 ? (
+                  <Chip
+                    label={`${inc} en reserva`}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ height: 22 }}
+                  />
+                ) : null}
+              </Stack>
             ) : (
               <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.25 }}>
-                Sin reservas
+                Sin pedido ni reserva
               </Typography>
             )}
           </Box>
@@ -364,7 +382,7 @@ export default function ClientesPage() {
           const n = reservasPorCliente[cid] ?? 0;
           return (
             <Typography variant="caption" color="text.secondary">
-              {n > 0 ? "Reservas sin pedido" : "—"}
+              {n > 0 ? "Cartas de stock sin pedido" : "—"}
             </Typography>
           );
         }
@@ -397,6 +415,37 @@ export default function ClientesPage() {
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {formatFechaTentativa(pedido.fecha_tentativa_entrega)}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      field: "reserva",
+      headerName: "Reserva en camino",
+      flex: 0.7,
+      minWidth: 160,
+      sortable: false,
+      renderCell: (params) => {
+        const c = params.row as ClientItem;
+        const inc = incomingUnitsPorCliente[clientItemId(c)] ?? 0;
+        if (inc === 0) {
+          return (
+            <Typography variant="caption" color="text.secondary">
+              —
+            </Typography>
+          );
+        }
+        return (
+          <Box sx={{ py: 0.5 }}>
+            <Chip
+              size="small"
+              label="En camino"
+              color="info"
+              sx={{ height: 22, mb: 0.25 }}
+            />
+            <Typography variant="caption" display="block" color="text.secondary">
+              {inc} unidad{inc === 1 ? "" : "es"}
             </Typography>
           </Box>
         );
@@ -450,21 +499,32 @@ export default function ClientesPage() {
     },
     {
       field: "reservar",
-      headerName: "Reservas",
-      width: 120,
+      headerName: "Acciones",
+      width: 168,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
         const c = params.row as ClientItem;
         return (
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={(e) => irReservar(c, e)}
-            sx={{ textTransform: "none", fontWeight: 600 }}
-          >
-            Gestionar
-          </Button>
+          <Stack spacing={0.5} onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={(e) => irReservar(c, e)}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Pedido
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              color="info"
+              onClick={(e) => irReservaCamino(c, e)}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Reserva
+            </Button>
+          </Stack>
         );
       },
     },
@@ -506,8 +566,8 @@ export default function ClientesPage() {
 
       <Box sx={clientesKpiGridSx}>
         {[
-          { label: "Con reservas", value: String(listStats.conReserva) },
-          { label: "Pedidos abiertos", value: String(listStats.conPedidoAbierto) },
+          { label: "Con pedido", value: String(listStats.conPedido) },
+          { label: "Con reserva", value: String(listStats.conReserva) },
           { label: "Requieren atención", value: String(listStats.urgentes), warn: listStats.urgentes > 0 },
           {
             label: "Ventas esperadas (COP)",
@@ -537,6 +597,7 @@ export default function ClientesPage() {
           }}
         >
           <Tab value="todos" label={`Todos · ${clientes.length}`} />
+          <Tab value="con_pedido" label={`Con pedido · ${listStats.conPedido}`} />
           <Tab value="con_reserva" label={`Con reserva · ${listStats.conReserva}`} />
           <Tab value="urgentes" label={`Urgentes · ${listStats.urgentes}`} />
         </Tabs>
@@ -575,7 +636,7 @@ export default function ClientesPage() {
 
       <Paper variant="outlined" sx={clientesSectionPaperSx}>
         <Box sx={{ width: "100%", overflowX: "auto" }}>
-          <Box sx={{ minWidth: 960 }}>
+              <Box sx={{ minWidth: 1100 }}>
             <DataGrid
               rows={sortedClientes}
               columns={columns}
@@ -588,7 +649,7 @@ export default function ClientesPage() {
               }}
               disableRowSelectionOnClick
               autoHeight
-              rowHeight={92}
+              rowHeight={108}
               sx={clientesDataGridSx}
             />
           </Box>

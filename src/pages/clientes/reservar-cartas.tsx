@@ -39,7 +39,16 @@ import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes
 import ClienteFormDialog from "./cliente-form-dialog";
 import NuevoPedidoDialog from "./nuevo-pedido-dialog";
 import PedidoContextBar from "./pedido-context-bar";
+import ReservaContextBar from "./reserva-context-bar";
+import PedidoTiendaSection from "./pedido-tienda-section";
+import IncomingPvpField, { incomingGroupPrecioCop } from "./incoming-pvp-field";
+import {
+  abrirWhatsAppConTexto,
+  buildWhatsAppReservaCaminoText,
+} from "./mensaje-reserva-pedido";
 import { extractAxiosErrorMessage } from "./extract-axios-error";
+import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
+import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
 import {
   API_PEDIDO,
   canReservarStock,
@@ -48,6 +57,7 @@ import {
   type PedidoItem,
 } from "./pedido-types";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
+import ImportWhatsAppReservaDialog from "./import-whatsapp-reserva-dialog";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import {
   isQuantityProduct,
@@ -112,7 +122,11 @@ export default function ReservarCartasPage() {
   const [cantidadStock, setCantidadStock] = useState<Record<string, string>>({});
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [pedidoDialog, setPedidoDialog] = useState<"create" | "edit" | null>(null);
+  const [pedidoCreateStoreId, setPedidoCreateStoreId] = useState<string | undefined>();
   const [importWaOpen, setImportWaOpen] = useState(false);
+  const [importWaReservaOpen, setImportWaReservaOpen] = useState(false);
+  const [waReservaBusy, setWaReservaBusy] = useState(false);
+  const [copiandoReserva, setCopiandoReserva] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -176,6 +190,7 @@ export default function ReservarCartasPage() {
   });
 
   const [searchParams] = useSearchParams();
+  const esReservaCamino = searchParams.get("camino") === "1";
   const caminoRef = useRef<HTMLDivElement | null>(null);
   const [busquedaCamino, setBusquedaCamino] = useState("");
   const [cantidadIncoming, setCantidadIncoming] = useState<Record<string, string>>({});
@@ -247,6 +262,15 @@ export default function ReservarCartasPage() {
     }));
   }, [incomingCliente]);
 
+  const reservaCardIds = useMemo(
+    () => [
+      ...incomingCatalog.map((r) => r.card_id),
+      ...incomingCliente.map((r) => r.card_id ?? ""),
+    ],
+    [incomingCatalog, incomingCliente],
+  );
+  const { detailsByCardId, isLoading: loadingCardImages } = useTcgdexCardDetails(reservaCardIds);
+
   const pendingForBatchItem = useCallback(
     (bid: string) =>
       allIncoming.filter((r) => r.batch_item_id === bid).reduce((s, r) => s + r.quantity, 0),
@@ -272,7 +296,7 @@ export default function ReservarCartasPage() {
         id,
         card_id: oldest.card_id,
         card_name: oldest.card_name,
-        image_url: oldest.image_url,
+        image_url: sorted.find((x) => x.image_url?.trim())?.image_url || oldest.image_url,
         language: oldest.language,
         rareza: oldest.rareza,
         unit_cost_cop_ref: weightedAverageUnitCostCop(sorted),
@@ -295,14 +319,6 @@ export default function ReservarCartasPage() {
     }
     return rows;
   }, [incomingGroupedCatalog, busquedaCamino]);
-
-  useEffect(() => {
-    if (searchParams.get("camino") !== "1") return;
-    const t = window.setTimeout(() => {
-      caminoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 350);
-    return () => window.clearTimeout(t);
-  }, [searchParams]);
 
   const stockDisponible = useMemo(
     () => sortReservaCatalogRows(filterStockInReservaCatalog(stockRaw)),
@@ -554,6 +570,63 @@ export default function ReservarCartasPage() {
     }
   };
 
+  const handleSaveIncomingPvp = async (rows: ReservaIncomingItem[], cop: number | null) => {
+    for (const r of rows) {
+      await axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop });
+    }
+    await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+    toast(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
+  };
+
+  const construirTextoReservaCamino = async (): Promise<string | null> => {
+    if (!client || incomingCliente.length === 0) return null;
+    return buildWhatsAppReservaCaminoText({
+      clientName: client.nombre,
+      lines: incomingClienteGrouped.map(({ rows, qtyTotal, head }) => ({
+        card_id: head?.card_id ?? "",
+        card_name: head?.card_name ?? "Carta",
+        quantity: qtyTotal,
+        language: head?.language,
+        rareza: head?.rareza,
+        precio_cop: incomingGroupPrecioCop(rows),
+      })),
+    });
+  };
+
+  const enviarReservaWhatsApp = async () => {
+    if (!client) return;
+    setWaReservaBusy(true);
+    try {
+      const texto = await construirTextoReservaCamino();
+      if (texto == null) return;
+      abrirWhatsAppConTexto(client.celular, texto);
+      toast("Se abrió WhatsApp con la reserva.", "success");
+    } finally {
+      setWaReservaBusy(false);
+    }
+  };
+
+  const copiarReservaWhatsApp = async () => {
+    setCopiandoReserva(true);
+    try {
+      const texto = await construirTextoReservaCamino();
+      if (texto == null) return;
+      let copiado = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(texto);
+          copiado = true;
+        }
+      } catch {
+        copiado = false;
+      }
+      if (copiado) toast("Mensaje de reserva copiado.", "success");
+      else toast("No se pudo copiar al portapapeles.", "error");
+    } finally {
+      setCopiandoReserva(false);
+    }
+  };
+
   const handleDeleteIncomingGroup = async (groupId: string, rows: ReservaIncomingItem[]) => {
     if (rows.length === 0) return;
     setIncomingMutatingId(groupId);
@@ -589,14 +662,23 @@ export default function ReservarCartasPage() {
       headerName: "",
       width: 100,
       sortable: false,
-      renderCell: (params) => (
-        <CardThumb
-          src={params.value as string}
-          alt=""
-          size="md"
-          enlargeOnHover
-        />
-      ),
+      renderCell: (params) => {
+        const src = resolveCardImageSrc(
+          params.row.card_id,
+          params.value as string,
+          detailsByCardId,
+          params.row.language,
+        );
+        return (
+          <CardThumb
+            src={src}
+            alt={params.row.card_name}
+            size="md"
+            pending={loadingCardImages && !src && looksLikeTcgdexCardId(params.row.card_id)}
+            enlargeOnHover={!!src}
+          />
+        );
+      },
     },
     {
       field: "card_name",
@@ -893,20 +975,55 @@ export default function ReservarCartasPage() {
           ← Detalle cliente
         </Button>
         <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1 }}>
-          Editar pedido · {client.nombre}
+          {esReservaCamino
+            ? incomingCliente.length > 0
+              ? "Editar reserva"
+              : "Crear reserva"
+            : "Editar pedido"}{" "}
+          · {client.nombre}
         </Typography>
       </Stack>
 
+      {esReservaCamino ? (
+        <ReservaContextBar
+          client={client}
+          units={incomingCliente.reduce((sum, row) => sum + (row.quantity ?? 0), 0)}
+          onEditCliente={abrirModalEditar}
+          onImportWhatsApp={() => setImportWaReservaOpen(true)}
+          onEnviarWhatsApp={() => void enviarReservaWhatsApp()}
+          onCopiarMensaje={() => void copiarReservaWhatsApp()}
+          waBusy={waReservaBusy}
+          copiando={copiandoReserva}
+          canEnviar={incomingCliente.length > 0}
+        />
+      ) : (
       <PedidoContextBar
         client={client}
         pedidoReservado={pedidoReservado}
         pedidoPagado={pedidoPagado}
-        onNuevoPedido={() => setPedidoDialog("create")}
+        onNuevoPedido={() => {
+          setPedidoCreateStoreId(undefined);
+          setPedidoDialog("create");
+        }}
         onEditEntrega={() => setPedidoDialog("edit")}
         onEditCliente={abrirModalEditar}
         onImportWhatsApp={() => setImportWaOpen(true)}
         canImport={canReservarStock(pedidoReservado)}
       />
+      )}
+
+      {!esReservaCamino ? (
+      <>
+      {clientId ? (
+        <PedidoTiendaSection
+          clientId={clientId}
+          pedidoReservado={pedidoReservado}
+          onNeedCreatePedido={(storeId) => {
+            setPedidoCreateStoreId(storeId);
+            setPedidoDialog("create");
+          }}
+        />
+      ) : null}
 
       <ImportWhatsAppPedidoDialog
         open={importWaOpen}
@@ -928,16 +1045,13 @@ export default function ReservarCartasPage() {
           mode={pedidoDialog === "edit" ? "edit" : "create"}
           clientId={clientId}
           pedido={pedidoReservado}
-          onClose={() => setPedidoDialog(null)}
+          initialStoreId={pedidoDialog === "create" ? pedidoCreateStoreId : undefined}
+          onClose={() => {
+            setPedidoDialog(null);
+            setPedidoCreateStoreId(undefined);
+          }}
         />
       ) : null}
-
-      <ClienteFormDialog
-        open={modalEditarCliente}
-        mode="edit"
-        client={client}
-        onClose={cerrarModalEditar}
-      />
 
       <Paper
         variant="outlined"
@@ -1184,24 +1298,34 @@ export default function ReservarCartasPage() {
           </Box>
         )}
       </Paper>
+      </>
+      ) : null}
 
+      {esReservaCamino ? (
       <Paper
         ref={caminoRef}
         variant="outlined"
-        sx={{ p: 2.5, borderRadius: 2, bgcolor: "info.50", borderColor: "info.light" }}
+        sx={{ p: 2.5, borderRadius: 2, borderColor: "info.light", borderWidth: 1 }}
       >
         <Typography variant="subtitle1" fontWeight={700} gutterBottom color="info.dark">
-          Cartas en camino (sin precio hasta llegada)
+          Reserva en camino
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          El cupo por variante (misma carta, rareza e idioma) agrupa varios lotes; el costo mostrado es el promedio
-          ponderado por unidades restantes en esos lotes.
+          El PVP de cada carta reservada es editable y se incluye al enviar el mensaje. El cupo por
+          variante agrupa lotes; el costo mostrado es el promedio ponderado por unidades restantes.
         </Typography>
 
         {incomingCliente.length > 0 ? (
           <Stack spacing={1.5} sx={{ mb: 3 }}>
-            <Typography variant="subtitle2">Tu pedido en camino</Typography>
-            {incomingClienteGrouped.map(({ groupId, rows, qtyTotal, head }) => (
+            <Typography variant="subtitle2">Tu reserva en camino</Typography>
+            {incomingClienteGrouped.map(({ groupId, rows, qtyTotal, head }) => {
+              const src = resolveCardImageSrc(
+                head?.card_id,
+                head?.image_url,
+                detailsByCardId,
+                head?.language,
+              );
+              return (
               <Stack
                 key={groupId}
                 direction={{ xs: "column", sm: "row" }}
@@ -1210,10 +1334,11 @@ export default function ReservarCartasPage() {
                 sx={{ py: 1, borderBottom: 1, borderColor: "divider" }}
               >
                 <CardThumb
-                  src={head?.image_url || undefined}
+                  src={src}
                   alt={head?.card_name ?? "Carta"}
-                  size="md"
-                  enlargeOnHover
+                  size="lg"
+                  pending={loadingCardImages && !src && looksLikeTcgdexCardId(head?.card_id)}
+                  enlargeOnHover={!!src}
                 />
                 <Box flex={1} minWidth={0}>
                   <Typography fontWeight={600} noWrap title={head?.card_name}>
@@ -1227,6 +1352,11 @@ export default function ReservarCartasPage() {
                       : ""}
                   </Typography>
                 </Box>
+                <IncomingPvpField
+                  valueCop={incomingGroupPrecioCop(rows)}
+                  disabled={incomingMutatingId === groupId}
+                  onSave={(cop) => handleSaveIncomingPvp(rows, cop)}
+                />
                 <Button
                   color="error"
                   variant="outlined"
@@ -1238,7 +1368,8 @@ export default function ReservarCartasPage() {
                   {incomingMutatingId === groupId ? "…" : "Quitar"}
                 </Button>
               </Stack>
-            ))}
+              );
+            })}
           </Stack>
         ) : null}
 
@@ -1292,6 +1423,27 @@ export default function ReservarCartasPage() {
           </Box>
         )}
       </Paper>
+      ) : null}
+
+      <ImportWhatsAppReservaDialog
+        open={importWaReservaOpen}
+        onClose={() => setImportWaReservaOpen(false)}
+        client={client}
+        onImported={async (summary) => {
+          await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+          if (clientId) {
+            await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
+          }
+          toast(summary, "success");
+        }}
+      />
+
+      <ClienteFormDialog
+        open={modalEditarCliente}
+        mode="edit"
+        client={client}
+        onClose={cerrarModalEditar}
+      />
 
       <Snackbar
         open={snackbar.open}

@@ -49,7 +49,7 @@ En Clientes, el operador:
 - Quitar chip/edición de tienda del cliente.
 - Si no hay pedido `reservado`: Alert + botón **Nuevo pedido** (dialog):
   - Checkbox «Entrega en tienda».
-  - Si sí: select de las 7 tiendas (nombre + dirección en helper text).
+  - Si sí: catálogo de tiendas (nombre + dirección); incluye Real Burgers.
   - Si no: ciudad, dirección o punto, notas.
   - Date picker / input date **Fecha tentativa de entrega** (requerida).
 - Si hay pedido `reservado`: mostrar entrega y fecha; permitir **Editar entrega**; grid de stock como hoy, `POST /reserva` con `pedido_id`.

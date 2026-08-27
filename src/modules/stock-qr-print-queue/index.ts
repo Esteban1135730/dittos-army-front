@@ -9,4 +9,5 @@ export {
   type ExpandQueueResult,
 } from "./expand-queue-to-export-rows";
 export { filterStockForSearch } from "./filter-stock-for-search";
+export { sortPrintQueueByName } from "./sort-print-queue-by-name";
 export { usePrintQueue } from "./use-print-queue";

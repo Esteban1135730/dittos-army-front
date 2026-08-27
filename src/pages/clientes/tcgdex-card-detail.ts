@@ -170,3 +170,15 @@ export function lookupTcgdexDetail(
   }
   return undefined;
 }
+
+/** Imagen guardada, o miniatura TCGdex si el lote no trae URL. */
+export function resolveCardImageSrc(
+  cardId: string | null | undefined,
+  imageUrl: string | null | undefined,
+  details: TcgdexDetailsByCardId | Map<string, TcgdexCardDetail>,
+  language?: string | null,
+): string {
+  const stored = String(imageUrl ?? "").trim();
+  if (stored) return stored;
+  return lookupTcgdexDetail(cardId, details, language)?.imageUrl?.trim() ?? "";
+}

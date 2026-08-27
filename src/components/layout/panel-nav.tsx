@@ -81,7 +81,7 @@ const SECTIONS: NavSection[] = [
       { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
       { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
       { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
-      { to: "/cotizar/pedido-cliente", label: "Pedido CardTrader", icon: IconCart },
+      { to: "/cotizar/pedido-cliente", label: "Pegar cotización", icon: IconCart },
     ],
   },
   {

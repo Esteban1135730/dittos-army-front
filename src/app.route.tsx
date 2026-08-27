@@ -188,6 +188,14 @@ export default function AppRouter() {
           }
         />
         <Route
+          path="/cotizar/pedido-cliente/:sessionId"
+          element={
+            <LayoutPage>
+              <CotizarPedidoClientePage />
+            </LayoutPage>
+          }
+        />
+        <Route
           path="/cardtrader-transit"
           element={
             <LayoutPage>

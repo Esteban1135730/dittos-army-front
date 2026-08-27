@@ -11,6 +11,8 @@ export type PedidoProgressSnapshot = {
   /** Unidades ya añadidas al carrito por línea (puede ser parcial por stock). */
   addedQtyByLineId?: Record<string, number>;
   activeLineId: string | null;
+  /** Líneas ya resueltas (URLs o cotización WhatsApp). Si falta, se reparsea `rawPaste` como URLs. */
+  lines?: import("./parse-cardtrader-pedido").ParsedPedidoLine[];
 };
 
 function getLocalStorage(): Storage | null {

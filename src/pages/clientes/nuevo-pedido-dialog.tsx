@@ -3,7 +3,6 @@ import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
-  Box,
   Button,
   Checkbox,
   Dialog,
@@ -23,12 +22,15 @@ import {
   type PedidoWriteBody,
   type TiendaEntregaCatalogItem,
 } from "./pedido-types";
+import { TiendaEntregaPicker } from "./tienda-entrega-picker";
 
 type Props = {
   open: boolean;
   mode: "create" | "edit";
   clientId: string;
   pedido?: PedidoItem | null;
+  /** Preselección al crear desde la sección de tiendas. */
+  initialStoreId?: string;
   onClose: () => void;
   onSaved?: (pedido: PedidoItem) => void;
 };
@@ -41,52 +43,12 @@ function todayLocalIso(): string {
   return `${y}-${m}-${d}`;
 }
 
-function TiendaCard({
-  tienda,
-  selected,
-  onSelect,
-}: {
-  tienda: TiendaEntregaCatalogItem;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <Box
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      sx={{
-        p: 1.5,
-        borderRadius: 2,
-        border: 2,
-        borderColor: selected ? "primary.main" : "divider",
-        bgcolor: selected ? "action.selected" : "background.paper",
-        cursor: "pointer",
-        transition: "border-color 0.15s",
-        "&:hover": { borderColor: selected ? "primary.main" : "primary.light" },
-      }}
-    >
-      <Typography variant="subtitle2" fontWeight={700}>
-        {tienda.name}
-      </Typography>
-      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
-        {tienda.address}
-      </Typography>
-    </Box>
-  );
-}
-
 export default function NuevoPedidoDialog({
   open,
   mode,
   clientId,
   pedido,
+  initialStoreId,
   onClose,
   onSaved,
 }: Props) {
@@ -122,13 +84,13 @@ export default function NuevoPedidoDialog({
       setFecha(pedido.fecha_tentativa_entrega ?? todayLocalIso());
     } else {
       setEntregaEnTienda(true);
-      setStoreId(tiendas[0]?.id ?? "");
+      setStoreId(initialStoreId || tiendas[0]?.id || "");
       setCiudad("Bogotá");
       setPunto("");
       setNotas("");
       setFecha(todayLocalIso());
     }
-  }, [open, mode, pedido?.id, tiendas]);
+  }, [open, mode, pedido?.id, tiendas, initialStoreId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,7 +151,7 @@ export default function NuevoPedidoDialog({
     <Dialog
       open={open}
       onClose={guardando ? undefined : onClose}
-      maxWidth="sm"
+      maxWidth="md"
       fullWidth
       PaperProps={{ sx: { borderRadius: 2 } }}
     >
@@ -218,16 +180,11 @@ export default function NuevoPedidoDialog({
                 <Typography variant="subtitle2" color="text.secondary">
                   Elige tienda en Bogotá
                 </Typography>
-                <Stack spacing={1}>
-                  {tiendas.map((t) => (
-                    <TiendaCard
-                      key={t.id}
-                      tienda={t}
-                      selected={storeId === t.id}
-                      onSelect={() => setStoreId(t.id)}
-                    />
-                  ))}
-                </Stack>
+                <TiendaEntregaPicker
+                  tiendas={tiendas}
+                  selectedId={storeId}
+                  onSelect={setStoreId}
+                />
               </Stack>
             ) : (
               <>

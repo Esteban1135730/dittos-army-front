@@ -6,6 +6,7 @@ import {
   looksLikeTcgdexCardId,
   lookupTcgdexDetail,
   mapTcgdexApiToDetail,
+  resolveCardImageSrc,
   tcgdxCardIdCandidates,
 } from "./tcgdex-card-detail";
 
@@ -94,5 +95,23 @@ describe("tcgdex-card-detail", () => {
     };
     const map = { "neo3-032": detail, "neo3-32": detail };
     expect(lookupTcgdexDetail("neo3-032", map)?.name).toBe("Test");
+  });
+
+  it("resolveCardImageSrc prioriza la URL guardada y cae a TCGdex", () => {
+    const detail = {
+      id: "me05-066",
+      name: "Pikipek",
+      imageUrl: "https://tcgdex.example/pikipek.png",
+      imageLargeUrl: "",
+      rarity: "",
+      category: "",
+      setLabel: "",
+    };
+    const map = { "me05-066": detail };
+    expect(resolveCardImageSrc("me05-066", "https://lote/local.png", map)).toBe(
+      "https://lote/local.png",
+    );
+    expect(resolveCardImageSrc("me05-066", "", map)).toBe("https://tcgdex.example/pikipek.png");
+    expect(resolveCardImageSrc("me05-066", null, {})).toBe("");
   });
 });

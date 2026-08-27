@@ -1,4 +1,4 @@
-import { normalizeOperationalRareza } from "../../constants/item-rareza";
+import { normalizeOperationalRareza } from "../constants/item-rareza";
 
 /** Agrupa por carta + rareza operativa + idioma (ignora el lote). */
 export function incomingVariantGroupKey(

@@ -7,6 +7,10 @@ import { paginatePedidoLineItems } from "./pedido-print-sheets";
 import { mergePedidoSelection } from "./pedido-print-selection";
 import { API_CLIENT, API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
 import { API_PEDIDO, type PedidoItem } from "./pedido-types";
+import {
+  groupReservasForPrint,
+  pickPedidoForPrintCard,
+} from "./group-reservas-for-print";
 import { abrirWhatsAppConTexto, buildWhatsAppPedidoText } from "./mensaje-reserva-pedido";
 import { descripcionEntrega, formatFechaTentativa } from "./pedido-entrega-label";
 import { reservaLineQuantity } from "./clientes-resumen-pedidos";
@@ -78,26 +82,13 @@ export default function ImprimirPedidosPage() {
     return map;
   }, [clientes]);
 
-  const reservaGroups = useMemo(() => {
-    const map = new Map<string, { clientId: string; pedidoId?: string; items: ReservaItem[] }>();
-    reservas.forEach((r) => {
-      const pedidoId = r.pedido_id?.trim();
-      const key = pedidoId || `legacy-${r.client_id}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.items.push(r);
-      } else {
-        map.set(key, { clientId: r.client_id, pedidoId, items: [r] });
-      }
-    });
-    return [...map.entries()];
-  }, [reservas]);
+  const reservaGroups = useMemo(
+    () => groupReservasForPrint(reservas),
+    [reservas],
+  );
 
   const pedidoIds = useMemo(
-    () =>
-      reservaGroups
-        .map(([, g]) => g.pedidoId)
-        .filter((id): id is string => Boolean(id)),
+    () => [...new Set(reservaGroups.flatMap((g) => g.pedidoIds))],
     [reservaGroups],
   );
 
@@ -121,10 +112,10 @@ export default function ImprimirPedidosPage() {
 
   const pedidos: PedidoCard[] = useMemo(() => {
     return reservaGroups
-      .map(([key, group]) => {
+      .map((group) => {
         const client = clientesMap[group.clientId];
         if (!client) return null;
-        const pedido = group.pedidoId ? pedidoById[group.pedidoId] : undefined;
+        const pedido = pickPedidoForPrintCard(group.pedidoIds, pedidoById);
         const rows = group.items.map((r) => {
           const units = reservaLineQuantity(r.quantity);
           return {
@@ -134,7 +125,7 @@ export default function ImprimirPedidosPage() {
         });
         const total = rows.reduce((sum, i) => sum + i.precio, 0);
         return {
-          key,
+          key: group.clientId,
           client,
           entregaLabel: pedido
             ? descripcionEntrega(pedido)

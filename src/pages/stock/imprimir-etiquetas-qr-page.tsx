@@ -31,6 +31,7 @@ import {
   expandQueueToExportRows,
   filterStockForSearch,
   formatQrLabelPageStatsMessage,
+  sortPrintQueueByName,
   usePrintQueue,
 } from "../../modules/stock-qr-print-queue";
 import {
@@ -271,6 +272,39 @@ export default function ImprimirEtiquetasQrPage() {
     [stock, busqueda],
   );
 
+  const receiptItemByStockId = useMemo(() => {
+    const map = new Map<string, StockListItem>();
+    for (const [ownerId, item] of receiptStockByOwnerId) {
+      const id = ownerId.slice(ownerId.indexOf(":") + 1);
+      if (id) map.set(id, item);
+    }
+    return map;
+  }, [receiptStockByOwnerId]);
+
+  const printQueueNameByStockId = useMemo(() => {
+    const map = new Map<string, string>();
+    const setName = (id: string, name: string | undefined) => {
+      const key = String(id ?? "").trim().toLowerCase();
+      const n = String(name ?? "").trim();
+      if (key && n) map.set(key, n);
+    };
+    for (const [id, row] of mergedExportByStockId) {
+      setName(id, row.card_name);
+    }
+    for (const [id, item] of stockById) {
+      setName(id, item.card_name);
+    }
+    for (const [id, item] of receiptItemByStockId) {
+      setName(id, item.card_name);
+    }
+    return map;
+  }, [mergedExportByStockId, stockById, receiptItemByStockId]);
+
+  const sortedQueue = useMemo(
+    () => sortPrintQueueByName(queue, printQueueNameByStockId),
+    [queue, printQueueNameByStockId],
+  );
+
   const pageStats = useMemo(
     () => computeQrLabelPageStats(totalLabels),
     [totalLabels],
@@ -378,7 +412,7 @@ export default function ImprimirEtiquetasQrPage() {
 
   const resolveQueueRows = () => {
     const { rows, omittedCount } = expandQueueToExportRows(
-      queue,
+      sortedQueue,
       mergedExportByStockId,
     );
     return { rows, omittedCount };
@@ -756,13 +790,14 @@ export default function ImprimirEtiquetasQrPage() {
             </p>
           ) : (
             <ul className="space-y-3 flex-1 min-h-0 overflow-y-auto mb-4 pr-1">
-              {queue.map((entry) => {
+              {sortedQueue.map((entry) => {
                 const stockKey = String(entry.stockId ?? "")
                   .trim()
                   .toLowerCase();
-                const item = stockById.get(stockKey);
-                const exportRow = exportByStockId.get(stockKey);
-                const elegible = eligibleIds.has(stockKey);
+                const item =
+                  stockById.get(stockKey) ?? receiptItemByStockId.get(stockKey);
+                const exportRow = mergedExportByStockId.get(stockKey);
+                const elegible = exportRow != null;
                 const imageUrl = item?.image_url;
 
                 return (
