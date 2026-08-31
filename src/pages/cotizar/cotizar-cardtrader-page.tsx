@@ -89,6 +89,13 @@ import {
 } from "@mui/material";
 
 import { API_BASE } from "../../config/api";
+import { useOwner } from "../../modules/owner";
+import {
+  buildCartExportPayload,
+  copyCartExportToClipboard,
+  downloadCartExport,
+  extractCartItemsFromResponse,
+} from "../../utils/cardtrader-cart-transfer";
 const CARDTRADER_POKEMON_GAME_ID = 5;
 const BLUEPRINTS_PER_PAGE = 96;
 const OFFERS_PER_PAGE = 12;
@@ -604,6 +611,7 @@ function CopPriceRow({
 
 export default function CotizarCardtraderPage() {
   const queryClient = useQueryClient();
+  const { owner } = useOwner();
   const { convert, rates, isPrompting, handleSaveRates } = useExchangeRates();
   const [rateInputs, setRateInputs] = useState({
     euroToCop: "",
@@ -634,6 +642,8 @@ export default function CotizarCardtraderPage() {
   );
   const [exportingCartPdf, setExportingCartPdf] = useState(false);
   const [exportingCartPvpPropioPdf, setExportingCartPvpPropioPdf] = useState(false);
+  const [exportingCartJson, setExportingCartJson] = useState(false);
+  const [importingEstebanCart, setImportingEstebanCart] = useState(false);
   const [pvpPropioDraftById, setPvpPropioDraftById] = useState<Record<number, string>>({});
   const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
@@ -1050,7 +1060,7 @@ export default function CotizarCardtraderPage() {
   }, [products, currentOffersPage]);
 
   const cartQuery = useQuery({
-    queryKey: ["cardtrader", "cart"],
+    queryKey: ["cardtrader", "cart", owner],
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/cart`);
       return res.data as CartResponse;
@@ -1488,6 +1498,76 @@ export default function CotizarCardtraderPage() {
       setExportingCartPvpPropioPdf(false);
     }
   }, [buildCartPdfLines, hasAnyPvpPropio]);
+
+  const handleExportCartJson = useCallback(async () => {
+    if (!lines.length) {
+      setSnack({ msg: "El carrito está vacío.", severity: "error" });
+      return;
+    }
+
+    setExportingCartJson(true);
+    try {
+      const metaByProductId = Object.fromEntries(
+        lines.map((line) => [line.productId, line.meta ?? {}]),
+      );
+      const payload = buildCartExportPayload({
+        cart: cartQuery.data,
+        sourceOwner: owner,
+        metaByProductId,
+      });
+      downloadCartExport(payload);
+      await copyCartExportToClipboard(payload);
+      setSnack({
+        msg: "Carrito exportado (JSON descargado y copiado al portapapeles).",
+        severity: "success",
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "No se pudo exportar el carrito.";
+      setSnack({ msg, severity: "error" });
+    } finally {
+      setExportingCartJson(false);
+    }
+  }, [cartQuery.data, lines, owner]);
+
+  const handleImportEstebanCart = useCallback(async () => {
+    setImportingEstebanCart(true);
+    try {
+      const res = await axios.get(`${API_BASE}/cardtrader/cart`, {
+        ownerOverride: "esteban",
+      });
+      const items = extractCartItemsFromResponse(res.data as CartResponse);
+      if (!items.length) {
+        setSnack({ msg: "El carrito de Esteban está vacío.", severity: "error" });
+        return;
+      }
+
+      for (const item of items) {
+        await axios.post(`${API_BASE}/cardtrader/cart/items`, {
+          product_id: item.product_id,
+          quantity: item.quantity,
+        });
+        if (item.meta) {
+          upsertCardtraderCartMeta(item.product_id, item.meta);
+        }
+      }
+
+      invalidateCart();
+      setSnack({
+        msg: `Importadas ${items.length} línea(s) del carrito de Esteban.`,
+        severity: "success",
+      });
+    } catch (e: unknown) {
+      const msg =
+        axios.isAxiosError(e) && typeof e.response?.data?.message === "string"
+          ? e.response.data.message
+          : e instanceof Error
+            ? e.message
+            : "No se pudo importar el carrito de Esteban.";
+      setSnack({ msg, severity: "error" });
+    } finally {
+      setImportingEstebanCart(false);
+    }
+  }, [invalidateCart]);
 
   const configError =
     axios.isAxiosError(expansionsQuery.error) && expansionsQuery.error.response?.status === 503;
@@ -2595,6 +2675,34 @@ export default function CotizarCardtraderPage() {
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                 Cotizando: {blueprint.name_en ?? blueprint.name ?? blueprint.id}
               </Typography>
+            )}
+            {(owner === "esteban" || owner === "pablo") && (
+              <Stack spacing={0.75} sx={{ mt: 1.25 }}>
+                {owner === "esteban" ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    disabled={exportingCartJson || lines.length === 0}
+                    onClick={() => void handleExportCartJson()}
+                  >
+                    {exportingCartJson ? "Exportando…" : "Exportar carrito"}
+                  </Button>
+                ) : null}
+                {owner === "pablo" ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="secondary"
+                    fullWidth
+                    disabled={importingEstebanCart}
+                    onClick={() => void handleImportEstebanCart()}
+                  >
+                    {importingEstebanCart ? "Importando…" : "Importar carrito de Esteban"}
+                  </Button>
+                ) : null}
+              </Stack>
             )}
             {lines.length > 0 && (
               <Stack spacing={0.75} sx={{ mt: 1.25 }}>
