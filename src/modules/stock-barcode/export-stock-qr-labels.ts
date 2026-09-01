@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import type { StockQrExportRow } from "./types";
+import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { formatCOP } from "../../utils/convert";
 
 export type QrLabelsPrintOptions = {
@@ -217,11 +218,11 @@ export async function openStockQrLabelsPrintWindow(
 }
 
 /**
- * Rollo adhesivo 50×25 mm (medido en 632-L58P).
+ * Rollo adhesivo 50×30 mm (632-L58P).
  * Constantes editables si el rollo físico cambia.
  */
 export const THERMAL_QR_LABEL_WIDTH_MM = 50;
-export const THERMAL_QR_LABEL_HEIGHT_MM = 25;
+export const THERMAL_QR_LABEL_HEIGHT_MM = 30;
 
 /**
  * Una etiqueta = una página CSS; un solo `window.print()`.
@@ -237,8 +238,8 @@ export async function openStockQrLabelsThermalPrintWindow(
 
   const W = THERMAL_QR_LABEL_WIDTH_MM;
   const H = THERMAL_QR_LABEL_HEIGHT_MM;
-  /** QR compacto: deja ancho al texto; alto 25 mm. */
-  const qrMm = 18;
+  /** QR compacto: deja ancho al texto; alto 30 mm. */
+  const qrMm = 20;
 
   const cards = await Promise.all(
     rows.map(async (row) => ({
@@ -415,9 +416,11 @@ export async function openStockQrLabelsThermalPrintWindow(
         const name = (c.card_name || "").trim() || "Sin nombre";
         const exp = (c.expansion || "").trim();
         const lang = (c.language || "").trim();
+        const rz = (c.rareza || "").trim();
         const metaParts: string[] = [];
         if (exp) metaParts.push(exp);
         if (lang && lang !== "—") metaParts.push(lang);
+        if (rz) metaParts.push(operationalRarezaLabel(rz));
         return `
       <div class="label">
         <div class="label-inner">

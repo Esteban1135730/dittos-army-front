@@ -38,6 +38,8 @@ export type TiendaEntregaCatalogItem = {
   id: string;
   name: string;
   address: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type PedidoWriteBody = {

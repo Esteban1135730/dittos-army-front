@@ -33,6 +33,7 @@ type Props = {
   initialStoreId?: string;
   onClose: () => void;
   onSaved?: (pedido: PedidoItem) => void;
+  onError?: (err: unknown) => void;
 };
 
 function todayLocalIso(): string {
@@ -51,6 +52,7 @@ export default function NuevoPedidoDialog({
   initialStoreId,
   onClose,
   onSaved,
+  onError,
 }: Props) {
   const queryClient = useQueryClient();
   const [entregaEnTienda, setEntregaEnTienda] = useState(true);
@@ -138,9 +140,11 @@ export default function NuevoPedidoDialog({
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
+      await queryClient.invalidateQueries({ queryKey: ["pedido-calendario"] });
       onSaved?.(saved);
       onClose();
     } catch (err) {
+      onError?.(err);
       setErrorMsg(extractAxiosErrorMessage(err, "No se pudo guardar el pedido."));
     } finally {
       setGuardando(false);

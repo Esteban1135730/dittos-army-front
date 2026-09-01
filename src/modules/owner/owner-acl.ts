@@ -11,10 +11,12 @@ const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/add-stock", feature: "agregar-stock" },
   { prefix: "/stock", feature: "stock" },
   { prefix: "/propiedad", feature: "propiedad" },
+  { prefix: "/envios", feature: "clientes" },
   { prefix: "/clientes", feature: "clientes" },
   { prefix: "/cotizar", feature: "cotizar" },
   { prefix: "/cardtrader", feature: "cardtrader" },
   { prefix: "/incoming-v2", feature: "incoming" },
+  { prefix: "/generar-pdf-grupos", feature: "inicio" },
   { prefix: "/", feature: "inicio" },
 ];
 

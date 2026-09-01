@@ -86,7 +86,9 @@ function PedidoHistorialCard({
           Sin líneas registradas para este pedido.
         </Typography>
       )}
-      {pedido.status === "reservado" && onEditEntrega && !fromVentas ? (
+      {(pedido.status === "reservado" || pedido.status === "pagado") &&
+      onEditEntrega &&
+      !fromVentas ? (
         <Button size="small" variant="outlined" onClick={() => onEditEntrega(pedido)} sx={{ textTransform: "none", fontWeight: 600 }}>
           Editar entrega
         </Button>
@@ -172,7 +174,12 @@ export default function PedidoHistorialSection({
   const [filter, setFilter] = useState<PedidoHistorialFilter>("todos");
 
   const pedidosOnly = useMemo(
-    () => items.map(({ historicoSource: _s, ventasIds: _v, ...p }) => p),
+    () =>
+      items.map(({ historicoSource, ventasIds, ...p }) => {
+        void historicoSource;
+        void ventasIds;
+        return p;
+      }),
     [items],
   );
 

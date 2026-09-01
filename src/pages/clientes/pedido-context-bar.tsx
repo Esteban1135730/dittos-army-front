@@ -70,7 +70,7 @@ export default function PedidoContextBar({
               </Alert>
             ) : null}
             <Stack direction="row" flexWrap="wrap" gap={1}>
-              {pedidoReservado ? (
+              {pedidoReservado || pedidoPagado ? (
                 <Button variant="outlined" size="small" onClick={onEditEntrega}>
                   Editar entrega
                 </Button>

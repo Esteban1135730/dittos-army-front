@@ -441,7 +441,7 @@ export default function ImprimirEtiquetasQrPage() {
 
       if (mode === "thermal") {
         await openStockQrLabelsThermalPrintWindow(rows, {
-          subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · térmica 50×25 mm`,
+          subtitle: `Cola manual · ${rows.length} etiqueta${rows.length === 1 ? "" : "s"} · térmica 50×30 mm`,
         });
       } else {
         await openStockQrLabelsPrintWindow(rows, {
@@ -879,7 +879,7 @@ export default function ImprimirEtiquetasQrPage() {
             >
               {imprimiendo === "thermal"
                 ? "Generando…"
-                : "Imprimir térmica (50×25)"}
+                : "Imprimir térmica (50×30)"}
             </Button>
             <Button
               variant="outlined"

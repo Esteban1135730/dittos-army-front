@@ -40,6 +40,8 @@ const StockReviewResolvePage = lazy(() => import("./pages/stock/revision/resolve
 const StockLostCardsPage = lazy(() => import("./pages/stock/lost-cards"));
 const ImprimirEtiquetasQrPage = lazy(() => import("./pages/stock/imprimir-etiquetas-qr-page"));
 const MetricasPage = lazy(() => import("./pages/metricas/metricas-page"));
+const EnviosPage = lazy(() => import("./pages/envios/envios"));
+const PdfGruposPage = lazy(() => import("./pages/pdf-grupos/pdf-grupos-page"));
 
 function RedirectLegacyIncomingShipRound() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -268,6 +270,14 @@ export default function AppRouter() {
           }
         />
         <Route
+          path="/envios"
+          element={
+            <LayoutPage>
+              <EnviosPage />
+            </LayoutPage>
+          }
+        />
+        <Route
           path="/clientes"
           element={
             <LayoutPage>
@@ -296,6 +306,14 @@ export default function AppRouter() {
           element={
             <LayoutPage>
               <ClienteDetallePage />
+            </LayoutPage>
+          }
+        />
+        <Route
+          path="/generar-pdf-grupos"
+          element={
+            <LayoutPage>
+              <PdfGruposPage />
             </LayoutPage>
           }
         />

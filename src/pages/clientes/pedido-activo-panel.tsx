@@ -177,9 +177,14 @@ export default function PedidoActivoPanel({
             ) : null}
             <Box sx={clientesActionRowSx}>
               {isPagado ? (
-                <Button variant="contained" color="success" disabled={finalizando} onClick={onEntregar}>
-                  Confirmar entrega
-                </Button>
+                <>
+                  <Button variant="contained" color="success" disabled={finalizando} onClick={onEntregar}>
+                    Confirmar entrega
+                  </Button>
+                  <Button variant="outlined" onClick={onEditEntrega}>
+                    Editar entrega
+                  </Button>
+                </>
               ) : null}
               <Tooltip title={reservasConStock.length === 0 ? "Sin reservas en inventario" : ""}>
                 <span>

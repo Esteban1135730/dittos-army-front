@@ -1044,7 +1044,7 @@ export default function ReservarCartasPage() {
           open={pedidoDialog != null}
           mode={pedidoDialog === "edit" ? "edit" : "create"}
           clientId={clientId}
-          pedido={pedidoReservado}
+          pedido={pedidoDialog === "edit" ? (pedidoReservado ?? pedidoPagado) : pedidoReservado}
           initialStoreId={pedidoDialog === "create" ? pedidoCreateStoreId : undefined}
           onClose={() => {
             setPedidoDialog(null);

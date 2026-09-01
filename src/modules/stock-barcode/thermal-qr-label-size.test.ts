@@ -5,8 +5,8 @@ import {
 } from "./export-stock-qr-labels";
 
 describe("thermal QR label size constants", () => {
-  it("usa 50×25 mm (medido en 632-L58P)", () => {
+  it("usa 50×30 mm (632-L58P)", () => {
     expect(THERMAL_QR_LABEL_WIDTH_MM).toBe(50);
-    expect(THERMAL_QR_LABEL_HEIGHT_MM).toBe(25);
+    expect(THERMAL_QR_LABEL_HEIGHT_MM).toBe(30);
   });
 });

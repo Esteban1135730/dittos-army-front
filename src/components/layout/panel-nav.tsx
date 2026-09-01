@@ -11,6 +11,7 @@ import {
   IconCart,
   IconCash,
   IconChevron,
+  IconDocument,
   IconDownload,
   IconGrid,
   IconHistory,
@@ -54,6 +55,7 @@ type NavSection = {
 
 const TOP_LINKS: NavLeaf[] = [
   { to: "/", label: "Inicio", icon: IconHome },
+  { to: "/generar-pdf-grupos", label: "PDF grupos", icon: IconDocument },
 ];
 
 const SECTIONS: NavSection[] = [
@@ -102,6 +104,7 @@ const SECTIONS: NavSection[] = [
     icon: IconUsers,
     items: [
       { to: "/clientes", label: "Clientes", icon: IconUsers },
+      { to: "/envios", label: "Coordinar envíos", icon: IconCart },
       { to: "/clientes/imprimir-pedidos", label: "Imprimir pedidos", icon: IconPrint },
     ],
   },

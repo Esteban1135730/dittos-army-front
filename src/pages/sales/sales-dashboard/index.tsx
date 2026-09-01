@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -8,6 +8,7 @@ import type { StockListItem } from "../../../types/stock";
 import { API_BASE, apiUrl } from "../../../config/api";
 import { CardThumb } from "../../../components/card-thumb";
 import { LoadingScreen } from "../../../components/loading";
+import { filterSalesByName } from "./filter-sales-by-name";
 
 type SaleWithStock = {
   _id: string;
@@ -42,6 +43,15 @@ export default function SalesDashboard() {
   const [mostrarModalCerrarCiclo, setMostrarModalCerrarCiclo] = useState(false);
   const [cerrandoCiclo, setCerrandoCiclo] = useState(false);
   const [mensajeCierreCiclo, setMensajeCierreCiclo] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [paginationModel, setPaginationModel] = useState({
+    page: 0,
+    pageSize: 20,
+  });
+
+  useEffect(() => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [busqueda]);
 
   const {
     data: sales = [],
@@ -145,6 +155,16 @@ export default function SalesDashboard() {
       roiReal,
     };
   }, [sales, stockData, convert]);
+
+  const ventasValidas = useMemo(
+    () => sales.filter((sale) => sale && sale._id && sale.stock_info),
+    [sales]
+  );
+
+  const ventasFiltradas = useMemo(
+    () => filterSalesByName(ventasValidas, busqueda),
+    [ventasValidas, busqueda]
+  );
 
   const handleAbrirModalEditar = (venta: SaleWithStock) => {
     setVentaEditando(venta);
@@ -746,23 +766,76 @@ export default function SalesDashboard() {
 
       {/* Tabla de Ventas */}
       <div style={{ height: "70vh", width: "100%" }}>
-        <h2 className="text-xl font-bold mb-4 text-gray-800">Detalle de Ventas</h2>
-        {sales.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Detalle de Ventas</h2>
+          <div className="flex-1 min-w-[220px] max-w-md">
+            <div className="relative">
+              <input
+                id="dashboard-ventas-busqueda"
+                type="search"
+                placeholder="Buscar por nombre..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                aria-label="Buscar por nombre de carta"
+                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <svg
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              {busqueda && (
+                <button
+                  type="button"
+                  onClick={() => setBusqueda("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {ventasValidas.length === 0 ? (
           <p className="text-center text-gray-500 mt-8">
             No hay ventas registradas aún.
           </p>
+        ) : ventasFiltradas.length === 0 ? (
+          <p className="text-center text-gray-500 mt-8">
+            Ninguna venta coincide con «{busqueda.trim()}».
+          </p>
         ) : (
           <DataGrid
-            rows={sales.filter((sale) => sale && sale._id && sale.stock_info)}
+            rows={ventasFiltradas}
             columns={columns}
             getRowId={(row) => row._id || Math.random().toString()}
             pageSizeOptions={[20, 30, 50]}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
             rowHeight={104}
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 20, page: 0 },
-              },
-            }}
             pagination
             disableRowSelectionOnClick
           />

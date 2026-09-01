@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     dedupe: ["@zxing/library"],
   },
   optimizeDeps: {
-    include: ["recharts"],
+    include: ["recharts", "leaflet", "react-leaflet"],
   },
   server: {
     host: true,
