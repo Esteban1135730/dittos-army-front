@@ -50,8 +50,13 @@ import PedidoActivoPanel from "./pedido-activo-panel";
 import PedidoTiendaSection from "./pedido-tienda-section";
 import PedidoHistorialSection from "./pedido-historial-section";
 import ReservaActivoPanel from "./reserva-activo-panel";
+import {
+  invalidateReservaIncomingAbonos,
+  useReservaIncomingAbonos,
+} from "./use-reserva-incoming-abonos";
+import { usePedidoAbonos } from "./use-pedido-abonos";
 import { buildHistorialClienteView } from "./cliente-historial-merge";
-import { API_PEDIDO, findPedidoAbierto, findPedidoReservado, pedidoId, type PedidoItem } from "./pedido-types";
+import { API_PEDIDO, findPedidoAbierto, findPedidoReservado, pedidoId, filterReservasDePedido, type PedidoItem } from "./pedido-types";
 import {
   descripcionEntrega,
   formatFechaTentativa,
@@ -150,6 +155,17 @@ export default function ClienteDetallePage() {
     enabled: !!clientId,
   });
 
+  const { data: incomingAbonos, isSuccess: incomingAbonosOk } = useReservaIncomingAbonos(
+    clientId,
+    incomingCliente.length > 0,
+  );
+
+  const pedidoAbiertoId = pedidoAbierto ? pedidoId(pedidoAbierto) : undefined;
+  const { data: pedidoAbonos, isSuccess: pedidoAbonosOk } = usePedidoAbonos(
+    pedidoAbiertoId,
+    Boolean(pedidoAbiertoId),
+  );
+
   const { data: stockRaw = [] } = useQuery<StockListItem[]>({
     queryKey: ["stock"],
     queryFn: async () => {
@@ -182,23 +198,29 @@ export default function ClienteDetallePage() {
     [pedidos, historialVentas, clientId],
   );
 
+  const reservasDelPedido = useMemo(() => {
+    const pid = pedidoAbierto ? pedidoId(pedidoAbierto) : undefined;
+    const includeOrphans = !pedidoAbierto || pedidoAbierto.status === "reservado";
+    return filterReservasDePedido(reservas, pid, includeOrphans);
+  }, [reservas, pedidoAbierto]);
+
   const reservasConStock = useMemo(
     () =>
-      reservas.map((r) => {
+      reservasDelPedido.map((r) => {
         const st = stockMap[r.stock_id];
         return { reserva: r, stock: st };
       }),
-    [reservas, stockMap],
+    [reservasDelPedido, stockMap],
   );
 
   const resumenReserva = useMemo(
-    () => aggregateReservasTotales(reservas, stockMap, convert),
-    [reservas, stockMap, convert],
+    () => aggregateReservasTotales(reservasDelPedido, stockMap, convert),
+    [reservasDelPedido, stockMap, convert],
   );
 
   const alertaPedido = useMemo(() => {
-    if (reservas.length === 0) return null;
-    const times = reservas
+    if (reservasDelPedido.length === 0) return null;
+    const times = reservasDelPedido
       .map((r) => (r.created_at ? new Date(r.created_at).getTime() : null))
       .filter((t): t is number => t != null && !Number.isNaN(t));
     const oldest = times.length ? Math.min(...times) : null;
@@ -207,12 +229,12 @@ export default function ClienteDetallePage() {
     if (hours >= ALERTA_HORAS_ROJO) return "critico" as const;
     if (hours >= ALERTA_HORAS_AMARILLO) return "alerta" as const;
     return null;
-  }, [reservas]);
+  }, [reservasDelPedido]);
 
   const construirTextoPedido = async (): Promise<string | null> => {
     if (!client) return null;
-    if (reservas.length === 0 && incomingCliente.length === 0) return null;
-    const lines = reservas.map((r) => {
+    if (reservasDelPedido.length === 0 && incomingCliente.length === 0) return null;
+    const lines = reservasDelPedido.map((r) => {
       const st = stockMap[r.stock_id];
       return {
         card_id: st?.card_id ?? "",
@@ -235,6 +257,9 @@ export default function ClienteDetallePage() {
       descripcionEntrega: descripcionEntrega(pedidoAbierto),
       lines,
       incomingLines: incomingLines.length ? incomingLines : undefined,
+      ...(pedidoAbonosOk && pedidoAbonos && lines.length > 0
+        ? { abonado_cop: pedidoAbonos.abonado_cop, saldo_cop: pedidoAbonos.saldo_cop }
+        : {}),
     });
   };
 
@@ -257,6 +282,9 @@ export default function ClienteDetallePage() {
         rareza: rows[0].rareza,
         precio_cop: incomingGroupPrecioCop(rows),
       })),
+      ...(incomingAbonosOk && incomingAbonos
+        ? { abonado_cop: incomingAbonos.abonado_cop, saldo_cop: incomingAbonos.saldo_cop }
+        : {}),
     });
   };
 
@@ -302,6 +330,7 @@ export default function ClienteDetallePage() {
       await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
     }
     await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+    await invalidateReservaIncomingAbonos(queryClient, clientId);
     show(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
   };
 
@@ -365,7 +394,7 @@ export default function ClienteDetallePage() {
   };
 
   const generarPdfVenta = async () => {
-    if (!client || reservas.length === 0) return;
+    if (!client || reservasDelPedido.length === 0) return;
     setGenerandoPdfVenta(true);
     try {
       const stockById: Record<
@@ -377,7 +406,7 @@ export default function ClienteDetallePage() {
           rareza?: string | null;
         }
       > = {};
-      reservas.forEach((r) => {
+      reservasDelPedido.forEach((r) => {
         const st = stockMap[r.stock_id];
         stockById[r.stock_id] = {
           card_id: st?.card_id ?? "",
@@ -392,7 +421,7 @@ export default function ClienteDetallePage() {
         clientName: client.nombre,
         descripcionEntrega: descripcionEntrega(pedidoAbierto),
         fechaTentativa: formatFechaTentativa(pedidoAbierto?.fecha_tentativa_entrega),
-        reservas: reservas.map((r) => ({
+        reservas: reservasDelPedido.map((r) => ({
           stock_id: r.stock_id,
           precio: r.precio,
           currency: r.currency,
@@ -604,6 +633,7 @@ export default function ClienteDetallePage() {
               }
               onGenerarPdf={generarPdfVenta}
               formatFechaReserva={formatFechaReserva}
+              onNotify={show}
             />
           ) : (
             <Paper variant="outlined" sx={[clientesSectionPaperSx, clientesSectionBodySx, { textAlign: "center" }]}>
@@ -629,6 +659,7 @@ export default function ClienteDetallePage() {
               onCopiarMensaje={() => void copiarReservaWhatsApp()}
               waBusy={waBusy}
               copiando={copiandoTexto}
+              onNotify={show}
             />
           ) : (
             <Paper variant="outlined" sx={[clientesSectionPaperSx, clientesSectionBodySx, { textAlign: "center" }]}>
@@ -695,7 +726,7 @@ export default function ClienteDetallePage() {
                   variant="contained"
                   color="success"
                   fullWidth
-                  disabled={(reservas.length === 0 && incomingCliente.length === 0) || waBusy}
+                  disabled={(reservasDelPedido.length === 0 && incomingCliente.length === 0) || waBusy}
                   onClick={enviarWhatsApp}
                   sx={{ textTransform: "none", fontWeight: 600 }}
                 >
@@ -704,7 +735,7 @@ export default function ClienteDetallePage() {
                 <Button
                   variant="outlined"
                   fullWidth
-                  disabled={(reservas.length === 0 && incomingCliente.length === 0) || copiandoTexto}
+                  disabled={(reservasDelPedido.length === 0 && incomingCliente.length === 0) || copiandoTexto}
                   onClick={copiarPedidoAlPortapapeles}
                   sx={{ textTransform: "none", fontWeight: 600 }}
                 >

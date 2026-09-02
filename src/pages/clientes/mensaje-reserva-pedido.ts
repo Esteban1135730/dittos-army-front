@@ -116,6 +116,8 @@ export function formatStoreReservaCaminoLine(
 export async function buildWhatsAppReservaCaminoText(opts: {
   clientName: string;
   lines: PedidoIncomingLineInput[];
+  abonado_cop?: number;
+  saldo_cop?: number;
 }): Promise<string> {
   const uniqueIds = [...new Set(opts.lines.map((l) => l.card_id).filter(Boolean))];
   const expansions = new Map<string, string | undefined>();
@@ -140,6 +142,10 @@ export async function buildWhatsAppReservaCaminoText(opts: {
   if (total > 0) {
     parts.push(`Total: ${formatCOP(total)}`);
   }
+  if (opts.abonado_cop != null && opts.saldo_cop != null) {
+    parts.push(`Abonado: ${formatCOP(opts.abonado_cop)}`);
+    parts.push(`Saldo: ${formatCOP(opts.saldo_cop)}`);
+  }
   parts.push(`A nombre de: ${opts.clientName}`);
   return parts.join("\n");
 }
@@ -149,6 +155,8 @@ export async function buildWhatsAppPedidoText(opts: {
   descripcionEntrega?: string;
   lines: PedidoLineInput[];
   incomingLines?: PedidoIncomingLineInput[];
+  abonado_cop?: number;
+  saldo_cop?: number;
 }): Promise<string> {
   const idsStock = opts.lines.map((l) => l.card_id);
   const idsInc = (opts.incomingLines ?? []).map((l) => l.card_id);
@@ -198,7 +206,12 @@ export async function buildWhatsAppPedidoText(opts: {
   parts.push("");
 
   if (opts.lines.length > 0) {
-    parts.push("Cartas reservadas:", ...lineasStock, "", `*Total: ${formatCOP(total)}*`, "");
+    parts.push("Cartas reservadas:", ...lineasStock, "", `*Total: ${formatCOP(total)}*`);
+    if (opts.abonado_cop != null && opts.saldo_cop != null) {
+      parts.push(`Abonado: ${formatCOP(opts.abonado_cop)}`);
+      parts.push(`Saldo: ${formatCOP(opts.saldo_cop)}`);
+    }
+    parts.push("");
   }
 
   if (opts.incomingLines && opts.incomingLines.length > 0) {

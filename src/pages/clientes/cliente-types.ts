@@ -168,6 +168,23 @@ export type ReservaIncomingItem = {
   remaining_quantity?: number;
   language?: string;
   precio_cop?: number | null;
+  /** Costo de compra unitario COP de la línea de tránsito (si existe). */
+  unit_cost_cop?: number | null;
+};
+
+/** Abono de capital de la reserva en camino (GET /reserva/incoming/client/:id/abonos) */
+export type ReservaIncomingAbonoItem = {
+  id: string;
+  amount_cop: number;
+  created_at: string;
+};
+
+export type ReservaIncomingAbonosResponse = {
+  client_id: string;
+  total_pvp_cop: number;
+  abonado_cop: number;
+  saldo_cop: number;
+  abonos: ReservaIncomingAbonoItem[];
 };
 
 export const ALERTA_HORAS_AMARILLO = 48;

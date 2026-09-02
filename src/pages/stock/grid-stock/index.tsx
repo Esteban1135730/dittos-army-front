@@ -39,6 +39,17 @@ import {
   type StockQrExportRow,
 } from "../../../modules/stock-barcode";
 import { filterStockVisibleInGrid } from "../../../utils/stock-grid-visible";
+import {
+  mapReservedClientByStockId,
+  stockReservationStateLabel,
+} from "../../../utils/reserved-client-by-stock";
+import {
+  API_CLIENT,
+  API_RESERVA,
+  type ClientItem,
+  type ReservaItem,
+} from "../../clientes/cliente-types";
+import { normalizeClientList } from "../../clientes/cliente-id";
 import { useOwner } from "../../../modules/owner";
 
 export type StockItem = StockListItem;
@@ -196,6 +207,27 @@ export default function StockGrid() {
         : [];
     },
   });
+
+  const { data: reservas = [] } = useQuery<ReservaItem[]>({
+    queryKey: ["reservas"],
+    queryFn: async () => {
+      const res = await axios.get(API_RESERVA);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
+  const { data: clientes = [] } = useQuery<ClientItem[]>({
+    queryKey: ["clientes"],
+    queryFn: async () => {
+      const res = await axios.get(API_CLIENT);
+      return normalizeClientList(res.data);
+    },
+  });
+
+  const reservedClientByStockId = useMemo(
+    () => mapReservedClientByStockId(reservas, clientes),
+    [reservas, clientes],
+  );
 
   const { convert } = useExchangeRates();
 
@@ -703,6 +735,11 @@ export default function StockGrid() {
     {
       field: "card_state",
       headerName: "Estado Venta",
+      valueGetter: (_value, row) =>
+        stockReservationStateLabel(
+          row.card_state,
+          reservedClientByStockId.get(String(row._id)),
+        ),
       renderCell: (params) => {
         if (params.row.card_state === "propiedad") {
           return (
@@ -713,11 +750,24 @@ export default function StockGrid() {
           return <span className="text-gray-500 font-medium">Vendida</span>;
         }
         if (params.row.card_state === "reserva") {
-          return <span className="text-yellow-600 font-medium">Reservada</span>;
+          const reserved = reservedClientByStockId.get(String(params.row._id));
+          return (
+            <div className="flex h-full flex-col justify-center leading-tight">
+              <span className="text-yellow-600 font-medium">Reservada</span>
+              {reserved ? (
+                <span
+                  className="truncate text-sm font-semibold text-yellow-700"
+                  title={reserved.nombre}
+                >
+                  {reserved.nombre}
+                </span>
+              ) : null}
+            </div>
+          );
         }
         return <span className="text-green-600 font-medium">Disponible</span>;
       },
-      width: 160,
+      width: 200,
     },
     {
       field: "modificar",

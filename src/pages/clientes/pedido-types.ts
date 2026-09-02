@@ -67,3 +67,20 @@ export function findPedidoAbierto(pedidos: PedidoItem[]): PedidoItem | undefined
 export function canReservarStock(openPedido: PedidoItem | undefined): boolean {
   return openPedido?.status === "reservado";
 }
+
+/**
+ * Líneas de stock que pertenecen a un pedido.
+ * Las reservas sin `pedido_id` (legado / materializadas) se incluyen solo si `includeOrphans`.
+ */
+export function filterReservasDePedido<T extends { pedido_id?: string }>(
+  reservas: T[],
+  targetPedidoId: string | undefined,
+  includeOrphans: boolean,
+): T[] {
+  const target = targetPedidoId?.trim() ?? "";
+  return reservas.filter((r) => {
+    const pid = r.pedido_id?.trim() ?? "";
+    if (!pid) return includeOrphans;
+    return Boolean(target) && pid === target;
+  });
+}

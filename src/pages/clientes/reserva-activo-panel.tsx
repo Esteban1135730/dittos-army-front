@@ -4,6 +4,11 @@ import { CardThumb } from "../../components/card-thumb";
 import { incomingVariantGroupKey } from "../../utils/incoming-variant-group";
 import type { ReservaIncomingItem } from "./cliente-types";
 import IncomingPvpField, { incomingGroupPrecioCop } from "./incoming-pvp-field";
+import ReservaCostMarginAside, {
+  incomingGroupUnitCostCop,
+  reservaMarginTotalCop,
+} from "./reserva-cost-margin";
+import ReservaIncomingAbonosBlock from "./reserva-incoming-abonos-block";
 import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
 import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
 import {
@@ -46,6 +51,7 @@ type Props = {
   onCopiarMensaje: () => void;
   waBusy?: boolean;
   copiando?: boolean;
+  onNotify: (message: string, severity: "success" | "error") => void;
 };
 
 export default function ReservaActivoPanel({
@@ -57,6 +63,7 @@ export default function ReservaActivoPanel({
   onCopiarMensaje,
   waBusy,
   copiando,
+  onNotify,
 }: Props) {
   const groups = groupIncoming(incoming);
   const units = incoming.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
@@ -110,6 +117,8 @@ export default function ReservaActivoPanel({
             stock.
           </Typography>
         </Box>
+
+        <ReservaIncomingAbonosBlock clientId={clientId} onNotify={onNotify} />
 
         <Box>
           <Typography sx={{ ...clientesMutedLabelSx, mb: 1.25 }}>Acciones</Typography>
@@ -172,10 +181,20 @@ export default function ReservaActivoPanel({
                     Reservada {formatFechaReserva(head.created_at)}
                   </Typography>
                 </Box>
-                <IncomingPvpField
-                  valueCop={incomingGroupPrecioCop(rows)}
-                  onSave={(cop) => onSavePvp(rows, cop)}
-                />
+                <Stack direction="row" alignItems="flex-start" flexWrap="wrap" spacing={1.5}>
+                  <IncomingPvpField
+                    valueCop={incomingGroupPrecioCop(rows)}
+                    onSave={(cop) => onSavePvp(rows, cop)}
+                  />
+                  <ReservaCostMarginAside
+                    costUnitCop={incomingGroupUnitCostCop(rows)}
+                    marginTotalCop={reservaMarginTotalCop(
+                      incomingGroupPrecioCop(rows),
+                      incomingGroupUnitCostCop(rows),
+                      qty,
+                    )}
+                  />
+                </Stack>
               </Stack>
               );
             })}

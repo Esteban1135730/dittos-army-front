@@ -35,13 +35,24 @@ import {
   weightedAverageUnitCostCop,
 } from "../../utils/incoming-variant-group";
 import { CardThumb } from "../../components/card-thumb";
-import { aggregateReservasTotales, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
+import { aggregateReservasTotales, amountToCop, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 import ClienteFormDialog from "./cliente-form-dialog";
 import NuevoPedidoDialog from "./nuevo-pedido-dialog";
 import PedidoContextBar from "./pedido-context-bar";
 import ReservaContextBar from "./reserva-context-bar";
+import ReservaIncomingAbonosBlock from "./reserva-incoming-abonos-block";
+import PedidoAbonosBlock from "./pedido-abonos-block";
+import {
+  invalidateReservaIncomingAbonos,
+  useReservaIncomingAbonos,
+} from "./use-reserva-incoming-abonos";
+import { invalidatePedidoAbonos } from "./use-pedido-abonos";
 import PedidoTiendaSection from "./pedido-tienda-section";
 import IncomingPvpField, { incomingGroupPrecioCop } from "./incoming-pvp-field";
+import ReservaCostMarginAside, {
+  incomingGroupUnitCostCop,
+  reservaMarginTotalCop,
+} from "./reserva-cost-margin";
 import {
   abrirWhatsAppConTexto,
   buildWhatsAppReservaCaminoText,
@@ -54,6 +65,7 @@ import {
   canReservarStock,
   findPedidoReservado,
   pedidoId,
+  filterReservasDePedido,
   type PedidoItem,
 } from "./pedido-types";
 import ImportWhatsAppPedidoDialog from "./import-whatsapp-pedido-dialog";
@@ -156,6 +168,8 @@ export default function ReservarCartasPage() {
 
   const pedidoReservado = findPedidoReservado(pedidos);
   const pedidoPagado = pedidos.find((p) => p.status === "pagado");
+  const stockPedido = pedidoReservado ?? pedidoPagado;
+  const stockPedidoId = stockPedido ? pedidoId(stockPedido) : undefined;
 
   const abrirModalEditar = () => setModalEditarCliente(true);
   const cerrarModalEditar = () => setModalEditarCliente(false);
@@ -188,6 +202,11 @@ export default function ReservarCartasPage() {
     },
     enabled: !!clientId,
   });
+
+  const reservasDelPedido = useMemo(() => {
+    const pid = pedidoReservado ? pedidoId(pedidoReservado) : undefined;
+    return filterReservasDePedido(reservasRaw, pid, true);
+  }, [reservasRaw, pedidoReservado]);
 
   const [searchParams] = useSearchParams();
   const esReservaCamino = searchParams.get("camino") === "1";
@@ -244,6 +263,11 @@ export default function ReservarCartasPage() {
   const incomingCliente = useMemo(
     () => allIncoming.filter((r) => r.client_id === clientId),
     [allIncoming, clientId],
+  );
+
+  const { data: incomingAbonos, isSuccess: incomingAbonosOk } = useReservaIncomingAbonos(
+    clientId,
+    incomingCliente.length > 0,
   );
 
   const incomingClienteGrouped = useMemo(() => {
@@ -334,8 +358,8 @@ export default function ReservarCartasPage() {
   }, [stockRaw]);
 
   const resumenReserva = useMemo(
-    () => aggregateReservasTotales(reservasRaw, stockMap, convert),
-    [reservasRaw, stockMap, convert],
+    () => aggregateReservasTotales(reservasDelPedido, stockMap, convert),
+    [reservasDelPedido, stockMap, convert],
   );
 
   const stockDisponibleFiltrado = useMemo(() => {
@@ -349,7 +373,7 @@ export default function ReservarCartasPage() {
   }, [stockDisponible, busqueda]);
 
   const reservasConStock = useMemo(() => {
-    return reservasRaw
+    return reservasDelPedido
       .map((r) => {
         const stock = stockRaw.find((s) => s._id === r.stock_id);
         return stock
@@ -372,7 +396,7 @@ export default function ReservarCartasPage() {
           rareza: string | null;
         } => r !== null,
       );
-  }, [reservasRaw, stockRaw]);
+  }, [reservasDelPedido, stockRaw]);
 
   const getPrecioDefault = (item: StockItem): number => {
     if (item.pvp != null && item.pvp > 0 && item.pvp_currency) {
@@ -438,6 +462,7 @@ export default function ReservarCartasPage() {
       }
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await invalidatePedidoAbonos(queryClient, stockPedidoId);
       await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
       toast(
         isQty
@@ -467,6 +492,7 @@ export default function ReservarCartasPage() {
       setPreciosReservadas(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await invalidatePedidoAbonos(queryClient, stockPedidoId);
       await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
       toast("Línea quitada del pedido.", "success");
     } catch {
@@ -499,6 +525,7 @@ export default function ReservarCartasPage() {
         return next;
       });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await invalidatePedidoAbonos(queryClient, stockPedidoId);
       toast("Precio actualizado.", "success");
     } catch {
       toast("Error al actualizar el precio.", "error");
@@ -530,6 +557,7 @@ export default function ReservarCartasPage() {
         return next;
       });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await invalidatePedidoAbonos(queryClient, stockPedidoId);
       toast("Precio aplicado desde PVP.", "success");
     } catch {
       toast("Error al aplicar PVP.", "error");
@@ -575,6 +603,7 @@ export default function ReservarCartasPage() {
       await axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop });
     }
     await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+    await invalidateReservaIncomingAbonos(queryClient, clientId);
     toast(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
   };
 
@@ -590,6 +619,9 @@ export default function ReservarCartasPage() {
         rareza: head?.rareza,
         precio_cop: incomingGroupPrecioCop(rows),
       })),
+      ...(incomingAbonosOk && incomingAbonos
+        ? { abonado_cop: incomingAbonos.abonado_cop, saldo_cop: incomingAbonos.saldo_cop }
+        : {}),
     });
   };
 
@@ -635,6 +667,7 @@ export default function ReservarCartasPage() {
         await axios.delete(`${API_RESERVA}/incoming/${r._id}`);
       }
       await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
+      await invalidateReservaIncomingAbonos(queryClient, clientId);
       toast(
         rows.length > 1 ? "Reservas en camino de esta variante eliminadas." : "Reserva en camino eliminada.",
         "success",
@@ -1033,6 +1066,7 @@ export default function ReservarCartasPage() {
           await queryClient.invalidateQueries({ queryKey: ["stock"] });
           if (clientId) {
             await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
+      await invalidatePedidoAbonos(queryClient, stockPedidoId);
             await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
           }
           toast(summary, "success");
@@ -1103,6 +1137,15 @@ export default function ReservarCartasPage() {
             </Typography>
           </Box>
         </Stack>
+        {stockPedidoId ? (
+          <Box sx={{ mb: 2 }}>
+            <PedidoAbonosBlock
+              pedidoId={stockPedidoId}
+              allowMutate={Boolean(pedidoReservado)}
+              onNotify={toast}
+            />
+          </Box>
+        ) : null}
         {loadingReservas ? (
           <Stack direction="row" alignItems="center" gap={1}>
             <CircularProgress size={20} />
@@ -1166,14 +1209,6 @@ export default function ReservarCartasPage() {
                           label={operationalRarezaLabel(r.rareza.trim())}
                         />
                       ) : null}
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={
-                          gananciaLinea > 0 ? "success" : gananciaLinea < 0 ? "error" : "default"
-                        }
-                        label={`Ganancia: ${formatCOP(Math.round(gananciaLinea))}`}
-                      />
                     </Stack>
                     <Typography variant="caption" color="text.secondary" display="block">
                       {r.card_id}
@@ -1185,9 +1220,9 @@ export default function ReservarCartasPage() {
                       </Typography>
                     ) : null}
                   </Box>
-                  <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+                  <Stack direction="row" alignItems="flex-start" spacing={1.5} flexWrap="wrap">
                     <TextField
-                      label="COP"
+                      label="PVP COP"
                       size="small"
                       type="text"
                       inputMode="decimal"
@@ -1202,6 +1237,16 @@ export default function ReservarCartasPage() {
                         if (n !== r.precio) handleActualizarPrecioReserva(r.stock_id, v);
                       }}
                       sx={{ width: 120 }}
+                    />
+                    <ReservaCostMarginAside
+                      costUnitCop={
+                        stockLine
+                          ? amountToCop(stockLine.card_cost, stockLine.currency, convert)
+                          : null
+                      }
+                      marginTotalCop={
+                        precioLinea > 0 ? gananciaLinea : null
+                      }
                     />
                     {actualizandoPrecioId === r.stock_id ? (
                       <CircularProgress size={18} />
@@ -1318,6 +1363,9 @@ export default function ReservarCartasPage() {
         {incomingCliente.length > 0 ? (
           <Stack spacing={1.5} sx={{ mb: 3 }}>
             <Typography variant="subtitle2">Tu reserva en camino</Typography>
+            {clientId ? (
+              <ReservaIncomingAbonosBlock clientId={clientId} onNotify={toast} />
+            ) : null}
             {incomingClienteGrouped.map(({ groupId, rows, qtyTotal, head }) => {
               const src = resolveCardImageSrc(
                 head?.card_id,
@@ -1352,11 +1400,21 @@ export default function ReservarCartasPage() {
                       : ""}
                   </Typography>
                 </Box>
-                <IncomingPvpField
-                  valueCop={incomingGroupPrecioCop(rows)}
-                  disabled={incomingMutatingId === groupId}
-                  onSave={(cop) => handleSaveIncomingPvp(rows, cop)}
-                />
+                <Stack direction="row" alignItems="flex-start" flexWrap="wrap" spacing={1.5}>
+                  <IncomingPvpField
+                    valueCop={incomingGroupPrecioCop(rows)}
+                    disabled={incomingMutatingId === groupId}
+                    onSave={(cop) => handleSaveIncomingPvp(rows, cop)}
+                  />
+                  <ReservaCostMarginAside
+                    costUnitCop={incomingGroupUnitCostCop(rows)}
+                    marginTotalCop={reservaMarginTotalCop(
+                      incomingGroupPrecioCop(rows),
+                      incomingGroupUnitCostCop(rows),
+                      qtyTotal,
+                    )}
+                  />
+                </Stack>
                 <Button
                   color="error"
                   variant="outlined"
@@ -1434,6 +1492,7 @@ export default function ReservarCartasPage() {
           if (clientId) {
             await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
           }
+          await invalidateReservaIncomingAbonos(queryClient, clientId);
           toast(summary, "success");
         }}
       />

@@ -94,8 +94,11 @@ import {
   buildCartExportPayload,
   copyCartExportToClipboard,
   downloadCartExport,
-  extractCartItemsFromResponse,
+  formatCartImportSnack,
+  importCartExportBestEffort,
+  type CardtraderCartExportPayload,
 } from "../../utils/cardtrader-cart-transfer";
+import { ImportEstebanCartDialog } from "./import-esteban-cart-dialog";
 const CARDTRADER_POKEMON_GAME_ID = 5;
 const BLUEPRINTS_PER_PAGE = 96;
 const OFFERS_PER_PAGE = 12;
@@ -644,8 +647,12 @@ export default function CotizarCardtraderPage() {
   const [exportingCartPvpPropioPdf, setExportingCartPvpPropioPdf] = useState(false);
   const [exportingCartJson, setExportingCartJson] = useState(false);
   const [importingEstebanCart, setImportingEstebanCart] = useState(false);
+  const [importEstebanCartOpen, setImportEstebanCartOpen] = useState(false);
   const [pvpPropioDraftById, setPvpPropioDraftById] = useState<Record<number, string>>({});
-  const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" } | null>(null);
+  const [snack, setSnack] = useState<{
+    msg: string;
+    severity: "success" | "warning" | "error";
+  } | null>(null);
 
   const expansionsQuery = useQuery({
     queryKey: ["cardtrader", "expansions", CARDTRADER_POKEMON_GAME_ID],
@@ -1529,45 +1536,47 @@ export default function CotizarCardtraderPage() {
     }
   }, [cartQuery.data, lines, owner]);
 
-  const handleImportEstebanCart = useCallback(async () => {
-    setImportingEstebanCart(true);
-    try {
-      const res = await axios.get(`${API_BASE}/cardtrader/cart`, {
-        ownerOverride: "esteban",
-      });
-      const items = extractCartItemsFromResponse(res.data as CartResponse);
-      if (!items.length) {
-        setSnack({ msg: "El carrito de Esteban está vacío.", severity: "error" });
-        return;
-      }
-
-      for (const item of items) {
-        await axios.post(`${API_BASE}/cardtrader/cart/items`, {
-          product_id: item.product_id,
-          quantity: item.quantity,
+  const handleImportEstebanCart = useCallback(
+    async (payload: CardtraderCartExportPayload) => {
+      setImportingEstebanCart(true);
+      try {
+        const result = await importCartExportBestEffort({
+          items: payload.items,
+          addItem: async (item) => {
+            try {
+              await axios.post(`${API_BASE}/cardtrader/cart/items`, {
+                product_id: item.product_id,
+                quantity: item.quantity,
+                via_cardtrader_zero: viaZero,
+              });
+            } catch (e: unknown) {
+              const msg = axios.isAxiosError(e)
+                ? nestErrorMessage(e.response?.data, e.response?.status, e.message)
+                : e instanceof Error
+                  ? e.message
+                  : "No se pudo añadir al carrito";
+              throw new Error(msg);
+            }
+            if (item.meta) {
+              upsertCardtraderCartMeta(item.product_id, item.meta);
+            }
+          },
         });
-        if (item.meta) {
-          upsertCardtraderCartMeta(item.product_id, item.meta);
-        }
-      }
 
-      invalidateCart();
-      setSnack({
-        msg: `Importadas ${items.length} línea(s) del carrito de Esteban.`,
-        severity: "success",
-      });
-    } catch (e: unknown) {
-      const msg =
-        axios.isAxiosError(e) && typeof e.response?.data?.message === "string"
-          ? e.response.data.message
-          : e instanceof Error
-            ? e.message
-            : "No se pudo importar el carrito de Esteban.";
-      setSnack({ msg, severity: "error" });
-    } finally {
-      setImportingEstebanCart(false);
-    }
-  }, [invalidateCart]);
+        invalidateCart();
+        setSnack(formatCartImportSnack(result));
+        if (result.imported > 0) {
+          setImportEstebanCartOpen(false);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "No se pudo importar el carrito de Esteban.";
+        setSnack({ msg, severity: "error" });
+      } finally {
+        setImportingEstebanCart(false);
+      }
+    },
+    [invalidateCart, viaZero],
+  );
 
   const configError =
     axios.isAxiosError(expansionsQuery.error) && expansionsQuery.error.response?.status === 503;
@@ -2697,7 +2706,7 @@ export default function CotizarCardtraderPage() {
                     color="secondary"
                     fullWidth
                     disabled={importingEstebanCart}
-                    onClick={() => void handleImportEstebanCart()}
+                    onClick={() => setImportEstebanCartOpen(true)}
                   >
                     {importingEstebanCart ? "Importando…" : "Importar carrito de Esteban"}
                   </Button>
@@ -3108,6 +3117,15 @@ export default function CotizarCardtraderPage() {
           )}
         </Paper>
       </Stack>
+
+      <ImportEstebanCartDialog
+        open={importEstebanCartOpen}
+        importing={importingEstebanCart}
+        onClose={() => {
+          if (!importingEstebanCart) setImportEstebanCartOpen(false);
+        }}
+        onConfirm={(payload) => void handleImportEstebanCart(payload)}
+      />
 
       <Snackbar
         open={Boolean(snack)}

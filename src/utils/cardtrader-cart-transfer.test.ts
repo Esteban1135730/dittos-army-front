@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildCartExportPayload,
   extractCartItemsFromResponse,
+  formatCartImportSnack,
+  importCartExportBestEffort,
+  parseCartExportJsonText,
   parseCartExportPayload,
 } from "./cardtrader-cart-transfer";
 
@@ -56,5 +59,46 @@ describe("cardtrader-cart-transfer", () => {
         items: [],
       }),
     ).toThrow(/no tiene líneas/i);
+  });
+
+  it("parseCartExportJsonText parsea texto JSON", () => {
+    const parsed = parseCartExportJsonText(
+      JSON.stringify({
+        version: 1,
+        sourceOwner: "esteban",
+        exportedAt: "2026-08-31T12:00:00.000Z",
+        items: [{ product_id: 7, quantity: 2 }],
+      }),
+    );
+    expect(parsed.items[0]?.product_id).toBe(7);
+  });
+
+  it("parseCartExportJsonText rechaza texto vacío o no JSON", () => {
+    expect(() => parseCartExportJsonText("  ")).toThrow(/pega o carga/i);
+    expect(() => parseCartExportJsonText("{no-json")).toThrow(/no es un JSON/i);
+  });
+
+  it("importCartExportBestEffort añade lo posible y reporta fallos", async () => {
+    const added: number[] = [];
+    const result = await importCartExportBestEffort({
+      items: [
+        { product_id: 1, quantity: 1, name: "A" },
+        { product_id: 2, quantity: 1, name: "B" },
+        { product_id: 3, quantity: 1, name: "C" },
+      ],
+      addItem: async (item) => {
+        if (item.product_id === 2) {
+          throw new Error("agotado");
+        }
+        added.push(item.product_id);
+      },
+    });
+    expect(added).toEqual([1, 3]);
+    expect(result).toEqual({
+      imported: 2,
+      total: 3,
+      failed: [{ product_id: 2, name: "B", error: "agotado" }],
+    });
+    expect(formatCartImportSnack(result).severity).toBe("warning");
   });
 });

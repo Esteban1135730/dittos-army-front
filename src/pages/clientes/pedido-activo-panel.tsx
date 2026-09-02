@@ -13,12 +13,15 @@ import { formatCOP } from "../../utils/convert";
 import { CardThumb } from "../../components/card-thumb";
 import type { ReservaItem } from "./cliente-types";
 import type { StockListItem } from "../../types/stock";
-import { gananciaEstimadaReservaCop, reservaLineQuantity } from "./clientes-resumen-pedidos";
+import { amountToCop, gananciaEstimadaReservaCop, reservaLineQuantity } from "./clientes-resumen-pedidos";
+import ReservaCostMarginAside from "./reserva-cost-margin";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
 import type { PedidoItem } from "./pedido-types";
+import { pedidoId } from "./pedido-types";
 import { pedidoStatusLabel } from "./pedido-entrega-label";
 import PedidoEntregaVisual from "./pedido-entrega-visual";
 import PedidoLineasList from "./pedido-lineas-list";
+import PedidoAbonosBlock from "./pedido-abonos-block";
 import PedidoStatusStepper from "./pedido-status-stepper";
 import { pedidoTotal } from "./pedido-ui-utils";
 import {
@@ -52,6 +55,7 @@ type Props = {
   onCancelar: () => void;
   onGenerarPdf: () => void;
   formatFechaReserva: (iso?: string) => string;
+  onNotify: (message: string, severity: "success" | "error") => void;
 };
 
 export default function PedidoActivoPanel({
@@ -68,6 +72,7 @@ export default function PedidoActivoPanel({
   onCancelar,
   onGenerarPdf,
   formatFechaReserva,
+  onNotify,
 }: Props) {
   const total = pedidoTotal(pedido.lines);
   const isReservado = pedido.status === "reservado";
@@ -149,6 +154,12 @@ export default function PedidoActivoPanel({
             </Typography>
           </Box>
         </Box>
+
+        <PedidoAbonosBlock
+          pedidoId={pedidoId(pedido)}
+          allowMutate={isReservado}
+          onNotify={onNotify}
+        />
 
         <Box>
           <Typography sx={{ ...clientesMutedLabelSx, mb: 1.25 }}>Acciones</Typography>
@@ -245,27 +256,36 @@ export default function PedidoActivoPanel({
                       enlargeOnHover
                     />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1} mb={0.5}>
-                        <Typography fontWeight={700}>{st?.card_name ?? "Carta"}</Typography>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={
-                            gananciaLinea > 0 ? "success" : gananciaLinea < 0 ? "error" : "default"
-                          }
-                          label={`Margen ${formatCOP(Math.round(gananciaLinea))}`}
-                        />
-                      </Stack>
+                      <Typography fontWeight={700}>{st?.card_name ?? "Carta"}</Typography>
                       <Typography variant="caption" color="text.secondary" display="block">
                         {st?.card_id}
                         {units > 1 ? ` · Cant.: ${units}` : ""}
                         {st?.rareza ? ` · ${st.rareza}` : ""}
                       </Typography>
-                      <Typography variant="body1" fontWeight={600} sx={{ mt: 0.75 }}>
-                        {formatCOP(r.precio * units)}
-                        {units > 1 ? ` (${formatCOP(r.precio)} c/u)` : ""}
-                        {r.currency && r.currency !== "COP" ? ` (${r.currency})` : ""}
-                      </Typography>
+                      <Stack
+                        direction="row"
+                        alignItems="flex-start"
+                        flexWrap="wrap"
+                        spacing={1.5}
+                        sx={{ mt: 0.75 }}
+                      >
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            PVP
+                          </Typography>
+                          <Typography variant="body1" fontWeight={600}>
+                            {formatCOP(r.precio * units)}
+                            {units > 1 ? ` (${formatCOP(r.precio)} c/u)` : ""}
+                            {r.currency && r.currency !== "COP" ? ` (${r.currency})` : ""}
+                          </Typography>
+                        </Box>
+                        <ReservaCostMarginAside
+                          costUnitCop={
+                            st ? amountToCop(st.card_cost, st.currency, convert) : null
+                          }
+                          marginTotalCop={r.precio > 0 ? gananciaLinea : null}
+                        />
+                      </Stack>
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
                         Reservada {formatFechaReserva(r.created_at)}
                       </Typography>

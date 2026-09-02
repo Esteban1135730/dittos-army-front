@@ -134,3 +134,81 @@ export async function copyCartExportToClipboard(payload: CardtraderCartExportPay
   }
   throw new Error("El portapapeles no está disponible en este navegador.");
 }
+
+export function parseCartExportJsonText(text: string): CardtraderCartExportPayload {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error("Pega o carga el JSON exportado del carrito de Esteban.");
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(trimmed);
+  } catch {
+    throw new Error("El archivo no es un JSON válido.");
+  }
+  return parseCartExportPayload(raw);
+}
+
+export type CartImportFailedLine = {
+  product_id: number;
+  name?: string;
+  error: string;
+};
+
+export type CartImportBestEffortResult = {
+  imported: number;
+  total: number;
+  failed: CartImportFailedLine[];
+};
+
+export async function importCartExportBestEffort(args: {
+  items: CardtraderCartExportItem[];
+  addItem: (item: CardtraderCartExportItem) => Promise<void>;
+}): Promise<CartImportBestEffortResult> {
+  const failed: CartImportFailedLine[] = [];
+  let imported = 0;
+
+  for (const item of args.items) {
+    try {
+      await args.addItem(item);
+      imported += 1;
+    } catch (e: unknown) {
+      failed.push({
+        product_id: item.product_id,
+        name: item.name,
+        error: e instanceof Error ? e.message : "No se pudo añadir al carrito.",
+      });
+    }
+  }
+
+  return {
+    imported,
+    total: args.items.length,
+    failed,
+  };
+}
+
+export function formatCartImportSnack(
+  result: CartImportBestEffortResult,
+): { msg: string; severity: "success" | "warning" | "error" } {
+  const { imported, total, failed } = result;
+  if (imported === 0) {
+    const firstError = failed[0]?.error;
+    return {
+      msg: firstError
+        ? `No se pudo importar ninguna línea (${total}). ${firstError}`
+        : `No se pudo importar ninguna línea (${total}).`,
+      severity: "error",
+    };
+  }
+  if (failed.length === 0) {
+    return {
+      msg: `Importadas ${imported} línea(s) del JSON de Esteban.`,
+      severity: "success",
+    };
+  }
+  return {
+    msg: `Importadas ${imported}/${total} línea(s). ${failed.length} no se pudieron añadir a tu carrito.`,
+    severity: "warning",
+  };
+}
