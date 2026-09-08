@@ -79,8 +79,16 @@ export const OWNERS_CONFIG: OwnersConfig = {
 
 export const OWNER_STORAGE_KEY = "dittos.panel.activeOwner";
 
+/** Prefijo visual de líneas de stock Esteban (ticket térmico y catálogo). U+263C. */
+export const ESTEBAN_STOCK_MARK = "☼";
+
 export function isOwnerKey(value: unknown): value is OwnerKey {
   return value === "pablo" || value === "esteban";
+}
+
+/** The complementary owner (pablo ↔ esteban). */
+export function otherOwner(owner: OwnerKey): OwnerKey {
+  return owner === "pablo" ? "esteban" : "pablo";
 }
 
 export function getOwnerDefinition(key: OwnerKey): OwnerDefinition {

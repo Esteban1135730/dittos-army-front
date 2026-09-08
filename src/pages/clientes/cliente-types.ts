@@ -1,4 +1,5 @@
 import { apiUrl } from "../../config/api";
+import type { OwnerKey } from "../../config/owners";
 
 /** Tipos compartidos del módulo Clientes (panel). */
 
@@ -22,6 +23,8 @@ export type ReservaItem = {
   /** Unidades; ausente en reservas unitarias legacy (= 1). */
   quantity?: number;
   pedido_id?: string;
+  /** Owner de la DB del stock. Ausente en documentos viejos. */
+  stock_owner?: OwnerKey;
   /** Fecha de creación de la reserva (puede faltar en documentos antiguos). */
   created_at?: string;
 };
@@ -83,6 +86,7 @@ export type ImportWhatsAppLineResult = {
   requested: number;
   matched: number;
   stock_ids: string[];
+  stock_owners?: OwnerKey[];
   precio_cop_por_unidad: number[];
   suggested_pvp_cop?: number | null;
   card_name?: string;
@@ -103,7 +107,13 @@ export type ImportWhatsAppPreviewResponse = {
 };
 
 export type ImportWhatsAppImportResponse = ImportWhatsAppPreviewResponse & {
-  created: { stock_id: string; reserva_id: string; precio: number; currency: string }[];
+  created: {
+    stock_id: string;
+    reserva_id: string;
+    precio: number;
+    currency: string;
+    stock_owner?: OwnerKey;
+  }[];
   skipped: { line_index: number; reason: string; requested: number; matched: number }[];
   pvp_saved?: number;
 };

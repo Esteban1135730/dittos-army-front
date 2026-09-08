@@ -41,6 +41,24 @@ describe("buildPedidoTermicaPrintHtml", () => {
     expect(html).toContain("Tienda centro");
   });
 
+  it("prefija ☼ solo en líneas de Esteban", () => {
+    const html = buildPedidoTermicaPrintHtml([
+      ticket({
+        lineas: [
+          { nombre: "Pikachu Pablo", precio: 10_000, stock_owner: "pablo" },
+          { nombre: "Mew Esteban", precio: 12_000, stock_owner: "esteban" },
+          { nombre: "Legado", precio: 1_000 },
+        ],
+        total: 23_000,
+      }),
+    ]);
+    expect(html).toContain("☼ Mew Esteban");
+    expect(html).toContain("Pikachu Pablo");
+    expect(html).not.toContain("☼ Pikachu Pablo");
+    expect(html).toContain("Legado");
+    expect(html).not.toContain("☼ Legado");
+  });
+
   it("escapa < en nombres de carta y no trunca a 22 caracteres", () => {
     const largo =
       "Charizard ex Special Illustration Rare <promo> edición extra larga";

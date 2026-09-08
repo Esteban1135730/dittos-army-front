@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -81,8 +81,22 @@ import {
   sortReservaCatalogRows,
 } from "../../utils/stock-reserva-catalog";
 import { reservaLineQuantity } from "./clientes-resumen-pedidos";
+import {
+  ESTEBAN_STOCK_MARK,
+  OWNERS_CONFIG,
+  otherOwner,
+  type OwnerKey,
+} from "../../config/owners";
+import { useOwner } from "../../modules/owner";
 
 type StockItem = StockListItem;
+type ReservaCatalogRow = StockListItem & { owner: OwnerKey };
+
+function catalogRowKey(owner: OwnerKey, id: string): string {
+  return `${owner}:${id}`;
+}
+
+const EMPTY_STOCK: StockItem[] = [];
 
 type IncomingCatalogRow = {
   batch_item_id: string;
@@ -123,6 +137,8 @@ export default function ReservarCartasPage() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { owner: activeOwner } = useOwner();
+  const secondaryOwner = otherOwner(activeOwner);
   const { convert } = useExchangeRates();
   const [precios, setPrecios] = useState<Record<string, string>>({});
   const [preciosReservadas, setPreciosReservadas] = useState<Record<string, string>>({});
@@ -174,13 +190,20 @@ export default function ReservarCartasPage() {
   const abrirModalEditar = () => setModalEditarCliente(true);
   const cerrarModalEditar = () => setModalEditarCliente(false);
 
-  const { data: stockRaw = [], isLoading: loadingStock } = useQuery<StockItem[]>({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(API_STOCK);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const stockQueries = useQueries({
+    queries: [activeOwner, secondaryOwner].map((owner) => ({
+      queryKey: ["stock", owner] as const,
+      queryFn: async (): Promise<StockItem[]> => {
+        const res = await axios.get(API_STOCK, { ownerOverride: owner });
+        return Array.isArray(res.data) ? res.data : [];
+      },
+    })),
   });
+  const stockActive = stockQueries[0]?.data ?? EMPTY_STOCK;
+  const stockOther = stockQueries[1]?.data ?? EMPTY_STOCK;
+  const loadingStock = stockQueries.every((q) => q.isLoading || q.isPending);
+  const stockActiveFailed = Boolean(stockQueries[0]?.isError);
+  const stockOtherFailed = Boolean(stockQueries[1]?.isError);
 
   useEffect(() => {
     void ensureBulkProduct().then((r) => {
@@ -344,18 +367,37 @@ export default function ReservarCartasPage() {
     return rows;
   }, [incomingGroupedCatalog, busquedaCamino]);
 
+  const stockCatalogAll = useMemo((): ReservaCatalogRow[] => {
+    return [
+      ...stockActive.map((s) => ({ ...s, owner: activeOwner })),
+      ...stockOther.map((s) => ({ ...s, owner: secondaryOwner })),
+    ];
+  }, [stockActive, stockOther, activeOwner, secondaryOwner]);
+
   const stockDisponible = useMemo(
-    () => sortReservaCatalogRows(filterStockInReservaCatalog(stockRaw)),
-    [stockRaw],
+    () =>
+      sortReservaCatalogRows([
+        ...filterStockInReservaCatalog(stockActive).map((s) => ({
+          ...s,
+          owner: activeOwner,
+        })),
+        ...filterStockInReservaCatalog(stockOther).map((s) => ({
+          ...s,
+          owner: secondaryOwner,
+        })),
+      ]),
+    [stockActive, stockOther, activeOwner, secondaryOwner],
   );
 
   const stockMap = useMemo(() => {
     const m: Record<string, StockItem> = {};
-    stockRaw.forEach((s) => {
-      m[s._id] = s;
-    });
+    for (const r of reservasDelPedido) {
+      const owner = r.stock_owner ?? activeOwner;
+      const row = stockCatalogAll.find((s) => s._id === r.stock_id && s.owner === owner);
+      if (row) m[r.stock_id] = row;
+    }
     return m;
-  }, [stockRaw]);
+  }, [reservasDelPedido, stockCatalogAll, activeOwner]);
 
   const resumenReserva = useMemo(
     () => aggregateReservasTotales(reservasDelPedido, stockMap, convert),
@@ -375,7 +417,8 @@ export default function ReservarCartasPage() {
   const reservasConStock = useMemo(() => {
     return reservasDelPedido
       .map((r) => {
-        const stock = stockRaw.find((s) => s._id === r.stock_id);
+        const owner = r.stock_owner ?? activeOwner;
+        const stock = stockCatalogAll.find((s) => s._id === r.stock_id && s.owner === owner);
         return stock
           ? {
               ...r,
@@ -383,6 +426,7 @@ export default function ReservarCartasPage() {
               image_url: stock.image_url,
               card_id: stock.card_id,
               rareza: stock.rareza ?? null,
+              line_owner: owner,
             }
           : null;
       })
@@ -394,9 +438,10 @@ export default function ReservarCartasPage() {
           image_url: string;
           card_id: string;
           rareza: string | null;
+          line_owner: OwnerKey;
         } => r !== null,
       );
-  }, [reservasDelPedido, stockRaw]);
+  }, [reservasDelPedido, stockCatalogAll, activeOwner]);
 
   const getPrecioDefault = (item: StockItem): number => {
     if (item.pvp != null && item.pvp > 0 && item.pvp_currency) {
@@ -407,8 +452,8 @@ export default function ReservarCartasPage() {
     return 0;
   };
 
-  const getPrecioReserva = (stockId: string, item: StockItem): number => {
-    const v = precios[stockId];
+  const getPrecioReserva = (rowKey: string, item: StockItem): number => {
+    const v = precios[rowKey];
     if (v !== undefined && v !== "") {
       const n = parseFloat(v.replace(",", "."));
       if (!Number.isNaN(n)) return n;
@@ -416,9 +461,10 @@ export default function ReservarCartasPage() {
     return getPrecioDefault(item);
   };
 
-  const handleReservar = async (item: StockItem) => {
+  const handleReservar = async (item: ReservaCatalogRow) => {
     if (!clientId || !client || !pedidoReservado) return;
-    const precio = getPrecioReserva(item._id, item);
+    const rowKey = catalogRowKey(item.owner, item._id);
+    const precio = getPrecioReserva(rowKey, item);
     if (precio <= 0) {
       toast("Ingresa un precio mayor a 0.", "error");
       return;
@@ -430,7 +476,7 @@ export default function ReservarCartasPage() {
     const qty = isQty
       ? Math.max(
           1,
-          Math.floor(Number((cantidadStock[item._id] ?? "1").replace(",", ".")) || 1),
+          Math.floor(Number((cantidadStock[rowKey] ?? "1").replace(",", ".")) || 1),
         )
       : 1;
     if (isQty) {
@@ -440,7 +486,7 @@ export default function ReservarCartasPage() {
         return;
       }
     }
-    setReservandoId(item._id);
+    setReservandoId(rowKey);
     try {
       const res = await axios.post(API_RESERVA, {
         client_id: clientId,
@@ -448,6 +494,7 @@ export default function ReservarCartasPage() {
         precio: Math.round(precio),
         currency: "COP",
         pedido_id: pedidoId(pedidoReservado),
+        stock_owner: item.owner,
         ...(isQty ? { quantity: qty } : {}),
       });
       if (res.data && (res.data as { error?: string }).error) {
@@ -455,10 +502,10 @@ export default function ReservarCartasPage() {
         return;
       }
       const next = { ...precios };
-      delete next[item._id];
+      delete next[rowKey];
       setPrecios(next);
       if (isQty) {
-        setCantidadStock((prev) => ({ ...prev, [item._id]: "1" }));
+        setCantidadStock((prev) => ({ ...prev, [rowKey]: "1" }));
       }
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
@@ -477,18 +524,22 @@ export default function ReservarCartasPage() {
     }
   };
 
-  const handleQuitarReserva = async (stockId: string) => {
-    setQuitandoId(stockId);
+  const handleQuitarReserva = async (stockId: string, stockOwner: OwnerKey) => {
+    const lineKey = catalogRowKey(stockOwner, stockId);
+    setQuitandoId(lineKey);
     try {
       const res = await axios.delete(`${API_RESERVA}/stock/${stockId}`, {
-        params: clientId ? { client_id: clientId } : undefined,
+        params: {
+          ...(clientId ? { client_id: clientId } : {}),
+          stock_owner: stockOwner,
+        },
       });
       if ((res.data as { success?: boolean }).success !== true) {
         toast((res.data as { error?: string }).error ?? "Error al quitar reserva.", "error");
         return;
       }
       const next = { ...preciosReservadas };
-      delete next[stockId];
+      delete next[lineKey];
       setPreciosReservadas(next);
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
@@ -502,10 +553,15 @@ export default function ReservarCartasPage() {
     }
   };
 
-  const handleActualizarPrecioReserva = async (stockId: string, precioStr: string) => {
+  const handleActualizarPrecioReserva = async (
+    stockId: string,
+    precioStr: string,
+    stockOwner: OwnerKey,
+  ) => {
     const n = parseFloat(precioStr.replace(",", "."));
     if (Number.isNaN(n) || n < 0) return;
-    setActualizandoPrecioId(stockId);
+    const lineKey = catalogRowKey(stockOwner, stockId);
+    setActualizandoPrecioId(lineKey);
     try {
       const res = await axios.put(
         `${API_RESERVA}/stock/${stockId}`,
@@ -513,7 +569,12 @@ export default function ReservarCartasPage() {
           precio: Math.round(n),
           currency: "COP",
         },
-        { params: clientId ? { client_id: clientId } : undefined },
+        {
+          params: {
+            ...(clientId ? { client_id: clientId } : {}),
+            stock_owner: stockOwner,
+          },
+        },
       );
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
@@ -521,7 +582,7 @@ export default function ReservarCartasPage() {
       }
       setPreciosReservadas((prev) => {
         const next = { ...prev };
-        delete next[stockId];
+        delete next[lineKey];
         return next;
       });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
@@ -534,10 +595,15 @@ export default function ReservarCartasPage() {
     }
   };
 
-  const handleAplicarPvpReserva = async (stockId: string, stock: StockItem) => {
+  const handleAplicarPvpReserva = async (
+    stockId: string,
+    stock: StockItem,
+    stockOwner: OwnerKey,
+  ) => {
     const precioCop = Math.round(getPrecioDefault(stock));
     if (precioCop <= 0) return;
-    setAplicandoPvpId(stockId);
+    const lineKey = catalogRowKey(stockOwner, stockId);
+    setAplicandoPvpId(lineKey);
     try {
       const res = await axios.put(
         `${API_RESERVA}/stock/${stockId}`,
@@ -545,7 +611,12 @@ export default function ReservarCartasPage() {
           precio: precioCop,
           currency: "COP",
         },
-        { params: clientId ? { client_id: clientId } : undefined },
+        {
+          params: {
+            ...(clientId ? { client_id: clientId } : {}),
+            stock_owner: stockOwner,
+          },
+        },
       );
       if (res.data && (res.data as { error?: string }).error) {
         toast((res.data as { error: string }).error, "error");
@@ -553,7 +624,7 @@ export default function ReservarCartasPage() {
       }
       setPreciosReservadas((prev) => {
         const next = { ...prev };
-        delete next[stockId];
+        delete next[lineKey];
         return next;
       });
       await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
@@ -679,8 +750,8 @@ export default function ReservarCartasPage() {
     }
   };
 
-  const getPrecioReservaInput = (stockId: string, precioActual: number): string => {
-    if (preciosReservadas[stockId] !== undefined) return preciosReservadas[stockId];
+  const getPrecioReservaInput = (lineKey: string, precioActual: number): string => {
+    if (preciosReservadas[lineKey] !== undefined) return preciosReservadas[lineKey];
     return precioActual > 0 ? String(precioActual) : "";
   };
 
@@ -816,14 +887,14 @@ export default function ReservarCartasPage() {
     },
   ];
 
-  const columns: GridColDef[] = [
+  const columns: GridColDef<ReservaCatalogRow>[] = [
     {
       field: "image_url",
       headerName: "",
       width: 100,
       sortable: false,
       renderCell: (params) => {
-        const item = params.row as StockItem;
+        const item = params.row;
         return (
           <CardThumb
             src={resolveStockImageUrl(item.card_id, params.value as string)}
@@ -839,6 +910,25 @@ export default function ReservarCartasPage() {
       headerName: "Carta",
       flex: 1,
       minWidth: 160,
+      renderCell: (params) => {
+        const item = params.row;
+        const name =
+          item.owner === "esteban"
+            ? `${ESTEBAN_STOCK_MARK} ${item.card_name}`
+            : item.card_name;
+        return (
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap title={item.card_name}>
+              {name}
+            </Typography>
+            <Chip
+              size="small"
+              label={OWNERS_CONFIG.owners[item.owner].label}
+              color={item.owner === "esteban" ? "secondary" : "default"}
+            />
+          </Stack>
+        );
+      },
     },
     { field: "card_id", headerName: "ID", width: 110 },
     {
@@ -847,7 +937,7 @@ export default function ReservarCartasPage() {
       width: 80,
       sortable: false,
       renderCell: (params) => {
-        const item = params.row as StockItem;
+        const item = params.row;
         if (
           !isQuantityProduct({
             product_kind: item.product_kind,
@@ -873,7 +963,7 @@ export default function ReservarCartasPage() {
       width: 120,
       sortable: false,
       renderCell: (params) => {
-        const rz = (params.row as StockItem).rareza?.trim();
+        const rz = params.row.rareza?.trim();
         if (!rz) {
           return (
             <Typography variant="body2" color="text.disabled">
@@ -917,16 +1007,17 @@ export default function ReservarCartasPage() {
       headerName: "Precio pedido (COP)",
       width: 160,
       renderCell: (params) => {
-        const item = params.row as StockItem;
+        const item = params.row;
+        const rowKey = catalogRowKey(item.owner, item._id);
         const defaultVal = getPrecioDefault(item);
-        const value = precios[item._id] ?? (defaultVal > 0 ? String(defaultVal) : "");
+        const value = precios[rowKey] ?? (defaultVal > 0 ? String(defaultVal) : "");
         return (
           <TextField
             size="small"
             type="text"
             inputMode="decimal"
             value={value}
-            onChange={(e) => setPrecios((prev) => ({ ...prev, [item._id]: e.target.value }))}
+            onChange={(e) => setPrecios((prev) => ({ ...prev, [rowKey]: e.target.value }))}
             placeholder={defaultVal > 0 ? String(defaultVal) : "0"}
             sx={{ width: 130, "& .MuiInputBase-input": { py: 0.75 } }}
           />
@@ -940,8 +1031,9 @@ export default function ReservarCartasPage() {
       width: 220,
       sortable: false,
       renderCell: (params) => {
-        const item = params.row as StockItem;
-        const loading = reservandoId === item._id;
+        const item = params.row;
+        const rowKey = catalogRowKey(item.owner, item._id);
+        const loading = reservandoId === rowKey;
         const isQty = isQuantityProduct({
           product_kind: item.product_kind,
           card_id: item.card_id,
@@ -954,9 +1046,9 @@ export default function ReservarCartasPage() {
                 size="small"
                 type="text"
                 inputMode="numeric"
-                value={cantidadStock[item._id] ?? "1"}
+                value={cantidadStock[rowKey] ?? "1"}
                 onChange={(e) =>
-                  setCantidadStock((prev) => ({ ...prev, [item._id]: e.target.value }))
+                  setCantidadStock((prev) => ({ ...prev, [rowKey]: e.target.value }))
                 }
                 sx={{ width: 64, "& .MuiInputBase-input": { py: 0.75 } }}
                 disabled={available <= 0}
@@ -1159,15 +1251,19 @@ export default function ReservarCartasPage() {
           <Stack divider={<Divider flexItem />} spacing={0}>
             {reservasConStock.map((r) => {
               const fechaTxt = formatReservaFecha(r.created_at);
-              const stockLine = stockRaw.find((s) => s._id === r.stock_id);
+              const lineOwner = r.line_owner;
+              const lineKey = catalogRowKey(lineOwner, r.stock_id);
+              const stockLine = stockCatalogAll.find(
+                (s) => s._id === r.stock_id && s.owner === lineOwner,
+              );
               const pvpCopAplicable = stockLine ? Math.round(getPrecioDefault(stockLine)) : 0;
               const puedeAplicarPvp = pvpCopAplicable > 0;
               const mutandoLinea =
-                quitandoId === r.stock_id ||
-                actualizandoPrecioId === r.stock_id ||
-                aplicandoPvpId === r.stock_id;
+                quitandoId === lineKey ||
+                actualizandoPrecioId === lineKey ||
+                aplicandoPvpId === lineKey;
               const precioLinea = (() => {
-                const raw = preciosReservadas[r.stock_id];
+                const raw = preciosReservadas[lineKey];
                 if (raw !== undefined && raw !== "") {
                   const n = parseFloat(raw.replace(",", "."));
                   if (!Number.isNaN(n)) return n;
@@ -1199,9 +1295,15 @@ export default function ReservarCartasPage() {
                   <Box flex={1} minWidth={0}>
                     <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
                       <Typography fontWeight={600} noWrap title={r.card_name}>
+                        {lineOwner === "esteban" ? `${ESTEBAN_STOCK_MARK} ` : ""}
                         {r.card_name}
                         {units > 1 ? ` ×${units}` : ""}
                       </Typography>
+                      <Chip
+                        size="small"
+                        label={OWNERS_CONFIG.owners[lineOwner].label}
+                        color={lineOwner === "esteban" ? "secondary" : "default"}
+                      />
                       {r.rareza?.trim() ? (
                         <Chip
                           size="small"
@@ -1226,15 +1328,15 @@ export default function ReservarCartasPage() {
                       size="small"
                       type="text"
                       inputMode="decimal"
-                      value={getPrecioReservaInput(r.stock_id, r.precio)}
+                      value={getPrecioReservaInput(lineKey, r.precio)}
                       onChange={(e) =>
-                        setPreciosReservadas((prev) => ({ ...prev, [r.stock_id]: e.target.value }))
+                        setPreciosReservadas((prev) => ({ ...prev, [lineKey]: e.target.value }))
                       }
                       onBlur={(e) => {
                         const v = e.target.value.trim();
                         if (v === "" || Number.isNaN(parseFloat(v.replace(",", ".")))) return;
                         const n = parseFloat(v.replace(",", "."));
-                        if (n !== r.precio) handleActualizarPrecioReserva(r.stock_id, v);
+                        if (n !== r.precio) handleActualizarPrecioReserva(r.stock_id, v, lineOwner);
                       }}
                       sx={{ width: 120 }}
                     />
@@ -1248,7 +1350,7 @@ export default function ReservarCartasPage() {
                         precioLinea > 0 ? gananciaLinea : null
                       }
                     />
-                    {actualizandoPrecioId === r.stock_id ? (
+                    {actualizandoPrecioId === lineKey ? (
                       <CircularProgress size={18} />
                     ) : null}
                     {r.precio === 0 && stockLine ? (
@@ -1256,11 +1358,11 @@ export default function ReservarCartasPage() {
                         <Button
                           variant="outlined"
                           size="small"
-                          onClick={() => handleAplicarPvpReserva(r.stock_id, stockLine)}
+                          onClick={() => handleAplicarPvpReserva(r.stock_id, stockLine, lineOwner)}
                           disabled={mutandoLinea}
                           sx={{ textTransform: "none" }}
                         >
-                          {aplicandoPvpId === r.stock_id ? "…" : "Aplicar PVP"}
+                          {aplicandoPvpId === lineKey ? "…" : "Aplicar PVP"}
                         </Button>
                       ) : (
                         <Tooltip title="Sin PVP definido">
@@ -1276,11 +1378,11 @@ export default function ReservarCartasPage() {
                       color="error"
                       variant="outlined"
                       size="small"
-                      onClick={() => handleQuitarReserva(r.stock_id)}
-                      disabled={quitandoId === r.stock_id || aplicandoPvpId === r.stock_id}
+                      onClick={() => handleQuitarReserva(r.stock_id, lineOwner)}
+                      disabled={quitandoId === lineKey || aplicandoPvpId === lineKey}
                       sx={{ textTransform: "none" }}
                     >
-                      {quitandoId === r.stock_id ? "…" : "Quitar"}
+                      {quitandoId === lineKey ? "…" : "Quitar"}
                     </Button>
                   </Stack>
                 </Stack>
@@ -1302,6 +1404,17 @@ export default function ReservarCartasPage() {
           onChange={(e) => setBusqueda(e.target.value)}
           sx={{ maxWidth: 420, mb: 2 }}
         />
+        {stockActiveFailed || stockOtherFailed ? (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {stockActiveFailed && stockOtherFailed
+              ? "No se pudo cargar el stock de ninguno de los owners."
+              : `No se pudo cargar el stock de ${
+                  stockActiveFailed
+                    ? OWNERS_CONFIG.owners[activeOwner].label
+                    : OWNERS_CONFIG.owners[secondaryOwner].label
+                }. Se muestra el que sí cargó.`}
+          </Alert>
+        ) : null}
         {loadingStock ? (
           <Stack direction="row" alignItems="center" gap={1}>
             <CircularProgress size={20} />
@@ -1330,7 +1443,7 @@ export default function ReservarCartasPage() {
                 <DataGrid
                   rows={stockDisponibleFiltrado}
                   columns={columns}
-                  getRowId={(row) => row._id}
+                  getRowId={(row) => catalogRowKey(row.owner, row._id)}
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
                   disableRowSelectionOnClick

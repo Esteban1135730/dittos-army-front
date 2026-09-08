@@ -1,3 +1,4 @@
+import { ESTEBAN_STOCK_MARK, type OwnerKey } from "../../config/owners";
 import { formatCOP } from "../../utils/convert";
 
 /** Ancho del rollo continuo (impresora 632-L58P). */
@@ -6,6 +7,7 @@ export const THERMAL_PEDIDO_WIDTH_MM = 58;
 export type PedidoTermicaLinea = {
   nombre: string;
   precio: number;
+  stock_owner?: OwnerKey;
 };
 
 export type PedidoTermicaTicket = {
@@ -56,13 +58,18 @@ export function buildPedidoTermicaPrintHtml(
         pedido.lineas.length === 0
           ? `<tr><td class="nombre" colspan="2">Sin líneas</td></tr>`
           : pedido.lineas
-              .map(
-                (linea) => `
+              .map((linea) => {
+                const escaped = escapeHtml(linea.nombre);
+                const visible =
+                  linea.stock_owner === "esteban"
+                    ? `${ESTEBAN_STOCK_MARK} ${escaped}`
+                    : escaped;
+                return `
             <tr>
-              <td class="nombre">${escapeHtml(linea.nombre)}</td>
+              <td class="nombre">${visible}</td>
               <td class="precio">${formatMoney(linea.precio)}</td>
-            </tr>`,
-              )
+            </tr>`;
+              })
               .join("");
 
       const muestraAbono = pedidoTermicaMuestraAbono(pedido.abonado_cop);

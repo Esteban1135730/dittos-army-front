@@ -7,6 +7,9 @@ import { paginatePedidoLineItems } from "./pedido-print-sheets";
 import { openPedidoTermicaPrintWindow, pedidoTermicaMuestraAbono } from "./pedido-termica-print";
 import { mergePedidoSelection } from "./pedido-print-selection";
 import { API_CLIENT, API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
+import { otherOwner, type OwnerKey } from "../../config/owners";
+import { useOwner } from "../../modules/owner";
+import type { PedidoTermicaLinea } from "./pedido-termica-print";
 import { API_PEDIDO, type PedidoItem, pedidoId as getPedidoId } from "./pedido-types";
 import {
   groupReservasForPrint,
@@ -25,7 +28,7 @@ type PedidoCard = {
   client: ClientItem;
   entregaLabel: string;
   fechaTentativa: string;
-  items: { nombre: string; precio: number }[];
+  items: PedidoTermicaLinea[];
   total: number;
 };
 
@@ -54,6 +57,8 @@ export default function ImprimirPedidosPage() {
   const printRef = useRef<HTMLDivElement>(null);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const seenPedidoIdsRef = useRef<Set<string> | null>(null);
+  const { owner: activeOwner } = useOwner();
+  const secondaryOwner = otherOwner(activeOwner);
 
   useEffect(() => {
     const clear = () => {
@@ -79,21 +84,30 @@ export default function ImprimirPedidosPage() {
     },
   });
 
-  const { data: stockRaw = [] } = useQuery<StockItem[]>({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(API_STOCK);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const stockQueries = useQueries({
+    queries: [activeOwner, secondaryOwner].map((owner) => ({
+      queryKey: ["stock", owner] as const,
+      queryFn: async (): Promise<{ owner: OwnerKey; items: StockItem[] }> => {
+        const res = await axios.get(API_STOCK, { ownerOverride: owner });
+        return {
+          owner,
+          items: Array.isArray(res.data) ? res.data : [],
+        };
+      },
+    })),
   });
 
-  const stockMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    stockRaw.forEach((s) => {
-      map[s._id] = s.card_name ?? "Carta";
-    });
+  const stockNameByOwnerId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const q of stockQueries) {
+      const data = q.data;
+      if (!data) continue;
+      for (const s of data.items) {
+        map.set(`${data.owner}:${s._id}`, s.card_name ?? "Carta");
+      }
+    }
     return map;
-  }, [stockRaw]);
+  }, [stockQueries]);
 
   const clientesMap = useMemo(() => {
     const map: Record<string, ClientItem> = {};
@@ -132,35 +146,40 @@ export default function ImprimirPedidosPage() {
   }, [pedidoQueries, pedidoIds]);
 
   const pedidos: PedidoCard[] = useMemo(() => {
-    return reservaGroups
-      .map((group) => {
-        const client = clientesMap[group.clientId];
-        if (!client) return null;
-        const pedido = pickPedidoForPrintCard(group.pedidoIds, pedidoById);
-        const rows = group.items.map((r) => {
-          const units = reservaLineQuantity(r.quantity);
-          return {
-            nombre: stockMap[r.stock_id] ?? `Stock ${r.stock_id.slice(-4)}`,
-            precio: r.precio * units,
-          };
-        });
-        const total = rows.reduce((sum, i) => sum + i.precio, 0);
-        return {
-          key: group.clientId,
-          pedidoId: pedido ? getPedidoId(pedido) : undefined,
-          client,
-          entregaLabel: pedido
-            ? descripcionEntrega(pedido)
-            : "Sin datos de entrega (pedido no migrado)",
-          fechaTentativa: pedido
-            ? formatFechaTentativa(pedido.fecha_tentativa_entrega)
-            : "—",
-          items: rows,
-          total,
+    const cards: PedidoCard[] = [];
+    for (const group of reservaGroups) {
+      const client = clientesMap[group.clientId];
+      if (!client) continue;
+      const pedido = pickPedidoForPrintCard(group.pedidoIds, pedidoById);
+      const rows: PedidoTermicaLinea[] = group.items.map((r) => {
+        const units = reservaLineQuantity(r.quantity);
+        const owner = r.stock_owner ?? activeOwner;
+        const line: PedidoTermicaLinea = {
+          nombre:
+            stockNameByOwnerId.get(`${owner}:${r.stock_id}`) ??
+            `Stock ${r.stock_id.slice(-4)}`,
+          precio: r.precio * units,
         };
-      })
-      .filter((p): p is PedidoCard => p !== null);
-  }, [reservaGroups, clientesMap, stockMap, pedidoById]);
+        if (r.stock_owner) line.stock_owner = r.stock_owner;
+        return line;
+      });
+      const card: PedidoCard = {
+        key: group.clientId,
+        client,
+        entregaLabel: pedido
+          ? descripcionEntrega(pedido)
+          : "Sin datos de entrega (pedido no migrado)",
+        fechaTentativa: pedido
+          ? formatFechaTentativa(pedido.fecha_tentativa_entrega)
+          : "—",
+        items: rows,
+        total: rows.reduce((sum, i) => sum + i.precio, 0),
+      };
+      if (pedido) card.pedidoId = getPedidoId(pedido);
+      cards.push(card);
+    }
+    return cards;
+  }, [reservaGroups, clientesMap, stockNameByOwnerId, pedidoById, activeOwner]);
 
   // Primera carga: marcar todos. Luego solo auto-marcar clientes nuevos con reservas.
   useEffect(() => {

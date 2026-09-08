@@ -30,6 +30,7 @@ import {
 } from "./cliente-types";
 import { clientNameDiffersFromMessage } from "./import-whatsapp-client-name";
 import { extractAxiosErrorMessage } from "./extract-axios-error";
+import { formatWhatsAppLineOwners } from "./import-whatsapp-owner-label";
 import { formatCOP } from "../../utils/convert";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { CardThumb } from "../../components/card-thumb";
@@ -271,6 +272,7 @@ export default function ImportWhatsAppPedidoDialog({ open, onClose, client, onIm
                       <TableCell align="right">Pedidas</TableCell>
                       <TableCell align="right">En stock</TableCell>
                       <TableCell>PVP COP</TableCell>
+                      <TableCell>Owner</TableCell>
                       <TableCell>Estado</TableCell>
                     </TableRow>
                   </TableHead>
@@ -336,6 +338,11 @@ export default function ImportWhatsAppPedidoDialog({ open, onClose, client, onIm
                               </Typography>
                             ) : null}
                           </TableCell>
+                          <TableCell>
+                            <Typography variant="caption">
+                              {formatWhatsAppLineOwners(line.stock_owners) || "—"}
+                            </Typography>
+                          </TableCell>
                           <TableCell>{lineStatusLabel(line)}</TableCell>
                         </TableRow>
                       );
@@ -388,6 +395,9 @@ export default function ImportWhatsAppPedidoDialog({ open, onClose, client, onIm
                           {line.parsed?.card_id}
                           {line.matched > 0 ? ` · ${line.matched} ud` : " · sin stock"}
                           {pvp != null ? ` · PVP ${formatCOP(pvp)}` : ""}
+                          {formatWhatsAppLineOwners(line.stock_owners)
+                            ? ` · ${formatWhatsAppLineOwners(line.stock_owners)}`
+                            : ""}
                         </Typography>
                       </Box>
                     </Stack>
