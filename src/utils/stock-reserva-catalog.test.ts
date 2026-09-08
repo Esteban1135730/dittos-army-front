@@ -42,7 +42,7 @@ describe("isStockLineInReservaCatalog", () => {
 });
 
 describe("filterStockInReservaCatalog / sortReservaCatalogRows", () => {
-  it("deja bulk primero entre las filas visibles", () => {
+  it("deja bulk, envio, domicilio y proteccion primero entre las filas visibles", () => {
     const rows = [
       { _id: "1", card_id: "sv1-1", card_state: "disponible" },
       {
@@ -53,8 +53,29 @@ describe("filterStockInReservaCatalog / sortReservaCatalogRows", () => {
         quantity: 9,
       },
       { _id: "3", card_id: "sv1-2", card_state: "reserva" },
+      {
+        _id: "4",
+        card_id: "da-proteccion-cartas",
+        card_state: "disponible",
+        product_kind: "quantity" as const,
+        quantity: 5,
+      },
+      {
+        _id: "5",
+        card_id: "da-envio",
+        card_state: "disponible",
+        product_kind: "quantity" as const,
+        quantity: 5,
+      },
+      {
+        _id: "6",
+        card_id: "da-domicilio",
+        card_state: "disponible",
+        product_kind: "quantity" as const,
+        quantity: 5,
+      },
     ];
     const filtered = sortReservaCatalogRows(filterStockInReservaCatalog(rows));
-    expect(filtered.map((r) => r._id)).toEqual(["2", "1"]);
+    expect(filtered.map((r) => r._id)).toEqual(["2", "5", "6", "4", "1"]);
   });
 });

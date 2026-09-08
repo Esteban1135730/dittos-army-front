@@ -1,6 +1,6 @@
 import {
-  isBulkCardId,
   isQuantityProduct,
+  reservaCatalogPinRank,
 } from "../constants/bulk-product";
 import type { StockListItem } from "../types/stock";
 
@@ -31,13 +31,11 @@ export function filterStockInReservaCatalog<
   return items.filter(isStockLineInReservaCatalog);
 }
 
-/** El SKU bulk va primero para no perderlo en la paginación. */
+/** bulk / envío / protección van primero para no perderlos en la paginación. */
 export function sortReservaCatalogRows<T extends Pick<StockListItem, "card_id">>(
   rows: T[],
 ): T[] {
-  return [...rows].sort((a, b) => {
-    const aBulk = isBulkCardId(a.card_id) ? 0 : 1;
-    const bBulk = isBulkCardId(b.card_id) ? 0 : 1;
-    return aBulk - bBulk;
-  });
+  return [...rows].sort(
+    (a, b) => reservaCatalogPinRank(a.card_id) - reservaCatalogPinRank(b.card_id),
+  );
 }
