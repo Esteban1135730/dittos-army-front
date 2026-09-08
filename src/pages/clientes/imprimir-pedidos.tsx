@@ -4,9 +4,10 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
 import { paginatePedidoLineItems } from "./pedido-print-sheets";
+import { openPedidoTermicaPrintWindow, pedidoTermicaMuestraAbono } from "./pedido-termica-print";
 import { mergePedidoSelection } from "./pedido-print-selection";
 import { API_CLIENT, API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
-import { API_PEDIDO, type PedidoItem } from "./pedido-types";
+import { API_PEDIDO, type PedidoItem, pedidoId as getPedidoId } from "./pedido-types";
 import {
   groupReservasForPrint,
   pickPedidoForPrintCard,
@@ -14,11 +15,13 @@ import {
 import { abrirWhatsAppConTexto, buildWhatsAppPedidoText } from "./mensaje-reserva-pedido";
 import { descripcionEntrega, formatFechaTentativa } from "./pedido-entrega-label";
 import { reservaLineQuantity } from "./clientes-resumen-pedidos";
+import type { PedidoAbonosResponse } from "./use-pedido-abonos";
 
 type StockItem = Pick<StockListItem, "_id" | "card_name">;
 
 type PedidoCard = {
   key: string;
+  pedidoId?: string;
   client: ClientItem;
   entregaLabel: string;
   fechaTentativa: string;
@@ -28,6 +31,24 @@ type PedidoCard = {
 
 const CARD_WIDTH_MM = 63;
 const CARD_HEIGHT_MM = 88;
+
+async function fetchPedidoAbonoSiAplica(
+  pedidoId: string | undefined,
+): Promise<{ abonado_cop: number; saldo_cop: number } | undefined> {
+  if (!pedidoId) return undefined;
+  try {
+    const res = await axios.get<PedidoAbonosResponse>(
+      `${API_PEDIDO}/${pedidoId}/abonos`,
+    );
+    if (!pedidoTermicaMuestraAbono(res.data.abonado_cop)) return undefined;
+    return {
+      abonado_cop: res.data.abonado_cop,
+      saldo_cop: res.data.saldo_cop,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export default function ImprimirPedidosPage() {
   const printRef = useRef<HTMLDivElement>(null);
@@ -126,6 +147,7 @@ export default function ImprimirPedidosPage() {
         const total = rows.reduce((sum, i) => sum + i.precio, 0);
         return {
           key: group.clientId,
+          pedidoId: pedido ? getPedidoId(pedido) : undefined,
           client,
           entregaLabel: pedido
             ? descripcionEntrega(pedido)
@@ -187,6 +209,34 @@ export default function ImprimirPedidosPage() {
   const handleImprimir = () => {
     document.body.classList.add("print-pedidos-mode");
     window.print();
+  };
+
+  const handleImprimirTermica = () => {
+    void (async () => {
+      try {
+        const tickets = await Promise.all(
+          pedidosAImprimir.map(async (pedido) => {
+            const abono = await fetchPedidoAbonoSiAplica(pedido.pedidoId);
+            return {
+              nombre: pedido.client.nombre,
+              celular: pedido.client.celular,
+              entrega: pedido.entregaLabel,
+              fechaTentativa: pedido.fechaTentativa,
+              lineas: pedido.items,
+              total: pedido.total,
+              ...(abono ?? {}),
+            };
+          }),
+        );
+        openPedidoTermicaPrintWindow(tickets);
+      } catch (err: unknown) {
+        window.alert(
+          err instanceof Error
+            ? err.message
+            : "No se pudo abrir la impresión térmica.",
+        );
+      }
+    })();
   };
 
   const mensajePedidoWhatsApp = async (pedido: PedidoCard): Promise<string> =>
@@ -266,17 +316,32 @@ export default function ImprimirPedidosPage() {
               </li>
             ))}
           </ul>
-          <div className="no-print flex flex-wrap gap-2 mb-6">
-            <button
-              type="button"
-              onClick={handleImprimir}
-              disabled={tarjetasPedidoAImprimir.length === 0}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
-            >
-              {tarjetasPedidoAImprimir.length === 0
-                ? "Selecciona al menos un pedido"
-                : `Imprimir ${tarjetasPedidoAImprimir.length} tarjeta${tarjetasPedidoAImprimir.length !== 1 ? "s" : ""}`}
-            </button>
+          <div className="no-print flex flex-col gap-1 mb-6">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleImprimir}
+                disabled={tarjetasPedidoAImprimir.length === 0}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
+              >
+                {tarjetasPedidoAImprimir.length === 0
+                  ? "Selecciona al menos un pedido"
+                  : `Imprimir ${tarjetasPedidoAImprimir.length} tarjeta${tarjetasPedidoAImprimir.length !== 1 ? "s" : ""}`}
+              </button>
+              <button
+                type="button"
+                onClick={handleImprimirTermica}
+                disabled={pedidosAImprimir.length === 0}
+                className="bg-gray-800 hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
+              >
+                {pedidosAImprimir.length === 0
+                  ? "Selecciona al menos un pedido"
+                  : "Imprimir térmica (58 mm)"}
+              </button>
+            </div>
+            <p className="text-gray-500 text-sm">
+              Térmica: rollo 58 mm, márgenes ninguno, escala 100%.
+            </p>
           </div>
         </>
       )}

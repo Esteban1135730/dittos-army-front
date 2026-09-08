@@ -1,5 +1,8 @@
 /** SKU fijo de inventario con cantidad (feature 032). Alineado con backend. */
 
+import { apiUrl } from "../config/api";
+import { rewriteCardImagesUrl } from "../utils/card-images-url";
+
 export const BULK_CARD_ID = "da-bulk";
 export const BULK_CARD_NAME = "bulk";
 export const BULK_DEFAULT_QUANTITY = 9999;
@@ -20,13 +23,13 @@ export function isQuantityProduct(opts: {
   return isBulkCardId(opts.card_id);
 }
 
-/** URL de imagen para UI: fallback dummy para da-bulk. */
+/** URL de imagen para UI: fallback dummy para da-bulk; /card-images vía API. */
 export function resolveStockImageUrl(
   cardId: string | null | undefined,
   imageUrl: string | null | undefined,
 ): string {
   const url = String(imageUrl ?? "").trim();
-  if (url) return url;
+  if (url) return rewriteCardImagesUrl(url, apiUrl);
   if (isBulkCardId(cardId)) return BULK_DUMMY_IMAGE_URL;
   return "";
 }
