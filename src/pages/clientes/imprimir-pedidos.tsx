@@ -18,6 +18,7 @@ import {
 import { abrirWhatsAppConTexto, buildWhatsAppPedidoText } from "./mensaje-reserva-pedido";
 import { descripcionEntrega, formatFechaTentativa } from "./pedido-entrega-label";
 import { reservaLineQuantity } from "./clientes-resumen-pedidos";
+import { stockRowsFromQueryData } from "./stock-query-rows";
 import type { PedidoAbonosResponse } from "./use-pedido-abonos";
 
 type StockItem = Pick<StockListItem, "_id" | "card_name">;
@@ -84,30 +85,31 @@ export default function ImprimirPedidosPage() {
     },
   });
 
+  const stockOwners: OwnerKey[] = [activeOwner, secondaryOwner];
   const stockQueries = useQueries({
-    queries: [activeOwner, secondaryOwner].map((owner) => ({
+    queries: stockOwners.map((owner) => ({
       queryKey: ["stock", owner] as const,
-      queryFn: async (): Promise<{ owner: OwnerKey; items: StockItem[] }> => {
+      queryFn: async (): Promise<StockItem[]> => {
         const res = await axios.get(API_STOCK, { ownerOverride: owner });
-        return {
-          owner,
-          items: Array.isArray(res.data) ? res.data : [],
-        };
+        return Array.isArray(res.data) ? res.data : [];
       },
     })),
   });
 
+  const stockActiveData = stockQueries[0]?.data;
+  const stockOtherData = stockQueries[1]?.data;
   const stockNameByOwnerId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const q of stockQueries) {
-      const data = q.data;
-      if (!data) continue;
-      for (const s of data.items) {
-        map.set(`${data.owner}:${s._id}`, s.card_name ?? "Carta");
+    const byOwner = [stockActiveData, stockOtherData];
+    byOwner.forEach((data, i) => {
+      const owner = stockOwners[i];
+      for (const s of stockRowsFromQueryData<StockItem>(data)) {
+        if (!s._id) continue;
+        map.set(`${owner}:${s._id}`, s.card_name ?? "Carta");
       }
-    }
+    });
     return map;
-  }, [stockQueries]);
+  }, [stockActiveData, stockOtherData, activeOwner, secondaryOwner]);
 
   const clientesMap = useMemo(() => {
     const map: Record<string, ClientItem> = {};
@@ -154,10 +156,13 @@ export default function ImprimirPedidosPage() {
       const rows: PedidoTermicaLinea[] = group.items.map((r) => {
         const units = reservaLineQuantity(r.quantity);
         const owner = r.stock_owner ?? activeOwner;
+        const stockId = String(r.stock_id ?? "").trim();
         const line: PedidoTermicaLinea = {
           nombre:
-            stockNameByOwnerId.get(`${owner}:${r.stock_id}`) ??
-            `Stock ${r.stock_id.slice(-4)}`,
+            (stockId
+              ? stockNameByOwnerId.get(`${owner}:${stockId}`)
+              : undefined) ??
+            (stockId ? `Stock ${stockId.slice(-4)}` : "Carta"),
           precio: r.precio * units,
         };
         if (r.stock_owner) line.stock_owner = r.stock_owner;
