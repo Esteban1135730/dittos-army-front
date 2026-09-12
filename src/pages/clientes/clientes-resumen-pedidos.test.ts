@@ -37,6 +37,17 @@ describe("gananciaEstimadaReservaCop", () => {
   it("trata costo 0 si falta stock", () => {
     expect(gananciaEstimadaReservaCop(5_000, "COP", undefined, convert)).toBe(5_000);
   });
+
+  it("envio conserva el precio y ganancia 0", () => {
+    expect(
+      gananciaEstimadaReservaCop(
+        8_000,
+        "COP",
+        { card_id: "da-envio", card_cost: 0, currency: "COP" },
+        convert,
+      ),
+    ).toBe(0);
+  });
 });
 
 describe("aggregateReservasTotales", () => {
@@ -55,6 +66,17 @@ describe("aggregateReservasTotales", () => {
 
     expect(result.ventasEsperadasCop).toBe(20_000);
     expect(result.gananciaEstimadaCop).toBe(12_000);
+  });
+
+  it("envio suma ventas esperadas y ganancia 0", () => {
+    const result = aggregateReservasTotales(
+      [{ stock_id: "d1", precio: 8_000, currency: "COP" }],
+      { d1: { card_id: "da-envio", card_cost: 0, currency: "COP" } },
+      convert,
+    );
+
+    expect(result.ventasEsperadasCop).toBe(8_000);
+    expect(result.gananciaEstimadaCop).toBe(0);
   });
 
   it("trata costo 0 si falta la línea de stock", () => {

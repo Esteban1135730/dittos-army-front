@@ -6,7 +6,13 @@ import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
 import { API_BASE, apiUrl } from "../../../config/api";
 import { CardThumb } from "../../../components/card-thumb";
+import {
+  PANEL_DATAGRID_DENSITY,
+  PANEL_DATAGRID_IMAGE_COL_WIDTH,
+  PANEL_DATAGRID_ROW_HEIGHT,
+} from "../../../theme/panel-density";
 import { LoadingScreen } from "../../../components/loading";
+import { isZeroProfitCardId } from "../../../constants/bulk-product";
 
 type SaleHistoryItem = {
   _id: string;
@@ -28,6 +34,19 @@ type SaleHistoryItem = {
     unity_cost: number;
   };
 };
+
+function historySaleCostoCop(
+  sale: SaleHistoryItem,
+  convert: ReturnType<typeof useExchangeRates>["convert"],
+): number {
+  if (isZeroProfitCardId(sale.card_id)) return sale.amount_cop;
+  const costo = sale.stock_info.card_cost;
+  const monedaCosto = sale.stock_info.currency;
+  if (monedaCosto === "COP") return costo;
+  if (monedaCosto === "EUR") return convert.toCopFromEur(costo) ?? 0;
+  if (monedaCosto === "USD") return convert.toCopFromUsd(costo) ?? 0;
+  return 0;
+}
 
 export default function SalesHistory() {
   const { convert } = useExchangeRates();
@@ -95,14 +114,14 @@ export default function SalesHistory() {
           <CardThumb
             src={src}
             alt={params?.row?.stock_info?.card_name || "carta"}
-            size="md"
+            size="sm"
             enlargeOnHover
           />
         );
       },
       sortable: false,
       filterable: false,
-      width: 100,
+      width: PANEL_DATAGRID_IMAGE_COL_WIDTH,
     },
     {
       field: "card_name",
@@ -121,25 +140,10 @@ export default function SalesHistory() {
       headerName: "Costo de Compra",
       renderCell: (params) => {
         if (!params?.row?.stock_info) return <span>-</span>;
-        const costo = params.row.stock_info.card_cost;
+        const costoCOP = historySaleCostoCop(params.row as SaleHistoryItem, convert);
+        const costoEUR = convert.toEurFromCop(costoCOP) ?? 0;
+        const costoUSD = convert.toUsdFromCop(costoCOP) ?? 0;
         const moneda = params.row.stock_info.currency;
-        let costoCOP = 0;
-        let costoEUR = 0;
-        let costoUSD = 0;
-
-        if (moneda === "COP") {
-          costoCOP = costo;
-          costoEUR = convert.toEurFromCop(costo) ?? 0;
-          costoUSD = convert.toUsdFromCop(costo) ?? 0;
-        } else if (moneda === "EUR") {
-          costoEUR = costo;
-          costoCOP = convert.toCopFromEur(costo) ?? 0;
-          costoUSD = convert.toUsdFromCop(costoCOP) ?? 0;
-        } else if (moneda === "USD") {
-          costoUSD = costo;
-          costoCOP = convert.toCopFromUsd(costo) ?? 0;
-          costoEUR = convert.toEurFromCop(costoCOP) ?? 0;
-        }
 
         return (
           <div className="flex flex-col gap-1 text-sm">
@@ -181,18 +185,8 @@ export default function SalesHistory() {
       headerName: "Ganancia",
       renderCell: (params) => {
         if (!params?.row?.stock_info || !params?.row?.amount_cop) return <span>-</span>;
-        const costo = params.row.stock_info.card_cost;
-        const monedaCosto = params.row.stock_info.currency;
         const ventaCOP = params.row.amount_cop;
-
-        let costoCOP = 0;
-        if (monedaCosto === "COP") {
-          costoCOP = costo;
-        } else if (monedaCosto === "EUR") {
-          costoCOP = convert.toCopFromEur(costo) ?? 0;
-        } else if (monedaCosto === "USD") {
-          costoCOP = convert.toCopFromUsd(costo) ?? 0;
-        }
+        const costoCOP = historySaleCostoCop(params.row as SaleHistoryItem, convert);
 
         const ganancia = ventaCOP - costoCOP;
         const porcentaje = costoCOP > 0 ? (ganancia / costoCOP) * 100 : 0;
@@ -378,7 +372,8 @@ export default function SalesHistory() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pagination
-            rowHeight={104}
+            rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+            density={PANEL_DATAGRID_DENSITY}
             disableRowSelectionOnClick
           />
         )}

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -43,7 +43,15 @@ import {
   reservaLineQuantity,
 } from "./clientes-resumen-pedidos";
 import { useExchangeRates } from "../../utils/tasa";
-import { resolveStockImageUrl } from "../../constants/bulk-product";
+import { otherOwner, type OwnerKey } from "../../config/owners";
+import { useOwner } from "../../modules/owner";
+import {
+  buildStockByOwnerId,
+  findPedidoLineByStockId,
+  lookupStockForReserva,
+  resolvePedidoReservaVisual,
+} from "./pedido-reserva-visual";
+import { stockRowsFromQueryData } from "./stock-query-rows";
 import { extractAxiosErrorMessage } from "./extract-axios-error";
 import NuevoPedidoDialog from "./nuevo-pedido-dialog";
 import PedidoActivoPanel from "./pedido-activo-panel";
@@ -86,6 +94,8 @@ function formatFechaReserva(iso?: string): string {
 export default function ClienteDetallePage() {
   const { clientId } = useParams<{ clientId: string }>();
   const queryClient = useQueryClient();
+  const { owner: activeOwner } = useOwner();
+  const secondaryOwner = otherOwner(activeOwner);
   const { convert } = useExchangeRates();
   const [formOpen, setFormOpen] = useState(false);
   const [pedidoDialog, setPedidoDialog] = useState<"create" | "edit" | null>(null);
@@ -166,21 +176,26 @@ export default function ClienteDetallePage() {
     Boolean(pedidoAbiertoId),
   );
 
-  const { data: stockRaw = [] } = useQuery<StockListItem[]>({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(API_STOCK);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const stockOwners: OwnerKey[] = [activeOwner, secondaryOwner];
+  const stockQueries = useQueries({
+    queries: stockOwners.map((owner) => ({
+      queryKey: ["stock", owner] as const,
+      queryFn: async (): Promise<StockListItem[]> => {
+        const res = await axios.get(API_STOCK, { ownerOverride: owner });
+        return Array.isArray(res.data) ? res.data : [];
+      },
+    })),
   });
-
-  const stockMap = useMemo(() => {
-    const m: Record<string, StockListItem> = {};
-    stockRaw.forEach((s) => {
-      m[s._id] = s;
-    });
-    return m;
-  }, [stockRaw]);
+  const stockActiveData = stockQueries[0]?.data;
+  const stockOtherData = stockQueries[1]?.data;
+  const stockByOwnerId = useMemo(
+    () =>
+      buildStockByOwnerId([
+        { owner: activeOwner, rows: stockRowsFromQueryData<StockListItem>(stockActiveData) },
+        { owner: secondaryOwner, rows: stockRowsFromQueryData<StockListItem>(stockOtherData) },
+      ]),
+    [stockActiveData, stockOtherData, activeOwner, secondaryOwner],
+  );
 
   const { data: historialVentas = [], isLoading: historialLoading } = useQuery<VentaClienteRow[]>({
     queryKey: ["ventas-cliente", clientId],
@@ -204,13 +219,22 @@ export default function ClienteDetallePage() {
     return filterReservasDePedido(reservas, pid, includeOrphans);
   }, [reservas, pedidoAbierto]);
 
+  const stockMap = useMemo(() => {
+    const m: Record<string, StockListItem> = {};
+    for (const r of reservasDelPedido) {
+      const st = lookupStockForReserva(stockByOwnerId, r.stock_id, r.stock_owner, activeOwner);
+      if (st) m[r.stock_id] = st;
+    }
+    return m;
+  }, [reservasDelPedido, stockByOwnerId, activeOwner]);
+
   const reservasConStock = useMemo(
     () =>
-      reservasDelPedido.map((r) => {
-        const st = stockMap[r.stock_id];
-        return { reserva: r, stock: st };
-      }),
-    [reservasDelPedido, stockMap],
+      reservasDelPedido.map((r) => ({
+        reserva: r,
+        stock: lookupStockForReserva(stockByOwnerId, r.stock_id, r.stock_owner, activeOwner),
+      })),
+    [reservasDelPedido, stockByOwnerId, activeOwner],
   );
 
   const resumenReserva = useMemo(
@@ -235,12 +259,17 @@ export default function ClienteDetallePage() {
     if (!client) return null;
     if (reservasDelPedido.length === 0 && incomingCliente.length === 0) return null;
     const lines = reservasDelPedido.map((r) => {
-      const st = stockMap[r.stock_id];
+      const visual = resolvePedidoReservaVisual({
+        stock: lookupStockForReserva(stockByOwnerId, r.stock_id, r.stock_owner, activeOwner),
+        pedidoLine: findPedidoLineByStockId(pedidoAbierto?.lines, r.stock_id),
+        stockOwner: r.stock_owner,
+        activeOwner,
+      });
       return {
-        card_id: st?.card_id ?? "",
-        card_name: st?.card_name ?? "Carta",
+        card_id: visual.cardId,
+        card_name: visual.cardName,
         precio: r.precio,
-        rareza: st?.rareza,
+        rareza: visual.rareza,
         quantity: reservaLineQuantity(r.quantity),
       };
     });
@@ -407,14 +436,17 @@ export default function ClienteDetallePage() {
         }
       > = {};
       reservasDelPedido.forEach((r) => {
-        const st = stockMap[r.stock_id];
+        const visual = resolvePedidoReservaVisual({
+          stock: lookupStockForReserva(stockByOwnerId, r.stock_id, r.stock_owner, activeOwner),
+          pedidoLine: findPedidoLineByStockId(pedidoAbierto?.lines, r.stock_id),
+          stockOwner: r.stock_owner,
+          activeOwner,
+        });
         stockById[r.stock_id] = {
-          card_id: st?.card_id ?? "",
-          card_name: st?.card_name ?? "Carta",
-          image_url: st?.image_url
-            ? resolveStockImageUrl(st.card_id, st.image_url)
-            : resolveStockImageUrl(st?.card_id, undefined),
-          rareza: st?.rareza,
+          card_id: visual.cardId,
+          card_name: visual.cardName,
+          image_url: visual.imageSrc,
+          rareza: visual.rareza,
         };
       });
       const { imageFailures } = await downloadVentaClientePdf({
@@ -530,7 +562,7 @@ export default function ClienteDetallePage() {
   }
 
   return (
-    <Stack spacing={3} sx={clientesPageSx}>
+    <Stack spacing={2} sx={clientesPageSx}>
       <Box sx={clientesToolbarSx}>
         <Stack direction="row" alignItems="center" gap={2} minWidth={0}>
           <Button
@@ -586,7 +618,7 @@ export default function ClienteDetallePage() {
       ) : null}
 
       <Box sx={clientesDetailGridSx}>
-        <Stack spacing={3}>
+        <Stack spacing={2}>
           {clientId ? (
             <PedidoTiendaSection
               clientId={clientId}
@@ -601,6 +633,7 @@ export default function ClienteDetallePage() {
             <PedidoActivoPanel
               pedido={pedidoAbierto}
               clientId={clientId}
+              activeOwner={activeOwner}
               reservasConStock={reservasConStock}
               resumen={resumenReserva}
               finalizando={finalizando}

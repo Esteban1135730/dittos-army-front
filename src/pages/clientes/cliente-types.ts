@@ -94,6 +94,21 @@ export type ImportWhatsAppLineResult = {
   issues: string[];
 };
 
+export type ImportWhatsAppPedidoAction =
+  | "create"
+  | "reuse_reservado"
+  | "reservas_only"
+  | "blocked_pagado";
+
+export type ImportWhatsAppDelivery = {
+  store_id: string | null;
+  store_name: string | null;
+  fecha_tentativa_entrega: string | null;
+  pedido_action: ImportWhatsAppPedidoAction;
+  existing_pedido_id: string | null;
+  issues: string[];
+};
+
 export type ImportWhatsAppPreviewResponse = {
   client_id: string;
   client_name_from_message: string | null;
@@ -104,6 +119,7 @@ export type ImportWhatsAppPreviewResponse = {
     lines_failed: number;
     units_reserved: number;
   };
+  delivery?: ImportWhatsAppDelivery;
 };
 
 export type ImportWhatsAppImportResponse = ImportWhatsAppPreviewResponse & {

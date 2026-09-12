@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rewriteCardImagesUrl } from "./card-images-url";
+import { isLocalCardImagesUrl, rewriteCardImagesUrl } from "./card-images-url";
 
 function apiUrl(path: string): string {
   return `https://api.example${path}`;
@@ -37,5 +37,16 @@ describe("rewriteCardImagesUrl", () => {
     expect(rewriteCardImagesUrl("/bulk-dummy.svg", apiUrl)).toBe(
       "/bulk-dummy.svg",
     );
+  });
+
+  it("isLocalCardImagesUrl detecta caché local, no CDN", () => {
+    expect(isLocalCardImagesUrl("/card-images/me03/me03-117.png")).toBe(true);
+    expect(
+      isLocalCardImagesUrl("http://localhost:3000/card-images/me03/me03-117.png"),
+    ).toBe(true);
+    expect(
+      isLocalCardImagesUrl("https://assets.tcgdex.net/en/me/me03/117/low.png"),
+    ).toBe(false);
+    expect(isLocalCardImagesUrl("/bulk-dummy.svg")).toBe(false);
   });
 });

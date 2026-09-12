@@ -20,6 +20,10 @@ vi.mock("axios", () => ({
   },
 }));
 
+vi.mock("../../config/api", () => ({
+  apiUrl: (path: string) => `https://api.test${path.startsWith("/") ? path : `/${path}`}`,
+}));
+
 describe("tcgdex-card-detail", () => {
   it("looksLikeTcgdexCardId acepta ids con ceros extra y sets con punto", () => {
     expect(looksLikeTcgdexCardId("sv8-194")).toBe(true);
@@ -113,5 +117,47 @@ describe("tcgdex-card-detail", () => {
     );
     expect(resolveCardImageSrc("me05-066", "", map)).toBe("https://tcgdex.example/pikipek.png");
     expect(resolveCardImageSrc("me05-066", null, {})).toBe("");
+  });
+
+  it("resolveCardImageSrc prefiere CDN TCGdex si la URL guardada es caché local", () => {
+    const detail = {
+      id: "me03-117",
+      name: "Wondrous Patch",
+      imageUrl: "https://assets.tcgdex.net/en/me/me03/117/low.png",
+      imageLargeUrl: "",
+      rarity: "",
+      category: "",
+      setLabel: "",
+    };
+    const map = { "me03-117": detail };
+    expect(
+      resolveCardImageSrc(
+        "me03-117",
+        "http://localhost:3000/card-images/me03/me03-117.png",
+        map,
+      ),
+    ).toBe("https://assets.tcgdex.net/en/me/me03/117/low.png");
+    expect(resolveCardImageSrc("me03-117", "/card-images/me03/me03-117.png", map)).toBe(
+      "https://assets.tcgdex.net/en/me/me03/117/low.png",
+    );
+    expect(
+      resolveCardImageSrc(
+        "me03-117",
+        "http://localhost:3000/card-images/me03/me03-117.png",
+        {},
+      ),
+    ).toBe("https://api.test/card-images/me03/me03-117.png");
+  });
+
+  it("resolveCardImageSrc reescribe /card-images/ y localhost contra el API", () => {
+    expect(resolveCardImageSrc("sv8-194", "/card-images/sv8/sv8-194.png", {})).toBe(
+      "https://api.test/card-images/sv8/sv8-194.png",
+    );
+    expect(
+      resolveCardImageSrc("sv8-194", "http://localhost:3000/card-images/sv8/sv8-194.png", {}),
+    ).toBe("https://api.test/card-images/sv8/sv8-194.png");
+    expect(
+      resolveCardImageSrc("sv8-194", "https://assets.tcgdex.net/en/sv8/194/low.png", {}),
+    ).toBe("https://assets.tcgdex.net/en/sv8/194/low.png");
   });
 });

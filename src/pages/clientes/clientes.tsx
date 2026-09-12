@@ -1,4 +1,4 @@
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { DataGrid, type GridColDef, type GridRowParams } from "@mui/x-data-grid";
 import { useState, useMemo, useCallback } from "react";
@@ -18,7 +18,12 @@ import {
 } from "@mui/material";
 import type { StockListItem } from "../../types/stock";
 import { LoadingScreen } from "../../components/loading";
+import {
+  PANEL_DATAGRID_DENSITY,
+  PANEL_DATAGRID_ROW_HEIGHT,
+} from "../../theme/panel-density";
 import ClienteFormDialog from "./cliente-form-dialog";
+import ImportWhatsAppFromListDialog from "./import-whatsapp-from-list-dialog";
 import {
   ALERTA_HORAS_AMARILLO,
   ALERTA_HORAS_ROJO,
@@ -56,8 +61,10 @@ type ListFilter = "todos" | "con_pedido" | "con_reserva" | "urgentes";
 
 export default function ClientesPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { convert } = useExchangeRates();
   const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [importWhatsAppOpen, setImportWhatsAppOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -558,6 +565,13 @@ export default function ClientesPage() {
           >
             Imprimir pedidos
           </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setImportWhatsAppOpen(true)}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Importar WhatsApp
+          </Button>
           <Button variant="contained" onClick={() => setNuevoOpen(true)} sx={{ textTransform: "none", fontWeight: 600 }}>
             Nuevo cliente
           </Button>
@@ -649,7 +663,8 @@ export default function ClientesPage() {
               }}
               disableRowSelectionOnClick
               autoHeight
-              rowHeight={108}
+              rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+              density={PANEL_DATAGRID_DENSITY}
               sx={clientesDataGridSx}
             />
           </Box>
@@ -661,6 +676,19 @@ export default function ClientesPage() {
         mode="create"
         onClose={() => setNuevoOpen(false)}
         onSaved={() => showSnackbar("Cliente creado.", "success")}
+      />
+
+      <ImportWhatsAppFromListDialog
+        open={importWhatsAppOpen}
+        onClose={() => setImportWhatsAppOpen(false)}
+        clientes={clientes}
+        onImported={async (summary) => {
+          await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+          await queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+          await queryClient.invalidateQueries({ queryKey: ["reservas"] });
+          await queryClient.invalidateQueries({ queryKey: ["stock"] });
+          showSnackbar(summary, "success");
+        }}
       />
 
       <Snackbar

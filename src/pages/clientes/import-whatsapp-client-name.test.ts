@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { clientNameDiffersFromMessage } from "./import-whatsapp-client-name";
+import {
+  clientNameDiffersFromMessage,
+  extractClientNameFromStoreMessage,
+} from "./import-whatsapp-client-name";
 
 describe("clientNameDiffersFromMessage", () => {
   it("no advierte si el mensaje no trae nombre", () => {
@@ -10,5 +13,12 @@ describe("clientNameDiffersFromMessage", () => {
   it("detecta diferencia ignorando mayúsculas", () => {
     expect(clientNameDiffersFromMessage("Ana García", "ana garcía")).toBe(false);
     expect(clientNameDiffersFromMessage("Ana", "Pedro")).toBe(true);
+  });
+
+  it("extrae A nombre de del mensaje", () => {
+    expect(
+      extractClientNameFromStoreMessage("A nombre de: Juan Pérez\nNota:"),
+    ).toBe("Juan Pérez");
+    expect(extractClientNameFromStoreMessage("sin nombre")).toBeNull();
   });
 });

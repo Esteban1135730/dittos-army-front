@@ -15,7 +15,7 @@ import type { ReservaItem } from "./cliente-types";
 import type { StockListItem } from "../../types/stock";
 import { amountToCop, gananciaEstimadaReservaCop, reservaLineQuantity } from "./clientes-resumen-pedidos";
 import ReservaCostMarginAside from "./reserva-cost-margin";
-import { resolveStockImageUrl } from "../../constants/bulk-product";
+import { ESTEBAN_STOCK_MARK, OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
 import type { PedidoItem } from "./pedido-types";
 import { pedidoId } from "./pedido-types";
 import { pedidoStatusLabel } from "./pedido-entrega-label";
@@ -24,6 +24,12 @@ import PedidoLineasList from "./pedido-lineas-list";
 import PedidoAbonosBlock from "./pedido-abonos-block";
 import PedidoStatusStepper from "./pedido-status-stepper";
 import { pedidoTotal } from "./pedido-ui-utils";
+import {
+  findPedidoLineByStockId,
+  resolvePedidoReservaVisual,
+} from "./pedido-reserva-visual";
+import { lookupTcgdexDetail } from "./tcgdex-card-detail";
+import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
 import {
   clientesActionRowSx,
   clientesHighlightPanelSx,
@@ -44,6 +50,7 @@ type ResumenFinanciero = {
 type Props = {
   pedido: PedidoItem;
   clientId: string;
+  activeOwner: OwnerKey;
   reservasConStock: ReservaConStock[];
   resumen: ResumenFinanciero;
   finalizando: boolean;
@@ -61,6 +68,7 @@ type Props = {
 export default function PedidoActivoPanel({
   pedido,
   clientId,
+  activeOwner,
   reservasConStock,
   resumen,
   finalizando,
@@ -77,6 +85,14 @@ export default function PedidoActivoPanel({
   const total = pedidoTotal(pedido.lines);
   const isReservado = pedido.status === "reservado";
   const isPagado = pedido.status === "pagado";
+  const tcgCardIds = [
+    ...reservasConStock.map(({ stock: st, reserva: r }) => {
+      const line = findPedidoLineByStockId(pedido.lines, r.stock_id);
+      return st?.card_id || line?.card_id || "";
+    }),
+    ...pedido.lines.map((l) => l.card_id),
+  ];
+  const { detailsByCardId, isLoading: loadingCardImages } = useTcgdexCardDetails(tcgCardIds);
 
   return (
     <Paper
@@ -228,12 +244,26 @@ export default function PedidoActivoPanel({
               <Typography variant="body2" color="text.secondary">
                 No hay cartas de stock en este pedido. Usa «Gestionar cartas» para agregar inventario.
               </Typography>
-              {pedido.lines.length > 0 ? <PedidoLineasList lines={pedido.lines} dense /> : null}
+              {pedido.lines.length > 0 ? (
+                <PedidoLineasList lines={pedido.lines} dense detailsByCardId={detailsByCardId} />
+              ) : null}
             </Stack>
           ) : (
             <Stack spacing={0} divider={<Divider flexItem />}>
               {reservasConStock.map(({ reserva: r, stock: st }) => {
                 const units = reservaLineQuantity(r.quantity);
+                const pedidoLine = findPedidoLineByStockId(pedido.lines, r.stock_id);
+                const tcg = lookupTcgdexDetail(
+                  st?.card_id || pedidoLine?.card_id,
+                  detailsByCardId,
+                );
+                const visual = resolvePedidoReservaVisual({
+                  stock: st,
+                  pedidoLine,
+                  tcg,
+                  stockOwner: r.stock_owner,
+                  activeOwner,
+                });
                 const gananciaLinea =
                   gananciaEstimadaReservaCop(
                     r.precio,
@@ -250,17 +280,28 @@ export default function PedidoActivoPanel({
                     sx={{ py: 1.75 }}
                   >
                     <CardThumb
-                      src={resolveStockImageUrl(st?.card_id, st?.image_url)}
-                      alt={st?.card_name ?? "Carta"}
+                      src={visual.imageSrc}
+                      alt={visual.cardName}
                       size="md"
-                      enlargeOnHover
+                      pending={loadingCardImages && !visual.imageSrc}
+                      enlargeOnHover={!!visual.imageSrc}
                     />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography fontWeight={700}>{st?.card_name ?? "Carta"}</Typography>
+                      <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75}>
+                        <Typography fontWeight={700}>
+                          {visual.lineOwner === "esteban" ? `${ESTEBAN_STOCK_MARK} ` : ""}
+                          {visual.cardName}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={OWNERS_CONFIG.owners[visual.lineOwner].label}
+                          color={visual.lineOwner === "esteban" ? "secondary" : "default"}
+                        />
+                      </Stack>
                       <Typography variant="caption" color="text.secondary" display="block">
-                        {st?.card_id}
+                        {visual.cardId}
                         {units > 1 ? ` · Cant.: ${units}` : ""}
-                        {st?.rareza ? ` · ${st.rareza}` : ""}
+                        {visual.rareza ? ` · ${visual.rareza}` : ""}
                       </Typography>
                       <Stack
                         direction="row"

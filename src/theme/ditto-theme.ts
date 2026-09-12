@@ -51,7 +51,13 @@ export const dittoTheme = createTheme({
   },
   typography: {
     fontFamily: '"DM Sans", "Segoe UI", system-ui, sans-serif',
-    h4: { fontWeight: 800, letterSpacing: "-0.02em", color: dittoPalette.text.primary },
+    h4: {
+      fontWeight: 800,
+      letterSpacing: "-0.02em",
+      color: dittoPalette.text.primary,
+      fontSize: "1.55rem",
+      lineHeight: 1.25,
+    },
     h5: { fontWeight: 700, letterSpacing: "-0.01em" },
     h6: { fontWeight: 700 },
     subtitle1: { fontWeight: 700 },
@@ -69,6 +75,31 @@ export const dittoTheme = createTheme({
         },
       },
     },
+    MuiTextField: {
+      defaultProps: {
+        size: "small",
+      },
+    },
+    MuiFormControl: {
+      defaultProps: {
+        size: "small",
+      },
+    },
+    MuiSelect: {
+      defaultProps: {
+        size: "small",
+      },
+    },
+    MuiDialog: {
+      defaultProps: {
+        scroll: "paper",
+      },
+      styleOverrides: {
+        paper: {
+          maxHeight: "calc(100dvh - 24px)",
+        },
+      },
+    },
     MuiButton: {
       defaultProps: {
         disableElevation: true,
@@ -78,6 +109,9 @@ export const dittoTheme = createTheme({
           borderRadius: 8,
           textTransform: "none",
           fontWeight: 600,
+        },
+        sizeMedium: {
+          paddingBlock: 5,
         },
         containedSuccess: {
           backgroundColor: dittoPalette.semantic.success,
@@ -106,7 +140,7 @@ export const dittoTheme = createTheme({
         root: {
           textTransform: "none",
           fontWeight: 600,
-          minHeight: 40,
+          minHeight: 36,
         },
       },
     },

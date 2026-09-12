@@ -831,7 +831,7 @@ export default function CardtraderReceiptPage() {
 
   if (isLoading) {
     return (
-      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 4, px: { xs: 1, sm: 0 } }}>
+      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 2, px: { xs: 1, sm: 0 } }}>
         {pageHeader}
         {stepper}
         <LoadingScreen variant="inline" message="Cargando sesión…" minHeight={280} />
@@ -841,7 +841,7 @@ export default function CardtraderReceiptPage() {
 
   if (!session) {
     return (
-      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 4, px: { xs: 1, sm: 0 } }}>
+      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 2, px: { xs: 1, sm: 0 } }}>
         {pageHeader}
         {stepper}
         <Paper variant="outlined" sx={{ p: 3, maxWidth: 560 }}>
@@ -883,7 +883,7 @@ export default function CardtraderReceiptPage() {
     const step: ReceiptWizardStep =
       wizardStep === 4 ? 4 : 3;
     return (
-      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 4, px: { xs: 1, sm: 0 } }}>
+      <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 2, px: { xs: 1, sm: 0 } }}>
         {pageHeader}
         {stepper}
         {error ? (
@@ -924,7 +924,7 @@ export default function CardtraderReceiptPage() {
     summary.pending === 0 && summary.verified > 0 && units.length > 0;
 
   return (
-    <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 4, px: { xs: 1, sm: 0 } }}>
+    <Box sx={{ maxWidth: 1280, mx: 'auto', pb: 2, px: { xs: 1, sm: 0 } }}>
       {pageHeader}
       {stepper}
 

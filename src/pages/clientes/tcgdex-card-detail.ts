@@ -1,5 +1,7 @@
 import axios from "axios";
 import { apiUrl } from "../../config/api";
+import { resolveStockImageUrl } from "../../constants/bulk-product";
+import { isLocalCardImagesUrl } from "../../utils/card-images-url";
 import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
 import { expansionFromCardDto } from "./mensaje-reserva-pedido";
 
@@ -171,7 +173,16 @@ export function lookupTcgdexDetail(
   return undefined;
 }
 
-/** Imagen guardada, o miniatura TCGdex si el lote no trae URL. */
+function publicCardImageSrc(
+  cardId: string | null | undefined,
+  imageUrl: string | null | undefined,
+): string {
+  const stored = String(imageUrl ?? "").trim();
+  if (!stored || isLocalCardImagesUrl(stored)) return "";
+  return resolveStockImageUrl(cardId, stored);
+}
+
+/** Imagen pública (CDN) preferida; caché local `/card-images` solo si no hay TCGdex. */
 export function resolveCardImageSrc(
   cardId: string | null | undefined,
   imageUrl: string | null | undefined,
@@ -179,6 +190,11 @@ export function resolveCardImageSrc(
   language?: string | null,
 ): string {
   const stored = String(imageUrl ?? "").trim();
-  if (stored) return stored;
-  return lookupTcgdexDetail(cardId, details, language)?.imageUrl?.trim() ?? "";
+  const tcgUrl = lookupTcgdexDetail(cardId, details, language)?.imageUrl?.trim() ?? "";
+  const fromStoredPublic = publicCardImageSrc(cardId, stored);
+  if (fromStoredPublic) return fromStoredPublic;
+  const fromTcgPublic = publicCardImageSrc(cardId, tcgUrl);
+  if (fromTcgPublic) return fromTcgPublic;
+  if (stored) return resolveStockImageUrl(cardId, stored);
+  return tcgUrl ? resolveStockImageUrl(cardId, tcgUrl) : "";
 }

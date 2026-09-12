@@ -161,7 +161,7 @@ function NavItemLink({
       aria-current={active ? "page" : undefined}
       className={[
         "group flex items-center gap-2.5 rounded-md px-2.5 text-[13px] leading-tight transition-colors",
-        indented ? "py-1.5 pl-3" : "py-2",
+        indented ? "py-1 pl-3" : "py-1",
         active
           ? "bg-white/10 text-white font-medium"
           : "text-gray-300 hover:bg-white/5 hover:text-white",
@@ -169,7 +169,7 @@ function NavItemLink({
     >
       <span
         className={[
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
           active ? "bg-white/10 text-white" : "text-gray-400 group-hover:text-gray-200",
         ].join(" ")}
       >
@@ -199,8 +199,8 @@ function NavGroup({
       open={openByDefault}
       className="group/section"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 select-none hover:bg-white/5 hover:text-gray-200 [&::-webkit-details-marker]:hidden">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center text-gray-500">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 select-none hover:bg-white/5 hover:text-gray-200 [&::-webkit-details-marker]:hidden">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center text-gray-500">
           <SectionIcon />
         </span>
         <span className="flex-1">{section.label}</span>
@@ -243,13 +243,13 @@ export default function PanelNav({
   })).filter((section) => section.items.length > 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0 space-y-3">
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="shrink-0 space-y-2">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">
             Panel
           </p>
-          <h2 className="text-lg font-bold tracking-tight text-white">
+          <h2 className="text-base font-bold tracking-tight text-white">
             Dittos Army
           </h2>
         </div>
@@ -293,8 +293,8 @@ export default function PanelNav({
 
       <div className="shrink-0 border-t border-white/10 pt-2">
         <details className="group/rates rounded-md bg-black/20">
-          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-gray-300 select-none hover:bg-white/5 hover:text-white [&::-webkit-details-marker]:hidden">
-            <span className="flex h-7 w-7 items-center justify-center text-gray-400">
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2.5 py-1 text-[13px] text-gray-300 select-none hover:bg-white/5 hover:text-white [&::-webkit-details-marker]:hidden">
+            <span className="flex h-6 w-6 items-center justify-center text-gray-400">
               <IconRates />
             </span>
             <span className="flex-1 font-medium">Tasas de cambio</span>

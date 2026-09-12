@@ -35,6 +35,11 @@ import {
   weightedAverageUnitCostCop,
 } from "../../utils/incoming-variant-group";
 import { CardThumb } from "../../components/card-thumb";
+import {
+  PANEL_DATAGRID_DENSITY,
+  PANEL_DATAGRID_IMAGE_COL_WIDTH,
+  PANEL_DATAGRID_ROW_HEIGHT,
+} from "../../theme/panel-density";
 import { aggregateReservasTotales, amountToCop, gananciaEstimadaReservaCop } from "./clientes-resumen-pedidos";
 import ClienteFormDialog from "./cliente-form-dialog";
 import NuevoPedidoDialog from "./nuevo-pedido-dialog";
@@ -764,7 +769,7 @@ export default function ReservarCartasPage() {
     {
       field: "image_url",
       headerName: "",
-      width: 100,
+      width: PANEL_DATAGRID_IMAGE_COL_WIDTH,
       sortable: false,
       renderCell: (params) => {
         const src = resolveCardImageSrc(
@@ -777,7 +782,7 @@ export default function ReservarCartasPage() {
           <CardThumb
             src={src}
             alt={params.row.card_name}
-            size="md"
+            size="sm"
             pending={loadingCardImages && !src && looksLikeTcgdexCardId(params.row.card_id)}
             enlargeOnHover={!!src}
           />
@@ -891,7 +896,7 @@ export default function ReservarCartasPage() {
     {
       field: "image_url",
       headerName: "",
-      width: 100,
+      width: PANEL_DATAGRID_IMAGE_COL_WIDTH,
       sortable: false,
       renderCell: (params) => {
         const item = params.row;
@@ -899,7 +904,7 @@ export default function ReservarCartasPage() {
           <CardThumb
             src={resolveStockImageUrl(item.card_id, params.value as string)}
             alt=""
-            size="md"
+            size="sm"
             enlargeOnHover
           />
         );
@@ -1448,7 +1453,8 @@ export default function ReservarCartasPage() {
                   initialState={{ pagination: { paginationModel: { pageSize: 15, page: 0 } } }}
                   disableRowSelectionOnClick
                   autoHeight
-                  rowHeight={104}
+                  rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+                  density={PANEL_DATAGRID_DENSITY}
                   sx={{ border: 0 }}
                 />
               </Box>
@@ -1586,7 +1592,8 @@ export default function ReservarCartasPage() {
                   initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
                   disableRowSelectionOnClick
                   autoHeight
-                  rowHeight={104}
+                  rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+                  density={PANEL_DATAGRID_DENSITY}
                   sx={{ border: 0 }}
                 />
               </Box>

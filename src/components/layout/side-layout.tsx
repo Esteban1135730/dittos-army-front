@@ -8,8 +8,7 @@ import Typography from "@mui/material/Typography";
 import { LoadingScreen } from "../loading";
 import PanelNav from "./panel-nav";
 import { OwnerRouteGuard } from "../../modules/owner";
-
-const DRAWER_WIDTH = 280;
+import { PANEL_DRAWER_WIDTH_PX, PANEL_MAIN_PADDING } from "../../theme/panel-density";
 
 function MenuIcon() {
   return (
@@ -52,7 +51,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
             display: { xs: "none", md: "flex" },
             flexDirection: "column",
             flexShrink: 0,
-            width: DRAWER_WIDTH,
+            width: PANEL_DRAWER_WIDTH_PX,
             bgcolor: theme.palette.ditto.nav.bg,
             backgroundImage: `linear-gradient(180deg, ${theme.palette.ditto.nav.bgTop} 0%, ${theme.palette.ditto.nav.bg} 100%)`,
             borderRight: 1,
@@ -70,7 +69,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
           sx={{
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": {
-              width: DRAWER_WIDTH,
+              width: PANEL_DRAWER_WIDTH_PX,
               bgcolor: (theme) => theme.palette.ditto.nav.bg,
               boxSizing: "border-box",
             },
@@ -118,7 +117,7 @@ export default function SideLayout({ children }: { children: ReactNode }) {
               flex: 1,
               overflow: "auto",
               minHeight: 0,
-              p: { xs: 1.5, sm: 2, md: 3 },
+              p: PANEL_MAIN_PADDING,
             }}
           >
             <Suspense fallback={<LoadingScreen message="Cargando pantalla…" />}>

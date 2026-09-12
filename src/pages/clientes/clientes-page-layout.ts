@@ -1,12 +1,13 @@
 import type { SxProps, Theme } from "@mui/material";
+import { PANEL_DATAGRID_HEADER_HEIGHT } from "../../theme/panel-density";
 
 /** Contenedor principal — laptop → 2K → 4K (sin breakpoints móvil). */
 export const clientesPageSx: SxProps<Theme> = {
   width: "100%",
   maxWidth: { lg: 1360, xl: 1680, "@media (min-width: 2560px)": 2200 },
   mx: "auto",
-  px: { lg: 3, xl: 4, "@media (min-width: 2560px)": 5 },
-  py: { lg: 3, xl: 3.5, "@media (min-width: 2560px)": 4 },
+  px: { lg: 0.5, xl: 2, "@media (min-width: 2560px)": 5 },
+  py: { lg: 0.5, xl: 2, "@media (min-width: 2560px)": 4 },
 };
 
 export const clientesSectionPaperSx: SxProps<Theme> = {
@@ -18,15 +19,15 @@ export const clientesSectionPaperSx: SxProps<Theme> = {
 };
 
 export const clientesSectionHeaderSx: SxProps<Theme> = {
-  px: 3,
-  py: 2,
+  px: 2,
+  py: 1.25,
   borderBottom: 1,
   borderColor: "divider",
   bgcolor: "grey.50",
 };
 
 export const clientesSectionBodySx: SxProps<Theme> = {
-  p: 3,
+  p: 2,
 };
 
 export const clientesKpiGridSx: SxProps<Theme> = {
@@ -101,8 +102,8 @@ export const clientesDataGridSx: SxProps<Theme> = (theme) => ({
     bgcolor: theme.palette.ditto.surface.muted,
     borderBottom: 1,
     borderColor: "divider",
-    minHeight: "44px !important",
-    maxHeight: "44px !important",
+    minHeight: `${PANEL_DATAGRID_HEADER_HEIGHT}px !important`,
+    maxHeight: `${PANEL_DATAGRID_HEADER_HEIGHT}px !important`,
   },
   "& .MuiDataGrid-columnHeaderTitle": {
     fontWeight: 700,

@@ -1604,7 +1604,7 @@ export default function CotizarCardtraderPage() {
 
   return (
     <Box
-      className="p-4"
+      className="p-3"
       sx={{
         minHeight: "100%",
         bgcolor: "grey.50",
@@ -1613,7 +1613,7 @@ export default function CotizarCardtraderPage() {
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 2, sm: 2.5 },
+          p: { xs: 1.5, sm: 1.5 },
           mb: 2,
           borderRadius: 2.5,
           bgcolor: "background.paper",

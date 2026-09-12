@@ -9,7 +9,7 @@ export const BULK_DEFAULT_QUANTITY = 9999;
 export const BULK_DEFAULT_PVP_COP = 2000;
 export const BULK_DUMMY_IMAGE_URL = "/bulk-dummy.svg";
 
-/** SKUs quantity de Pablo (PVP 0; precio en cada pedido). */
+/** SKUs quantity de Pablo (PVP 0 en domicilio/protección; envío conserva precio y ganancia 0). */
 export const ENVIO_CARD_ID = "da-envio";
 export const DOMICILIO_CARD_ID = "da-domicilio";
 export const PROTECCION_CARTAS_CARD_ID = "da-proteccion-cartas";
@@ -26,6 +26,11 @@ export type ProductKind = "unit" | "quantity";
 
 export function isBulkCardId(cardId: string | null | undefined): boolean {
   return String(cardId ?? "").trim() === BULK_CARD_ID;
+}
+
+/** Envío siempre tiene precio y nunca aporta ganancia. Domicilio sí (100%). */
+export function isZeroProfitCardId(cardId: string | null | undefined): boolean {
+  return String(cardId ?? "").trim() === ENVIO_CARD_ID;
 }
 
 export function reservaCatalogPinRank(cardId: string | null | undefined): number {

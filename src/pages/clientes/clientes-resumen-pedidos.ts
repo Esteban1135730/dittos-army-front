@@ -1,5 +1,6 @@
 import type { StockListItem } from "../../types/stock";
 import type { ReservaItem } from "./cliente-types";
+import { isZeroProfitCardId } from "../../constants/bulk-product";
 
 export type CurrencyConverter = {
   toCopFromEur: (value: number) => number | null | undefined;
@@ -32,9 +33,10 @@ export function reservaLineQuantity(quantity?: number | null): number {
 export function gananciaEstimadaReservaCop(
   precio: number,
   currency: string,
-  stock: Pick<StockListItem, "currency" | "card_cost"> | undefined,
+  stock: Pick<StockListItem, "currency" | "card_cost" | "card_id"> | undefined,
   convert: CurrencyConverter,
 ): number {
+  if (isZeroProfitCardId(stock?.card_id)) return 0;
   const precioCop = amountToCop(precio, currency ?? "COP", convert);
   const costoCop = stock ? amountToCop(stock.card_cost, stock.currency, convert) : 0;
   return precioCop - costoCop;
@@ -42,7 +44,7 @@ export function gananciaEstimadaReservaCop(
 
 export function aggregateReservasTotales(
   reservas: Pick<ReservaItem, "stock_id" | "precio" | "currency" | "quantity">[],
-  stockById: Record<string, Pick<StockListItem, "currency" | "card_cost"> | undefined>,
+  stockById: Record<string, Pick<StockListItem, "currency" | "card_cost" | "card_id"> | undefined>,
   convert: CurrencyConverter,
 ): ReservasTotales {
   let ventasEsperadasCop = 0;

@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
 import { formatCOP } from "../../../utils/convert";
@@ -26,12 +26,20 @@ import {
 } from "../../../constants/stock-tags";
 import {
   isQuantityProduct,
+  isZeroProfitCardId,
   resolveStockImageUrl,
 } from "../../../constants/bulk-product";
 import { CardThumb } from "../../../components/card-thumb";
+import {
+  PANEL_DATAGRID_DENSITY,
+  PANEL_DATAGRID_IMAGE_COL_WIDTH,
+  PANEL_DATAGRID_ROW_HEIGHT,
+} from "../../../theme/panel-density";
 import { LoadingScreen } from "../../../components/loading";
 import { ensureBulkProduct } from "../../../api/ensure-bulk";
 import { PvpInlineCell } from "./pvp-inline-cell";
+import { StockRowActions } from "./stock-row-actions";
+import { StockInventoryStats, StockToolbar } from "./stock-toolbar";
 import { API_BASE, apiUrl } from "../../../config/api";
 import {
   filterQrExportRowsByStockIds,
@@ -110,6 +118,7 @@ function gananciaCopFromRow(
   item: StockListItem,
   convert: ExchangeConvert
 ): number | null {
+  if (isZeroProfitCardId(item.card_id)) return 0;
   if (stockHasBulkTag(item)) return null;
   const pvpCOP = pvpCopFromRow(item, convert);
   if (pvpCOP == null) return null;
@@ -546,14 +555,14 @@ export default function StockGrid() {
           <CardThumb
             src={src}
             alt={row.card_name || "carta"}
-            size="md"
+            size="sm"
             enlargeOnHover
           />
         );
       },
       sortable: false,
       filterable: false,
-      width: 100,
+      width: PANEL_DATAGRID_IMAGE_COL_WIDTH,
     },
     {
       field: "card_name",
@@ -567,6 +576,23 @@ export default function StockGrid() {
             <span className="text-blue-600 font-semibold ml-1">(liga)</span>
           )}
         </span>
+      ),
+    },
+    {
+      field: "acciones",
+      headerName: "Acciones",
+      sortable: false,
+      filterable: false,
+      width: 200,
+      renderCell: (params) => (
+        <StockRowActions
+          row={params.row as StockItem}
+          marcandoPropiedad={marcandoPropiedad}
+          onModificar={handleModificar}
+          onMarcarPropiedad={handleMarcarPropiedad}
+          onVender={handleAbrirModalVenta}
+          onEliminar={handleOpenDeleteDialog}
+        />
       ),
     },
     {
@@ -769,112 +795,6 @@ export default function StockGrid() {
       },
       width: 200,
     },
-    {
-      field: "modificar",
-      headerName: "Modificar",
-      sortable: false,
-      filterable: false,
-      width: 120,
-      renderCell: (params) => (
-        <button
-          onClick={() => handleModificar(params.row._id)}
-          className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
-        >
-          Modificar
-        </button>
-      ),
-    },
-    {
-      field: "asignarPVP",
-      headerName: "Asignar/Modificar PVP",
-      sortable: false,
-      filterable: false,
-      width: 160,
-      renderCell: (params) => {
-        const tienePvp = params.row.pvp && params.row.pvp > 0;
-        return (
-          <Link
-            to={`/add-pvp/${params.row.card_id}`}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded inline-block no-underline"
-          >
-            {tienePvp ? "Modificar PVP" : "Asignar PVP"}
-          </Link>
-        );
-      },
-    },
-    {
-      field: "propiedad",
-      headerName: "Quedarme",
-      sortable: false,
-      filterable: false,
-      width: 150,
-      renderCell: (params) => (
-        <button
-          onClick={() =>
-            handleMarcarPropiedad(params.row._id, params.row.card_id)
-          }
-          disabled={
-            params.row.card_state === "propiedad" ||
-            marcandoPropiedad === params.row._id
-          }
-          className={`px-3 py-1 rounded ${params.row.card_state === "propiedad"
-              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-              : "bg-rose-600 text-white hover:bg-rose-700"
-            }`}
-        >
-          {marcandoPropiedad === params.row._id ? "Marcando..." : "Propiedad"}
-        </button>
-      ),
-    },
-    {
-      field: "vendido",
-      headerName: "Vendido",
-      sortable: false,
-      filterable: false,
-      width: 120,
-      renderCell: (params) => (
-        <button
-          onClick={() =>
-            handleAbrirModalVenta(params.row as StockItem)
-          }
-          disabled={
-            params.row.card_state === "vendida" ||
-            params.row.card_state === "propiedad" ||
-            (isQuantityProduct({
-              product_kind: params.row.product_kind,
-              card_id: params.row.card_id,
-            }) &&
-              !(typeof params.row.quantity === "number" && params.row.quantity > 0))
-          }
-          className={`px-3 py-1 rounded ${params.row.card_state === "vendida" ||
-              params.row.card_state === "propiedad"
-              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-              : "bg-green-600 text-white hover:bg-green-700"
-            }`}
-        >
-          Vendido
-        </button>
-      ),
-    },
-    {
-      field: "eliminar",
-      headerName: "Eliminar",
-      sortable: false,
-      filterable: false,
-      width: 110,
-      renderCell: (params) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleOpenDeleteDialog(params.row as StockItem);
-          }}
-          className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-sm"
-        >
-          Eliminar
-        </button>
-      ),
-    },
   ];
 
   const [exportando, setExportando] = useState(false);
@@ -1029,246 +949,90 @@ export default function StockGrid() {
 
     <div className="w-full min-w-0">
       {cartasSinPvp > 0 && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-red-500"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium">
-                Tienes {cartasSinPvp} {cartasSinPvp === 1 ? "carta sin asignar" : "cartas sin asignar"} un valor de mercado (PVP)
-              </p>
-            </div>
-          </div>
-        </div>
+        <Alert severity="warning" sx={{ mb: 1, py: 0 }}>
+          {cartasSinPvp === 1
+            ? "1 carta sin PVP"
+            : `${cartasSinPvp} cartas sin PVP`}
+        </Alert>
       )}
-      <div className="mb-4">
-        <div className="flex flex-wrap items-center gap-4 mb-3">
-          <div className="flex-1 min-w-[220px]">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Buscar por nombre de carta..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              {busqueda && (
-                <button
-                  type="button"
-                  onClick={() => setBusqueda("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative">
-              <button
-                onClick={handleExportar}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                Exportar PDF
-              </button>
 
-              {exportando && (
-                <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
-                  Generando PDF...
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => void handleExportarQr()}
-                disabled={exportandoBarcode}
-                className="bg-violet-600 text-white px-4 py-2 rounded hover:bg-violet-700 disabled:opacity-60"
-              >
-                {exportandoBarcode ? "Generando…" : "Exportar QR"}
-              </button>
-            </div>
-            <div className="relative">
-              <button
-                onClick={handleImprimirCatalogo}
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-              >
-                Imprimir Catálogo
-              </button>
+      <StockToolbar
+        busqueda={busqueda}
+        onBusquedaChange={setBusqueda}
+        exportando={exportando}
+        exportandoBarcode={exportandoBarcode}
+        imprimiendo={imprimiendo}
+        limpiandoPvp={limpiandoPvp}
+        actualizandoTienda={actualizandoTienda}
+        canExportTienda={canExportTienda}
+        onExportPdf={handleExportar}
+        onExportQr={handleExportarQr}
+        onPrintCatalog={handleImprimirCatalogo}
+        onClearAllPvp={handleLimpiarTodosPvp}
+        onUpdateStore={handleActualizarInformacionTienda}
+      />
 
-              {imprimiendo && (
-                <div className="absolute top-0 right-0 mt-2 mr-2 text-sm text-gray-700 bg-white px-3 py-2 border rounded shadow">
-                  Generando catálogo...
-                </div>
-              )}
-            </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-1.5 text-sm text-gray-700">
+        <span className="font-medium shrink-0 text-xs uppercase tracking-wide text-gray-500">
+          Tags
+        </span>
+        {STOCK_TAG_VALUES.map((tag) => {
+          const active = filtroTags.includes(tag);
+          return (
             <button
-              onClick={handleLimpiarTodosPvp}
-              disabled={limpiandoPvp}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {limpiandoPvp ? "Limpiando..." : "Limpiar todos los PVP"}
-            </button>
-            {canExportTienda ? (
-            <button
+              key={tag}
               type="button"
-              title="Genera inventory.json y upcoming.json en dittos-army-store/public y hace push a main (despliegue Firebase)"
-              onClick={handleActualizarInformacionTienda}
-              disabled={actualizandoTienda}
-              className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => toggleFiltroTag(tag)}
+              className={`px-2.5 py-0.5 rounded-full border text-xs transition ${
+                active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white border-gray-300 hover:border-gray-400"
+              }`}
             >
-              {actualizandoTienda ? "Actualizando..." : "Actualizar tienda (catálogo + Próximamente)"}
+              {STOCK_TAG_LABEL[tag]}
             </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mb-4 text-sm text-gray-700">
-          <span className="font-medium shrink-0">
-            Filtrar por tags (varias = deben tenerlas todas; “Sin tags” solo líneas vacías):
-          </span>
-          {STOCK_TAG_VALUES.map((tag) => {
-            const active = filtroTags.includes(tag);
-            return (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleFiltroTag(tag)}
-                className={`px-3 py-1 rounded-full border transition ${
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                {STOCK_TAG_LABEL[tag]}
-              </button>
-            );
-          })}
+          );
+        })}
+        <button
+          type="button"
+          onClick={toggleFiltroSinTags}
+          className={`px-2.5 py-0.5 rounded-full border border-dashed text-xs transition ${
+            filtroSinTags
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-white border-gray-400 hover:border-gray-500"
+          }`}
+        >
+          Sin tags
+        </button>
+        {(filtroTags.length > 0 || filtroSinTags) && (
           <button
             type="button"
-            onClick={toggleFiltroSinTags}
-            className={`px-3 py-1 rounded-full border border-dashed transition ${
-              filtroSinTags
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white border-gray-400 hover:border-gray-500"
-            }`}
+            onClick={() => {
+              setFiltroTags([]);
+              setFiltroSinTags(false);
+            }}
+            className="text-xs text-blue-600 hover:underline ml-1"
           >
-            Sin tags
+            Quitar
           </button>
-          {(filtroTags.length > 0 || filtroSinTags) && (
-            <button
-              type="button"
-              onClick={() => {
-                setFiltroTags([]);
-                setFiltroSinTags(false);
-              }}
-              className="text-blue-600 hover:underline ml-1"
-            >
-              Quitar filtros de tags
-            </button>
-          )}
-        </div>
-        <div className="flex flex-col gap-4 mt-4">
-            <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
-              <h3 className="text-lg font-semibold mb-3 text-gray-700">
-                Estadísticas del Inventario
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Precio del Inventario</p>
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-blue-600 text-lg">
-                      COP {formatCOP(precioInventario.cop.toFixed(0))}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      EUR {precioInventario.eur.toFixed(2)} / USD {precioInventario.usd.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Ventas Esperadas</p>
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-indigo-600 text-lg">
-                      COP {formatCOP(ventasEsperadas.cop.toFixed(0))}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      EUR {ventasEsperadas.eur.toFixed(2)} / USD {ventasEsperadas.usd.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Ganancia Esperada</p>
-                  <div className="flex flex-col gap-1">
-                    <span
-                      className={`font-bold text-lg ${gananciaEsperada.cop > 0
-                          ? "text-green-600"
-                          : gananciaEsperada.cop < 0
-                            ? "text-red-600"
-                            : "text-gray-600"
-                        }`}
-                    >
-                      {gananciaEsperada.cop > 0 ? "+" : ""}
-                      COP {formatCOP(gananciaEsperada.cop.toFixed(0))}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      {gananciaEsperada.eur > 0 ? "+" : ""}
-                      EUR {gananciaEsperada.eur.toFixed(2)} /{" "}
-                      {gananciaEsperada.usd > 0 ? "+" : ""}
-                      USD {gananciaEsperada.usd.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {busqueda && (
-              <p className="text-sm text-gray-600 text-center md:text-left">
-                Mostrando {stockFiltrado.length}{" "}
-                {stockFiltrado.length === 1 ? "resultado" : "resultados"} de{" "}
-                {stock.length} cartas
-              </p>
-            )}
-          </div>
-          {errorPropiedad && (
-            <p className="text-sm text-red-600 text-center mt-2">
-              {errorPropiedad}
-            </p>
-          )}
-        </div>
+        )}
+      </div>
+
+      <StockInventoryStats
+        precioInventario={precioInventario}
+        ventasEsperadas={ventasEsperadas}
+        gananciaEsperada={gananciaEsperada}
+      />
+
+      {busqueda ? (
+        <p className="text-xs text-gray-600 mb-1">
+          {stockFiltrado.length}{" "}
+          {stockFiltrado.length === 1 ? "resultado" : "resultados"} de {stock.length}
+        </p>
+      ) : null}
+      {errorPropiedad ? (
+        <p className="text-sm text-red-600 mb-1">{errorPropiedad}</p>
+      ) : null}
 
         <Dialog
           open={deleteTarget !== null}
@@ -1315,8 +1079,8 @@ export default function StockGrid() {
         {/* Modal de Venta */}
         {mostrarModalVenta && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl max-h-[calc(100dvh-24px)] overflow-y-auto">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">
                 Registrar Venta
               </h2>
               <p className="text-sm text-gray-600 mb-4">
@@ -1414,7 +1178,8 @@ export default function StockGrid() {
               columns={columns}
               getRowId={(row) => row._id}
               pageSizeOptions={[20, 30, 40]}
-              rowHeight={104}
+              rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+              density={PANEL_DATAGRID_DENSITY}
               initialState={{
                 pagination: {
                   paginationModel: { pageSize: 20, page: 0 },

@@ -10,6 +10,11 @@ import {
 } from "../../../utils/incoming-variant-group";
 import { API_INCOMING } from "../../clientes/cliente-types";
 import { CardThumb } from "../../../components/card-thumb";
+import {
+  PANEL_DATAGRID_DENSITY,
+  PANEL_DATAGRID_IMAGE_COL_WIDTH,
+  PANEL_DATAGRID_ROW_HEIGHT,
+} from "../../../theme/panel-density";
 
 type IncomingShipRoundReviewItem = {
   batch_item_id: string;
@@ -385,14 +390,14 @@ export default function IncomingShipRoundReviewPage() {
       {
         field: "image_url",
         headerName: "",
-        width: 100,
+        width: PANEL_DATAGRID_IMAGE_COL_WIDTH,
         sortable: false,
         filterable: false,
         renderCell: (p) => (
           <CardThumb
             src={p.row.ref.image_url}
             alt={p.row.ref.card_name}
-            size="md"
+            size="sm"
             enlargeOnHover
           />
         ),
@@ -633,7 +638,8 @@ export default function IncomingShipRoundReviewPage() {
               rows={groupedFiltrados}
               columns={columns}
               getRowId={(row) => row.id}
-              rowHeight={104}
+              rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+              density={PANEL_DATAGRID_DENSITY}
               getRowClassName={(params) => {
                 const g = params.row as GroupedShipRoundRow;
                 const arrived = sumArrivedGroup(g.lines);
