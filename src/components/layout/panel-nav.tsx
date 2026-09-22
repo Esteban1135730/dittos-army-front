@@ -94,6 +94,7 @@ const SECTIONS: NavSection[] = [
       { to: "/ventas", label: "Dashboard", icon: IconCash },
       { to: "/metricas", label: "Métricas", icon: IconRates },
       { to: "/ventas/escanear-qr", label: "Venta asistida QR", icon: IconScan },
+      { to: "/ventas/desde-movil", label: "Ventas desde móvil", icon: IconInbox },
       { to: "/ventas/historico", label: "Histórico", icon: IconHistory },
       { to: "/propiedad", label: "En propiedad", icon: IconBookmark },
     ],

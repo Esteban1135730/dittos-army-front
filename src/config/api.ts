@@ -67,6 +67,10 @@ export function getApiOwnerHeader(): OwnerKey {
 axios.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
   config.headers["X-Owner"] = resolveAxiosOwner(config, activeApiOwner);
+  const syncToken = import.meta.env.VITE_SYNC_TOKEN?.trim();
+  if (syncToken) {
+    config.headers["X-Sync-Token"] = syncToken;
+  }
   return config;
 });
 

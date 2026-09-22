@@ -6,6 +6,7 @@ import type { FeatureKey } from "../../config/owners";
  */
 const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/ventas/escanear-qr", feature: "venta-asistida-qr" },
+  { prefix: "/ventas/desde-movil", feature: "ventas" },
   { prefix: "/ventas", feature: "ventas" },
   { prefix: "/metricas", feature: "ventas" },
   { prefix: "/add-stock", feature: "agregar-stock" },

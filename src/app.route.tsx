@@ -24,6 +24,7 @@ const NovedadStockPage = lazy(() => import("./pages/incoming-v2/novedad-stock/no
 const CotizarCardtraderPage = lazy(() => import("./pages/cotizar/cotizar-cardtrader-page"));
 const CotizarPedidoClientePage = lazy(() => import("./pages/cotizar/cotizar-pedido-cliente-page"));
 const VentaAsistidaQrPage = lazy(() => import("./pages/ventas/venta-asistida-qr-page"));
+const VentasDesdeMovilPage = lazy(() => import("./pages/ventas/ventas-desde-movil-page"));
 const CardtraderTransitListPage = lazy(
   () => import("./pages/cardtrader-transit/cardtrader-transit-list-page"),
 );
@@ -250,6 +251,14 @@ export default function AppRouter() {
           element={
             <LayoutPage>
               <VentaAsistidaQrPage />
+            </LayoutPage>
+          }
+        />
+        <Route
+          path="/ventas/desde-movil"
+          element={
+            <LayoutPage>
+              <VentasDesdeMovilPage />
             </LayoutPage>
           }
         />

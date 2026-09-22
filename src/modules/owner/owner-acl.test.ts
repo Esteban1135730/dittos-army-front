@@ -15,6 +15,10 @@ describe("owner ACL helpers", () => {
     expect(routeToFeature("/ventas/escanear-qr")).toBe("venta-asistida-qr");
   });
 
+  it("routeToFeature /ventas/desde-movil → ventas", () => {
+    expect(routeToFeature("/ventas/desde-movil")).toBe("ventas");
+  });
+
   it("routeToFeature /incoming-v2 → incoming", () => {
     expect(routeToFeature("/incoming-v2/novedad-stock")).toBe("incoming");
   });
