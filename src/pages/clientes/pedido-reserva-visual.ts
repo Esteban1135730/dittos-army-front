@@ -2,7 +2,7 @@ import { isOwnerKey, type OwnerKey } from "../../config/owners";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
 import type { StockListItem } from "../../types/stock";
 import type { PedidoLine } from "./pedido-types";
-import type { TcgdexCardDetail } from "./tcgdex-card-detail";
+import type { TcgdexCardDetail } from "../../pokemon";
 
 export function resolveReservaOwner(
   stockOwner: string | null | undefined,

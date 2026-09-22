@@ -85,7 +85,7 @@ export function absolutizeCardtraderUrl(url: string): string {
   return `${CARDTRADER_ORIGIN}/${url}`;
 }
 
-/** URL lista para `<img>` vía proxy Nest. `apiBase` = raíz del API (sin `/cardtrader`). */
+/** URL lista para `<img>` vía proxy Nest. `apiBase` = base TCG (`…/pokemon`, sin `/cardtrader`). */
 export function blueprintImageProxySrc(
   imageUrl: string | null | undefined,
   apiBase: string,

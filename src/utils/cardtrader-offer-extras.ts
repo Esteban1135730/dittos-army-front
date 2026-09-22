@@ -206,7 +206,11 @@ export function matchesOfferExtrasFilter(p: CtMarketplaceProduct, selectedExtraI
 export function extraChipSx(extraLabel: string): { bgcolor: string; color: string } {
   const l = extraLabel.toLowerCase();
   if (l.includes("first")) return { bgcolor: "#4a148c", color: "#fff" };
-  if (l.includes("reverse")) return { bgcolor: "#1565c0", color: "#fff" };
-  if (l.includes("foil") || l.includes("holo")) return { bgcolor: "#e65100", color: "#fff" };
+  if (l.includes("pokeball") || l.includes("masterball") || l.includes("reverse")) {
+    return { bgcolor: "#1565c0", color: "#fff" };
+  }
+  if (l.includes("foil") || l.includes("holo") || l.includes("hollow")) {
+    return { bgcolor: "#e65100", color: "#fff" };
+  }
   return { bgcolor: "#eceff1", color: "#37474f" };
 }

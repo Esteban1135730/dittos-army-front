@@ -1,27 +1,16 @@
 import axios from "axios";
-import { formatCOP } from "../../utils/convert";
 import { apiUrl } from "../../config/api";
-import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
+import {
+  buildTcgdexCardIdLookupCandidates,
+  expansionFromCardDto,
+  type TcgCardLite,
+} from "../../pokemon";
+import { formatCOP } from "../../utils/convert";
+
+export { expansionFromCardDto };
 
 const API_TCG = apiUrl("/tcg-dex/card/find");
-
-type TcgCardLite = {
-  set?: string;
-  name?: string;
-  /** Nombre EN del set (homólogo / cards-database) cuando el set localizado no es inglés. */
-  setEnglishName?: string;
-};
-
-/** Expone la lógica de expansión para tests y para el mensaje WhatsApp. */
-export function expansionFromCardDto(card: TcgCardLite | null | undefined): string | undefined {
-  const english = card?.setEnglishName?.trim();
-  if (english) return english;
-  if (!card?.set) return undefined;
-  const s = String(card.set);
-  const m = s.match(/\(([^)]+)\)\s*$/);
-  return m ? m[1].trim() : s.trim();
-}
 
 export async function fetchExpansionForCard(cardId: string): Promise<string | undefined> {
   const candidates = buildTcgdexCardIdLookupCandidates(cardId);

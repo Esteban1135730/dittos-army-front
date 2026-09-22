@@ -1,9 +1,9 @@
 import axios from "axios";
-import { apiUrl } from "../../config/api";
-import { resolveStockImageUrl } from "../../constants/bulk-product";
-import { isLocalCardImagesUrl } from "../../utils/card-images-url";
-import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
-import { expansionFromCardDto } from "./mensaje-reserva-pedido";
+import { apiUrl } from "../config/api";
+import { resolveStockImageUrl } from "../constants/bulk-product";
+import { isLocalCardImagesUrl } from "../utils/card-images-url";
+import { expansionFromCardDto } from "./set-label";
+import { buildTcgdexCardIdLookupCandidates } from "./tcgdex-set-resolve";
 
 const API_TCG_FIND = apiUrl("/tcg-dex/card/find");
 

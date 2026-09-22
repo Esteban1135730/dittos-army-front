@@ -11,35 +11,38 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { OwnerProvider } from "./modules/owner";
 import { dittoTheme } from "./theme";
 import "./config/api";
+import { PANEL_UI_PREFIX, redirectLegacyPanelPath } from "./config/routes";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+if (!redirectLegacyPanelPath()) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 1000 * 60 * 60 * 24, // 24 hours
+      },
     },
-  },
-});
+  });
 
-const localStoragePersister = createSyncStoragePersister({
-  storage: window.localStorage,
-});
+  const localStoragePersister = createSyncStoragePersister({
+    storage: window.localStorage,
+  });
 
-persistQueryClient({
-  queryClient,
-  persister: localStoragePersister,
-});
+  persistQueryClient({
+    queryClient,
+    persister: localStoragePersister,
+  });
 
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ThemeProvider theme={dittoTheme}>
-      <CssBaseline />
-      <QueryClientProvider client={queryClient}>
-        <OwnerProvider>
-          <BrowserRouter>
-            <AppRouter />
-          </BrowserRouter>
-        </OwnerProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
-  </React.StrictMode>
-);
+  createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ThemeProvider theme={dittoTheme}>
+        <CssBaseline />
+        <QueryClientProvider client={queryClient}>
+          <OwnerProvider>
+            <BrowserRouter basename={PANEL_UI_PREFIX}>
+              <AppRouter />
+            </BrowserRouter>
+          </OwnerProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </React.StrictMode>,
+  );
+}

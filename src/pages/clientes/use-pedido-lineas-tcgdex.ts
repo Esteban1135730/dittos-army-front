@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { PedidoLine } from "./pedido-types";
-import { collectTcgdexIdsFromLines, type TcgdexDetailsByCardId } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { collectTcgdexIdsFromLines, type TcgdexDetailsByCardId } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 
 export function usePedidoLineasTcgdex(lines: PedidoLine[]): {
   detailsByCardId: TcgdexDetailsByCardId;

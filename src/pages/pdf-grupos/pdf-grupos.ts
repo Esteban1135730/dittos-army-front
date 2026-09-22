@@ -241,6 +241,42 @@ async function prepareLogo(logoDataUrl: string): Promise<PreparedImage> {
   };
 }
 
+export type NidoTcgPdfAssets = {
+  logoDataUrl: string;
+  logoWidth: number;
+  logoHeight: number;
+  instagramIcon: string;
+  whatsappIcon: string;
+};
+
+/** Lockup de El Nido TCG más iconos de Instagram y WhatsApp, los mismos del PDF de grupos. */
+export async function prepareNidoTcgPdfAssets(logoDataUrl: string): Promise<NidoTcgPdfAssets> {
+  if (!logoDataUrl.trim()) {
+    throw new Error("No se pudo cargar el logo.");
+  }
+  let logo: PreparedImage;
+  try {
+    logo = await prepareLogo(logoDataUrl);
+  } catch {
+    throw new Error("No se pudo cargar el logo.");
+  }
+  try {
+    const [instagramIcon, whatsappIcon] = await Promise.all([
+      rasterizeSvg(INSTAGRAM_SVG, 128),
+      rasterizeSvg(WHATSAPP_SVG, 128),
+    ]);
+    return {
+      logoDataUrl: logo.dataUrl,
+      logoWidth: logo.width,
+      logoHeight: logo.height,
+      instagramIcon,
+      whatsappIcon,
+    };
+  } catch {
+    throw new Error("No se pudieron preparar los iconos del pie.");
+  }
+}
+
 function drawPageBackground(doc: jsPDF) {
   const [r, g, b] = hexToRgb(GRUPOS_PDF_BG);
   doc.setFillColor(r, g, b);

@@ -4,12 +4,15 @@ import { OWNERS_CONFIG } from "./owners";
 
 const API_PORT = import.meta.env.VITE_API_PORT ?? "3000";
 
+/** Nest product API path prefix (Pokémon surface). */
+export const API_TCG_PREFIX = "/pokemon";
+
 /**
- * URL base del API Nest (sin barra final).
+ * Origen del API Nest (sin `/pokemon`, sin barra final).
  * En dev: mismo origen HTTPS + proxy Vite `/api` → Nest (`VITE_API_PORT`, default 3000).
  * Override: VITE_API_BASE=https://otro-host:3000
  */
-export function getApiBase(): string {
+export function getApiOrigin(): string {
   const fromEnv = import.meta.env.VITE_API_BASE?.trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");
@@ -24,17 +27,54 @@ export function getApiBase(): string {
   return `http://localhost:${API_PORT}`;
 }
 
-/** Siempre resuelve en el momento (correcto tras HTTPS / proxy en dev). */
-export function apiBase(): string {
-  return getApiBase();
+/** @deprecated Preferir `getApiOrigin()`; nombre histórico = origen sin TCG. */
+export function getApiBase(): string {
+  return getApiOrigin();
 }
 
-/** @deprecated Preferir `apiBase()` o `apiUrl()` para lecturas dinámicas. */
-export const API_BASE = getApiBase();
+/** Origen del API (sin `/pokemon`). */
+export function apiOrigin(): string {
+  return getApiOrigin();
+}
+
+/** Base del API de producto Pokémon (`origin` + `/pokemon`). */
+export function tcgApiBase(): string {
+  return `${getApiOrigin()}${API_TCG_PREFIX}`;
+}
+
+/**
+ * Base usada por proxy CardTrader / concatenaciones legacy.
+ * Incluye `/pokemon` (controladores Nest bajo el prefijo global).
+ */
+export function apiBase(): string {
+  return tcgApiBase();
+}
+
+/**
+ * @deprecated Preferir `apiUrl()` o `tcgApiBase()`.
+ * Incluye `/pokemon` para que `${API_BASE}/stock` siga siendo correcto.
+ */
+export const API_BASE = `${getApiOrigin()}${API_TCG_PREFIX}`;
+
+function withTcgPrefix(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized.startsWith("/card-images")) {
+    return normalized;
+  }
+  if (normalized === "/health" || normalized.startsWith("/health?")) {
+    return normalized;
+  }
+  if (
+    normalized === API_TCG_PREFIX ||
+    normalized.startsWith(`${API_TCG_PREFIX}/`)
+  ) {
+    return normalized;
+  }
+  return `${API_TCG_PREFIX}${normalized}`;
+}
 
 export function apiUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${getApiBase()}${normalized}`;
+  return `${getApiOrigin()}${withTcgPrefix(path)}`;
 }
 
 /** Active owner for Axios default instance (034). */
@@ -67,10 +107,6 @@ export function getApiOwnerHeader(): OwnerKey {
 axios.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
   config.headers["X-Owner"] = resolveAxiosOwner(config, activeApiOwner);
-  const syncToken = import.meta.env.VITE_SYNC_TOKEN?.trim();
-  if (syncToken) {
-    config.headers["X-Sync-Token"] = syncToken;
-  }
   return config;
 });
 

@@ -7,7 +7,7 @@ import {
   lookupTcgdexDetail,
   resolveCardImageSrc,
   type TcgdexDetailsByCardId,
-} from "./tcgdex-card-detail";
+} from "../../pokemon";
 
 type Props = {
   lines: PedidoLine[];

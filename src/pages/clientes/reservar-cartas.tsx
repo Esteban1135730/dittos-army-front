@@ -63,8 +63,8 @@ import {
   buildWhatsAppReservaCaminoText,
 } from "./mensaje-reserva-pedido";
 import { extractAxiosErrorMessage } from "./extract-axios-error";
-import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { looksLikeTcgdexCardId, resolveCardImageSrc } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 import {
   API_PEDIDO,
   canReservarStock,

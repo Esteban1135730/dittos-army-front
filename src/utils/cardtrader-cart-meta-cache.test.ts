@@ -79,7 +79,11 @@ describe("cardtrader-cart-meta-cache", () => {
         id: 10,
         name_en: "Charizard",
         blueprint_id: 5,
-        properties_hash: { condition: "Near Mint", pokemon_language: "en" },
+        properties_hash: {
+          condition: "Near Mint",
+          pokemon_language: "en",
+          poke_ball_reverse_holo: true,
+        },
       },
       blueprint: {
         id: 5,
@@ -96,6 +100,7 @@ describe("cardtrader-cart-meta-cache", () => {
       collectorNumber: "4",
       rarity: "Rare",
       imageUrl: "https://img/char.png",
+      variants: ["Pokeball"],
     });
   });
 });
@@ -105,5 +110,27 @@ describe("mergeCartItemMeta", () => {
     expect(
       mergeCartItemMeta({ name: "A", language: "EN" }, { name: "B" }),
     ).toMatchObject({ name: "B", language: "EN" });
+  });
+
+  it("no borra variants cacheadas si el patch las omite o vienen vacías", () => {
+    const cached = { name: "Mew", variants: ["Reverse", "First edition"] };
+    expect(mergeCartItemMeta(cached, { condition: "NM" }).variants).toEqual([
+      "Reverse",
+      "First edition",
+    ]);
+    expect(mergeCartItemMeta(cached, { variants: [] }).variants).toEqual([
+      "Reverse",
+      "First edition",
+    ]);
+    expect(mergeCartItemMeta(cached, { variants: undefined }).variants).toEqual([
+      "Reverse",
+      "First edition",
+    ]);
+  });
+
+  it("actualiza variants solo cuando el patch trae etiquetas reales", () => {
+    expect(
+      mergeCartItemMeta({ variants: ["Reverse"] }, { variants: ["Pokeball"] }).variants,
+    ).toEqual(["Pokeball"]);
   });
 });

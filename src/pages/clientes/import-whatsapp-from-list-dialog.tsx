@@ -45,8 +45,8 @@ import { formatWhatsAppLineOwners } from "./import-whatsapp-owner-label";
 import { formatCOP } from "../../utils/convert";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { CardThumb } from "../../components/card-thumb";
-import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { looksLikeTcgdexCardId, resolveCardImageSrc } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 import { clientItemId, normalizeClientItem } from "./cliente-id";
 
 const STEPS = ["Pegar mensaje", "Cliente", "Revisar y PVP", "Confirmar"] as const;

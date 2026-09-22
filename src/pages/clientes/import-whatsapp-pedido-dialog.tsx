@@ -34,8 +34,8 @@ import { formatWhatsAppLineOwners } from "./import-whatsapp-owner-label";
 import { formatCOP } from "../../utils/convert";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { CardThumb } from "../../components/card-thumb";
-import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { looksLikeTcgdexCardId, resolveCardImageSrc } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 
 const STEPS = ["Pegar mensaje", "Revisar y PVP", "Confirmar"] as const;
 

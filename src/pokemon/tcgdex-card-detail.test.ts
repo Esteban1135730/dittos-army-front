@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import axios from "axios";
-import { buildTcgdexCardIdLookupCandidates } from "../../utils/tcgdex-set-resolve";
+import { buildTcgdexCardIdLookupCandidates } from "./tcgdex-set-resolve";
 import {
   fetchTcgdexCardDetail,
   looksLikeTcgdexCardId,
@@ -20,7 +20,7 @@ vi.mock("axios", () => ({
   },
 }));
 
-vi.mock("../../config/api", () => ({
+vi.mock("../config/api", () => ({
   apiUrl: (path: string) => `https://api.test${path.startsWith("/") ? path : `/${path}`}`,
 }));
 

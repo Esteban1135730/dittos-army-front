@@ -20,6 +20,7 @@ import {
   upsertCardtraderCartMeta,
   type CardtraderCartItemMeta,
 } from "../../utils/cardtrader-cart-meta-cache";
+import { cartVariantLabelsFromPropertiesHash } from "../../utils/cardtrader-cart-variants";
 import {
   LanguageChipLabel,
   LanguageFlag,
@@ -504,6 +505,10 @@ function cartLines(cart: CartResponse | null | undefined): {
           : typeof props?.number === "string"
             ? props.number
             : undefined;
+      const variantsFromProps =
+        props && typeof props === "object"
+          ? cartVariantLabelsFromPropertiesHash(props)
+          : undefined;
       const pricing = resolveCartItemPricing({
         priceCents: rawCents,
         quantity: qty,
@@ -536,6 +541,9 @@ function cartLines(cart: CartResponse | null | undefined): {
             typeof meta?.image_url === "string" && meta.image_url.trim()
               ? meta.image_url.trim()
               : undefined,
+          ...(variantsFromProps !== undefined && variantsFromProps.length > 0
+            ? { variants: variantsFromProps }
+            : {}),
         },
       });
     });
@@ -1393,6 +1401,7 @@ export default function CotizarCardtraderPage() {
             language: meta.language,
             collectorNumber: meta.collectorNumber,
             rarity: meta.rarity,
+            variants: meta.variants,
           },
         });
       }
@@ -2888,6 +2897,19 @@ export default function CotizarCardtraderPage() {
                       {ln.meta?.language && (
                         <LanguageFlag lang={ln.meta.language} showLabel flagWidth={16} />
                       )}
+                      {ln.meta?.variants?.map((variant) => (
+                        <Chip
+                          key={variant}
+                          size="small"
+                          label={variant}
+                          sx={{
+                            height: 20,
+                            fontSize: "0.65rem",
+                            fontWeight: 600,
+                            ...extraChipSx(variant),
+                          }}
+                        />
+                      ))}
                       <Box sx={{ ml: "auto", textAlign: "right" }}>
                         <Typography variant="caption" color="text.secondary" display="block">
                           {ln.priceLabel} / u.

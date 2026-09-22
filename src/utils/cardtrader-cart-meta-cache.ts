@@ -1,5 +1,7 @@
 /** Metadata de productos CardTrader añadidos al carrito (panel /cotizar). */
 
+import { cartVariantLabelsFromPropertiesHash } from "./cardtrader-cart-variants";
+
 export const CARDTRADER_CART_META_TTL_MS = 48 * 60 * 60 * 1000;
 
 const STORAGE_KEY = "dittos-army.cardtrader-cart-meta.v1";
@@ -15,7 +17,13 @@ export type CardtraderCartItemMeta = {
   imageUrl?: string;
   /** JPEG/PNG en base64 para PDF sin CORS. */
   imageDataUrl?: string;
+  /** Rareza de blueprint (p. ej. Rare / Uncommon), no la variante operativa. */
   rarity?: string;
+  /**
+   * Etiquetas legibles de variante de oferta (Pokeball, Reverse, Hollow, …).
+   * Persistidas en localStorage porque el backend no siempre reenvía properties_hash.
+   */
+  variants?: string[];
   /** PVP manual en COP (precio especial para exportar al cliente). */
   pvpPropioCop?: number;
 };
@@ -83,6 +91,12 @@ export function mergeCartItemMeta(
   const pick = <T>(next: T | undefined, prev: T | undefined): T | undefined =>
     next !== undefined && next !== null && next !== "" ? next : prev;
 
+  // Array vacío o ausente NO borra variantes ya cacheadas (cartLines suele omitirlas).
+  const variants =
+    patch.variants !== undefined && patch.variants.length > 0
+      ? patch.variants
+      : base?.variants;
+
   return {
     name: pick(patch.name, base?.name),
     expansion: pick(patch.expansion, base?.expansion),
@@ -93,6 +107,7 @@ export function mergeCartItemMeta(
     imageUrl: pick(patch.imageUrl, base?.imageUrl),
     imageDataUrl: pick(patch.imageDataUrl, base?.imageDataUrl),
     rarity: pick(patch.rarity, base?.rarity),
+    variants,
     pvpPropioCop:
       patch.pvpPropioCop !== undefined ? patch.pvpPropioCop : base?.pvpPropioCop,
   };
@@ -160,6 +175,10 @@ export function buildCartMetaFromOffer(args: {
     args.blueprintImageUrl?.trim() ||
     undefined;
 
+  const variants = cartVariantLabelsFromPropertiesHash(
+    props && typeof props === "object" ? props : undefined,
+  );
+
   return {
     name: args.product.name_en?.trim() || undefined,
     expansion: typeof expansionName === "string" ? expansionName : undefined,
@@ -173,5 +192,6 @@ export function buildCartMetaFromOffer(args: {
     blueprintId: args.product.blueprint_id ?? args.blueprint?.id,
     imageUrl,
     rarity: typeof rarityRaw === "string" && rarityRaw.trim() ? rarityRaw.trim() : undefined,
+    ...(variants.length > 0 ? { variants } : {}),
   };
 }

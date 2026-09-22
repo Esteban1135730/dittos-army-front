@@ -9,8 +9,8 @@ import ReservaCostMarginAside, {
   reservaMarginTotalCop,
 } from "./reserva-cost-margin";
 import ReservaIncomingAbonosBlock from "./reserva-incoming-abonos-block";
-import { looksLikeTcgdexCardId, resolveCardImageSrc } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { looksLikeTcgdexCardId, resolveCardImageSrc } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 import {
   clientesActionRowSx,
   clientesMutedLabelSx,

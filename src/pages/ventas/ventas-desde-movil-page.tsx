@@ -41,7 +41,7 @@ function axiosMessage(err: unknown, fallback: string): string {
     if (typeof msg === "string" && msg.trim()) return msg;
     if (Array.isArray(msg) && msg[0]) return String(msg[0]);
     if (err.response?.status === 401) {
-      return "Token de sync incorrecto. Revisa VITE_SYNC_TOKEN.";
+      return "No autorizado.";
     }
   }
   return fallback;
@@ -71,6 +71,8 @@ export default function VentasDesdeMovilPage() {
   const listQuery = useQuery({
     queryKey: QUERY_KEY,
     queryFn: listMobilePendingSales,
+    refetchInterval: 4_000,
+    refetchOnWindowFocus: true,
   });
 
   const invalidate = async () => {
@@ -141,7 +143,7 @@ export default function VentasDesdeMovilPage() {
           Ventas desde móvil
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Avisos del APK. El stock sigue vendible hasta aceptar.
+          Avisos del APK. Se actualizan solos cada pocos segundos. El stock sigue vendible hasta aceptar.
         </Typography>
       </Stack>
 

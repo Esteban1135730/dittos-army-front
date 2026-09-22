@@ -21,7 +21,7 @@ import { formatFechaTentativa, pedidoStatusLabel } from "./pedido-entrega-label"
 import PedidoEntregaVisual from "./pedido-entrega-visual";
 import PedidoLineasHistorialList from "./pedido-lineas-historial-list";
 import { usePedidoLineasTcgdex } from "./use-pedido-lineas-tcgdex";
-import type { TcgdexDetailsByCardId } from "./tcgdex-card-detail";
+import type { TcgdexDetailsByCardId } from "../../pokemon";
 import {
   filterPedidosHistorial,
   pedidoTotal,

@@ -3,8 +3,10 @@ import { isFeatureAllowed, parseStoredOwner } from "../../config/owners";
 import { routeToFeature } from "./owner-acl";
 
 describe("owner ACL helpers", () => {
-  it("isFeatureAllowed esteban cotizar → false", () => {
-    expect(isFeatureAllowed("esteban", "cotizar")).toBe(false);
+  it("isFeatureAllowed esteban cotizar → true; sin incoming/export-tienda", () => {
+    expect(isFeatureAllowed("esteban", "cotizar")).toBe(true);
+    expect(isFeatureAllowed("esteban", "incoming")).toBe(false);
+    expect(isFeatureAllowed("esteban", "export-tienda")).toBe(false);
   });
 
   it("isFeatureAllowed pablo export-tienda → true", () => {

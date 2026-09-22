@@ -28,8 +28,8 @@ import {
   findPedidoLineByStockId,
   resolvePedidoReservaVisual,
 } from "./pedido-reserva-visual";
-import { lookupTcgdexDetail } from "./tcgdex-card-detail";
-import { useTcgdexCardDetails } from "./use-tcgdex-card-details";
+import { lookupTcgdexDetail } from "../../pokemon";
+import { useTcgdexCardDetails } from "../../pokemon";
 import {
   clientesActionRowSx,
   clientesHighlightPanelSx,
