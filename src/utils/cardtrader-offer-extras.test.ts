@@ -36,4 +36,14 @@ describe("cardtrader-offer-extras", () => {
     ]);
     expect(facets.map((f) => f.id)).toEqual(expect.arrayContaining(["first_edition", "foil"]));
   });
+
+  it("no trata yugioh_language como extra", () => {
+    const p = product({
+      condition: "Near Mint",
+      yugioh_language: "en",
+      first_edition: true,
+    });
+    expect(productOfferExtraFacetIds(p)).toEqual(["first_edition"]);
+    expect(productOfferExtraLabels(p)).toEqual(["First Edition"]);
+  });
 });

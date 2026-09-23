@@ -11,6 +11,11 @@ describe('cardtrader-order-item-map', () => {
     expect(readCtLanguage({ pokemon_language: 'JP' })).toBe('ja');
   });
 
+  it('lee idioma yugioh_language', () => {
+    expect(readCtLanguage({ yugioh_language: 'en' })).toBe('en');
+    expect(readCtLanguage({ yugioh_language: 'ES' })).toBe('es');
+  });
+
   it('infiere rareza operativa', () => {
     expect(inferOperationalRarezaFromCtProperties({ first_edition: true })).toBe('first edition');
     expect(inferOperationalRarezaFromCtProperties({ poke_ball_reverse_holo: true })).toBe(

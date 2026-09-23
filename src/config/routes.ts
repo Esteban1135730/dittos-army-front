@@ -3,6 +3,18 @@
  * BrowserRouter basename; legacy URLs without this prefix redirect here.
  */
 export const PANEL_UI_PREFIX = "/pokemon";
+export const YUGIOH_UI_PREFIX = "/yugioh";
+
+/** Basename del panel según la URL, o null si hay que redirigir a Pokémon. */
+export function panelBasenameForPath(pathname: string): string | null {
+  if (pathname === YUGIOH_UI_PREFIX || pathname.startsWith(`${YUGIOH_UI_PREFIX}/`)) {
+    return YUGIOH_UI_PREFIX;
+  }
+  if (pathname === PANEL_UI_PREFIX || pathname.startsWith(`${PANEL_UI_PREFIX}/`)) {
+    return PANEL_UI_PREFIX;
+  }
+  return null;
+}
 
 /**
  * If the location is outside `/pokemon`, replace to the prefixed path.
@@ -10,7 +22,7 @@ export const PANEL_UI_PREFIX = "/pokemon";
  */
 export function redirectLegacyPanelPath(): boolean {
   const { pathname, search, hash } = window.location;
-  if (pathname === PANEL_UI_PREFIX || pathname.startsWith(`${PANEL_UI_PREFIX}/`)) {
+  if (panelBasenameForPath(pathname)) {
     return false;
   }
   const dest =

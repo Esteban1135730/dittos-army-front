@@ -2,8 +2,17 @@ import type { FeatureKey } from "../../config/owners";
 
 /**
  * Map pathname → feature key for ACL (034).
- * More specific prefixes first.
+ * More specific prefixes first. `/pokemon` and `/yugioh` se ignoran.
  */
+function panelPath(pathname: string): string {
+  const path = pathname.split("?")[0] || "/";
+  for (const prefix of ["/pokemon", "/yugioh"]) {
+    if (path === prefix) return "/";
+    if (path.startsWith(`${prefix}/`)) return path.slice(prefix.length);
+  }
+  return path;
+}
+
 const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/ventas/escanear-qr", feature: "venta-asistida-qr" },
   { prefix: "/ventas/desde-movil", feature: "ventas" },
@@ -15,6 +24,8 @@ const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/envios", feature: "clientes" },
   { prefix: "/clientes", feature: "clientes" },
   { prefix: "/cotizar", feature: "cotizar" },
+  { prefix: "/cardtrader-transit", feature: "cardtrader" },
+  { prefix: "/cardtrader-receipt", feature: "cardtrader" },
   { prefix: "/cardtrader", feature: "cardtrader" },
   { prefix: "/incoming-v2", feature: "incoming" },
   { prefix: "/generar-pdf-grupos", feature: "inicio" },
@@ -22,7 +33,7 @@ const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
 ];
 
 export function routeToFeature(pathname: string): FeatureKey {
-  const path = pathname.split("?")[0] || "/";
+  const path = panelPath(pathname);
   for (const rule of ROUTE_FEATURE_RULES) {
     if (rule.prefix === "/") {
       if (path === "/" || path === "") return rule.feature;

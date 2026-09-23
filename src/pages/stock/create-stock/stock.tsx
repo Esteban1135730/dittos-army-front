@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import CardDetail from "./components/card.detail";
+import { ExpansionSearch } from "../../../components/add-stock/expansion-search";
+import { CardResultGrid } from "../../../components/add-stock/card-result-grid";
+import { StockEntryModal } from "../../../components/add-stock/stock-entry-modal";
 import type { CreateStockRequestBody } from "../../../types/stock";
 import {
   STOCK_TAG_LABEL,
@@ -61,9 +64,7 @@ export default function Stock() {
   const [mostrarLista, setMostrarLista] = useState(false);
   const [expansionSeleccionada, setExpansionSeleccionada] = useState("");
   const [expansion, setExpansion] = useState<Expansion | null>(null);
-  const [currency, setCurrency] = useState<"EUR" | "COP">("EUR");
-  const [paginaActual, setPaginaActual] = useState(1);
-  const cartasPorPagina = 12;
+  const [currency, setCurrency] = useState<"EUR" | "COP">("COP");
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const { data: expansiones = [], isLoading: cargandoExpansiones } = useQuery({
@@ -104,14 +105,9 @@ export default function Stock() {
       ? cartas.filter(
           (carta: CartaBusquedaDirecta) =>
             carta.name.toLowerCase().includes(busqueda.toLowerCase()) ||
-            carta.localId?.includes(busqueda.toLowerCase())
+            carta.localId?.toLowerCase().includes(busqueda.toLowerCase())
         )
       : cartas;
-
-  // Resetear página cuando cambia la búsqueda o la expansión
-  useEffect(() => {
-    setPaginaActual(1);
-  }, [busqueda, expansionSeleccionada]);
 
   useEffect(() => {
     setOperationalRareza("");
@@ -123,11 +119,6 @@ export default function Stock() {
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
-
-  const totalPaginas = Math.ceil(cartasFiltradas.length / cartasPorPagina);
-  const indiceInicio = (paginaActual - 1) * cartasPorPagina;
-  const indiceFin = indiceInicio + cartasPorPagina;
-  const cartasPagina = cartasFiltradas.slice(indiceInicio, indiceFin);
 
   const expansionesFiltradas = expansiones.filter(
     (exp) =>
@@ -299,57 +290,32 @@ export default function Stock() {
       {/* ------------------ MODO EXPANSIÓN ------------------ */}
       {modoBusqueda === "expansion" && (
         <>
-          {/* Buscador de expansión */}
-          <div className="mb-6 relative">
-            <label className="block mb-2 text-sm font-medium text-gray-700">
-              Buscar expansión
-            </label>
-            <input
-              type="text"
-              value={filtroExpansion}
-              onChange={(e) => {
-                setFiltroExpansion(e.target.value);
-                setMostrarLista(true);
-              }}
-              onFocus={() => setMostrarLista(true)}
-              placeholder="Nombre o código de la expansión..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {mostrarLista && (
-              <ul className="absolute z-10 bg-white w-full border border-gray-200 max-h-60 overflow-y-auto rounded-lg shadow mt-1">
-                {expansionesFiltradas.length > 0 ? (
-                  expansionesFiltradas.map((exp: Expansion) => (
-                    <li
-                      key={exp.id}
-                      onClick={() => {
-                        setExpansionSeleccionada(exp.id);
-                        setExpansion(exp);
-                        const label = expansionDisplayName(exp);
-                        setFiltroExpansion(
-                          exp.ptcgoCode ? `${label} (${exp.ptcgoCode})` : label
-                        );
-                        setMostrarLista(false);
-                        setCartaSeleccionada(null);
-                      }}
-                      className="px-4 py-2 cursor-pointer hover:bg-blue-100"
-                    >
-                      {expansionDisplayName(exp)}
-                      {exp.ptcgoCode ? ` (${exp.ptcgoCode})` : ""}
-                    </li>
-                  ))
-                ) : (
-                  <li className="px-4 py-2 text-gray-500">
-                    No se encontraron expansiones.
-                  </li>
-                )}
-              </ul>
-            )}
-            {cargandoExpansiones && (
-              <p className="text-sm text-gray-500 mt-2">
-                Cargando expansiones...
-              </p>
-            )}
-          </div>
+          <ExpansionSearch
+            value={filtroExpansion}
+            onChange={(value) => {
+              setFiltroExpansion(value);
+              setMostrarLista(true);
+            }}
+            open={mostrarLista}
+            onOpen={() => setMostrarLista(true)}
+            loading={cargandoExpansiones}
+            items={expansionesFiltradas.map((exp: Expansion) => {
+              const label = expansionDisplayName(exp);
+              return {
+                id: exp.id,
+                label: exp.ptcgoCode ? `${label} (${exp.ptcgoCode})` : label,
+              };
+            })}
+            onPick={(item) => {
+              const exp = expansiones.find((row: Expansion) => row.id === item.id);
+              if (!exp) return;
+              setExpansionSeleccionada(exp.id);
+              setExpansion(exp);
+              setFiltroExpansion(item.label);
+              setMostrarLista(false);
+              setCartaSeleccionada(null);
+            }}
+          />
 
           {/* Buscador de carta */}
           {expansionSeleccionada && (
@@ -367,97 +333,28 @@ export default function Stock() {
             </div>
           )}
 
-          {/* Listado de cartas */}
-          {cargandoCartas || buscandoCartas ? (
-            <p className="text-gray-500 text-center">Cargando cartas...</p>
-          ) : cartasFiltradas.length > 0 ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cartasPagina.map((carta: CartaBusquedaDirecta) => (
-                  <div
-                    key={carta.id}
-                    onClick={() => {
-                      setCartaSeleccionada(carta);
-                      setModalAbierto(true);
-                    }}
-                    className={`bg-white rounded-lg shadow p-4 border flex flex-col cursor-pointer transition-all hover:shadow-lg ${
-                      cartaSeleccionada?.id === carta.id
-                        ? "border-4 border-blue-500 shadow-lg"
-                        : "border-gray-200"
-                    }`}
-                  >
-                    <img
-                      src={carta.image}
-                      alt={carta.name}
-                      className="w-full h-40 object-contain mb-2"
-                    />
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      {carta.name}{expansion?.ptcgoCode ? ` - ${expansion.ptcgoCode}` : ''} - {carta.localId}
-                    </h3>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Controles de paginación */}
-              {totalPaginas > 1 && (
-                <div className="mt-6 flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => setPaginaActual((prev) => Math.max(1, prev - 1))}
-                    disabled={paginaActual === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Anterior
-                  </button>
-                  
-                  <div className="flex gap-1">
-                    {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((num) => {
-                      // Mostrar solo algunas páginas alrededor de la actual
-                      if (
-                        num === 1 ||
-                        num === totalPaginas ||
-                        (num >= paginaActual - 1 && num <= paginaActual + 1)
-                      ) {
-                        return (
-                          <button
-                            key={num}
-                            onClick={() => setPaginaActual(num)}
-                            className={`px-3 py-2 border rounded-md ${
-                              paginaActual === num
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : "border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {num}
-                          </button>
-                        );
-                      } else if (num === paginaActual - 2 || num === paginaActual + 2) {
-                        return <span key={num} className="px-2">...</span>;
-                      }
-                      return null;
-                    })}
-                  </div>
-                  
-                  <button
-                    onClick={() => setPaginaActual((prev) => Math.min(totalPaginas, prev + 1))}
-                    disabled={paginaActual === totalPaginas}
-                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              )}
-              
-              <p className="text-sm text-gray-500 text-center mt-2">
-                Mostrando {indiceInicio + 1}-{Math.min(indiceFin, cartasFiltradas.length)} de {cartasFiltradas.length} cartas
-              </p>
-            </>
-          ) : (
-            busqueda && (
-              <p className="text-gray-500">
-                No se encontraron cartas con ese nombre.
-              </p>
-            )
-          )}
+          <CardResultGrid
+            cards={cartasFiltradas.map((carta: CartaBusquedaDirecta) => ({
+              id: carta.id,
+              name: carta.name,
+              image: carta.image,
+              subtitle: expansion?.ptcgoCode
+                ? `${expansion.ptcgoCode} - ${carta.localId}`
+                : carta.localId,
+            }))}
+            loading={cargandoCartas || buscandoCartas}
+            selectedId={cartaSeleccionada?.id}
+            resetKey={`${expansionSeleccionada}:${busqueda}`}
+            emptyWhenFiltered={Boolean(busqueda)}
+            onSelect={(tile) => {
+              const carta = cartasFiltradas.find(
+                (row: CartaBusquedaDirecta) => row.id === tile.id,
+              );
+              if (!carta) return;
+              setCartaSeleccionada(carta);
+              setModalAbierto(true);
+            }}
+          />
         </>
       )}
 
@@ -517,129 +414,58 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Modal de detalles de la carta seleccionada */}
-      {modalAbierto && cartaSeleccionada && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setModalAbierto(false);
-            }
-          }}
-        >
-          <div
-            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header del modal */}
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-xl flex justify-between items-center z-10">
-              <h2 className="text-xl font-bold">Detalles de la carta</h2>
-              <button
-                onClick={() => setModalAbierto(false)}
-                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
-                aria-label="Cerrar"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+      <StockEntryModal
+        open={modalAbierto && Boolean(cartaSeleccionada)}
+        saving={guardando}
+        message={mensaje}
+        currency={currency}
+        onCurrency={setCurrency}
+        onClose={() => setModalAbierto(false)}
+        onSave={guardarStock}
+      >
+        {cartaSeleccionada ? (
+          <>
+            <CardDetail
+              carta={cartaSeleccionada}
+              costoCarta={costoCarta}
+              setCostoCarta={setCostoCarta}
+              costoEnvio={costoEnvio}
+              setCostoEnvio={setCostoEnvio}
+              cartasEnvio={cartasEnvio}
+              setCartasEnvio={setCartasEnvio}
+              copias={copias}
+              setCopias={setCopias}
+              cardState={cardState}
+              setCardState={setCardState}
+              language={language}
+              setLanguage={setLanguage}
+              operationalRareza={operationalRareza}
+              setOperationalRareza={setOperationalRareza}
+            />
+            <div className="mt-6">
+              <span className="block text-sm font-medium text-gray-700 mb-2">
+                Tags (filtro)
+              </span>
+              <div className="flex flex-wrap gap-3">
+                {STOCK_TAG_VALUES.map((tag) => (
+                  <label
+                    key={tag}
+                    className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-800"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={stockTags.includes(tag)}
+                      onChange={() => toggleStockTag(tag)}
+                      className="rounded border-gray-300"
+                    />
+                    {STOCK_TAG_LABEL[tag]}
+                  </label>
+                ))}
+              </div>
             </div>
-
-            {/* Contenido del modal */}
-            <div className="p-6">
-              <CardDetail
-                carta={cartaSeleccionada}
-                costoCarta={costoCarta}
-                setCostoCarta={setCostoCarta}
-                costoEnvio={costoEnvio}
-                setCostoEnvio={setCostoEnvio}
-                cartasEnvio={cartasEnvio}
-                setCartasEnvio={setCartasEnvio}
-                copias={copias}
-                setCopias={setCopias}
-                cardState={cardState}
-                setCardState={setCardState}
-                language={language}
-                setLanguage={setLanguage}
-                operationalRareza={operationalRareza}
-                setOperationalRareza={setOperationalRareza}
-              />
-              
-              <div className="mt-6">
-                <span className="block text-sm font-medium text-gray-700 mb-2">
-                  Tags (filtro)
-                </span>
-                <div className="flex flex-wrap gap-3">
-                  {STOCK_TAG_VALUES.map((tag) => (
-                    <label
-                      key={tag}
-                      className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-800"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={stockTags.includes(tag)}
-                        onChange={() => toggleStockTag(tag)}
-                        className="rounded border-gray-300"
-                      />
-                      {STOCK_TAG_LABEL[tag]}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Moneda
-                </label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value as "EUR" | "COP")}
-                  className="w-full px-3 py-2 border rounded-lg border-gray-300 focus:ring-blue-500 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="EUR">EUR</option>
-                  <option value="COP">COP</option>
-                </select>
-              </div>
-              
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={guardarStock}
-                  disabled={guardando}
-                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors shadow-md hover:shadow-lg"
-                >
-                  {guardando ? "Guardando..." : "Guardar stock"}
-                </button>
-                <button
-                  onClick={() => setModalAbierto(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-              
-              {mensaje && (
-                <div className={`mt-4 p-3 rounded-lg text-sm text-center ${
-                  mensaje.includes("✅") 
-                    ? "bg-green-50 text-green-800 border border-green-200" 
-                    : "bg-red-50 text-red-800 border border-red-200"
-                }`}>
-                  {mensaje}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </StockEntryModal>
     </div>
   );
 }

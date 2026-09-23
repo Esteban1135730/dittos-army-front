@@ -163,11 +163,20 @@ export function buildCartMetaFromOffer(args: {
   blueprintImageUrl?: string;
 }): CardtraderCartItemMeta {
   const props = args.product.properties_hash;
-  const languageRaw = props?.pokemon_language ?? props?.mtg_language ?? props?.language;
+  const languageRaw =
+    props?.pokemon_language ??
+    props?.yugioh_language ??
+    props?.mtg_language ??
+    props?.language;
   const conditionRaw = props?.condition ?? props?.pokemon_condition;
   const fixed = args.blueprint?.fixed_properties;
   const rarityRaw =
-    fixed?.pokemon_rarity ?? fixed?.mtg_rarity ?? fixed?.rarity ?? props?.pokemon_rarity;
+    fixed?.pokemon_rarity ??
+    (fixed as { yugioh_rarity?: string } | undefined)?.yugioh_rarity ??
+    fixed?.mtg_rarity ??
+    fixed?.rarity ??
+    props?.pokemon_rarity ??
+    props?.yugioh_rarity;
 
   const expansionName = args.expansion?.name_en ?? args.expansion?.name;
   const imageUrl =

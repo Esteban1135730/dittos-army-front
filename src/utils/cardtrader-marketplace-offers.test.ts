@@ -32,6 +32,19 @@ describe("cardtrader-marketplace-offers", () => {
     expect(matchesOfferFilters(product, [], ["es"], null, null)).toBe(false);
   });
 
+  it("lee yugioh_language en filtros de idioma", () => {
+    const ygo = {
+      id: 2,
+      price: { cents: 100 },
+      properties_hash: {
+        condition: "Near Mint",
+        yugioh_language: "es",
+      },
+    };
+    expect(matchesOfferFilters(ygo, [], ["es"], null, null)).toBe(true);
+    expect(matchesOfferFilters(ygo, [], ["en"], null, null)).toBe(false);
+  });
+
   it("matchesOfferFilters por rango USD", () => {
     expect(matchesOfferFilters(product, [], [], 6, 4)).toBe(true);
     expect(matchesOfferFilters(product, [], [], 4, null)).toBe(false);

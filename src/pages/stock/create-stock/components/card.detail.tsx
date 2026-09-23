@@ -12,9 +12,9 @@ interface Props {
   copias: number;
   cardState: string;
   language: string;
-  /** "" = sin variante */
-  operationalRareza: string;
-  setOperationalRareza: (s: string) => void;
+  /** "" = sin variante. Omitir en TCGs que no usan rareza operativa de Pokémon. */
+  operationalRareza?: string;
+  setOperationalRareza?: (s: string) => void;
   setCostoCarta: (n: number) => void;
   setCostoEnvio: (n: number) => void;
   setCartasEnvio: (n: number) => void;
@@ -182,12 +182,13 @@ export default function CardDetail({
             <option value="otro">Otro</option>
           </select>
         </div>
+        {setOperationalRareza ? (
         <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Variante (rareza)
           </label>
           <select
-            value={operationalRareza}
+            value={operationalRareza ?? ""}
             onChange={(e) => setOperationalRareza(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
           >
@@ -199,6 +200,7 @@ export default function CardDetail({
             ))}
           </select>
         </div>
+        ) : null}
       </div>
     </div>
   );

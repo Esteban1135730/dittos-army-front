@@ -1,4 +1,5 @@
 import { matchesOfferExtrasFilter } from "./cardtrader-offer-extras";
+import { readCtLanguage } from "./cardtrader-order-item-map";
 
 /** Helpers compartidos para listados marketplace CardTrader (ofertas / productos). */
 
@@ -57,15 +58,13 @@ export function productConditionLabel(p: CtMarketplaceProduct): string {
 }
 
 export function productLanguageLabel(p: CtMarketplaceProduct): string {
-  const raw =
-    p.properties_hash?.pokemon_language ?? p.properties_hash?.mtg_language ?? p.properties_hash?.language;
-  return typeof raw === "string" ? String(raw).toUpperCase() : "—";
+  const lang = readCtLanguage(p.properties_hash);
+  return lang === "—" ? "—" : lang.toUpperCase();
 }
 
 function productLangRaw(p: CtMarketplaceProduct): string | null {
-  const props = p.properties_hash;
-  const lang = props?.pokemon_language ?? props?.mtg_language ?? props?.language;
-  return typeof lang === "string" && lang.trim() ? lang.trim() : null;
+  const lang = readCtLanguage(p.properties_hash);
+  return lang === "—" ? null : lang;
 }
 
 export function productConditionValue(p: CtMarketplaceProduct): string | null {

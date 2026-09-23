@@ -2,6 +2,8 @@ import type { ComponentType, SVGProps } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import EuroToCOPConverter from "../../utils/tasa";
 import { OwnerSelect, useOwner } from "../../modules/owner";
+import { TcgSelect } from "./tcg-select";
+import { panelBasenameForPath, YUGIOH_UI_PREFIX } from "../../config/routes";
 import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
 import { isRouteAllowed } from "../../modules/owner/owner-acl";
 import { runOwnerChangeGuards } from "../../modules/owner/owner-change-guard";
@@ -58,6 +60,47 @@ const TOP_LINKS: NavLeaf[] = [
   { to: "/generar-pdf-grupos", label: "PDF grupos", icon: IconDocument },
 ];
 
+const CARDTRADER_SECTION: NavSection = {
+  id: "cardtrader",
+  label: "CardTrader",
+  icon: IconTruck,
+  items: [
+    { to: "/cardtrader-transit", label: "Tránsito", icon: IconTruck },
+    { to: "/cardtrader-transit/import", label: "Importar CT Zero", icon: IconDownload },
+    { to: "/cardtrader-receipt", label: "Recepción CT", icon: IconInbox },
+    { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
+    { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
+    { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
+    { to: "/cotizar/pedido-cliente", label: "Pegar cotización", icon: IconCart },
+  ],
+};
+
+const YUGIOH_TOP_LINKS: NavLeaf[] = [
+  { to: "/", label: "Inicio", icon: IconHome },
+];
+
+const YUGIOH_SECTIONS: NavSection[] = [
+  {
+    id: "inventario",
+    label: "Inventario",
+    icon: IconInventory,
+    items: [
+      { to: "/stock", label: "Stock", icon: IconGrid },
+      { to: "/add-stock", label: "Agregar stock", icon: IconPlus },
+    ],
+  },
+  CARDTRADER_SECTION,
+  {
+    id: "dashboards",
+    label: "Dashboards",
+    icon: IconCash,
+    items: [
+      { to: "/ventas", label: "Ventas", icon: IconCash },
+      { to: "/metricas", label: "Métricas", icon: IconRates },
+    ],
+  },
+];
+
 const SECTIONS: NavSection[] = [
   {
     id: "inventario",
@@ -72,20 +115,7 @@ const SECTIONS: NavSection[] = [
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
-  {
-    id: "cardtrader",
-    label: "CardTrader",
-    icon: IconTruck,
-    items: [
-      { to: "/cardtrader-transit", label: "Tránsito", icon: IconTruck },
-      { to: "/cardtrader-transit/import", label: "Importar CT Zero", icon: IconDownload },
-      { to: "/cardtrader-receipt", label: "Recepción CT", icon: IconInbox },
-      { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
-      { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
-      { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
-      { to: "/cotizar/pedido-cliente", label: "Pegar cotización", icon: IconCart },
-    ],
-  },
+  CARDTRADER_SECTION,
   {
     id: "ventas",
     label: "Ventas",
@@ -232,11 +262,15 @@ export default function PanelNav({
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const visibleTop = TOP_LINKS.filter((item) =>
+  const yugioh = panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX;
+  const topLinks = yugioh ? YUGIOH_TOP_LINKS : TOP_LINKS;
+  const sections = yugioh ? YUGIOH_SECTIONS : SECTIONS;
+
+  const visibleTop = topLinks.filter((item) =>
     isRouteAllowed(item.to, allowedFeatures),
   );
 
-  const visibleSections = SECTIONS.map((section) => ({
+  const visibleSections = sections.map((section) => ({
     ...section,
     items: section.items.filter((item) =>
       isRouteAllowed(item.to, allowedFeatures),
@@ -265,6 +299,7 @@ export default function PanelNav({
             return true;
           }}
         />
+        <TcgSelect />
       </div>
 
       <nav

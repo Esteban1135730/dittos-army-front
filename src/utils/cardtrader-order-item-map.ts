@@ -14,7 +14,11 @@ function isActiveTruthy(value: unknown): boolean {
 
 export function readCtLanguage(props: Record<string, unknown> | undefined): string {
   const raw =
-    props?.pokemon_language ?? props?.mtg_language ?? props?.language ?? props?.fab_language;
+    props?.pokemon_language ??
+    props?.yugioh_language ??
+    props?.mtg_language ??
+    props?.language ??
+    props?.fab_language;
   const s = String(raw ?? '')
     .trim()
     .toLowerCase();
@@ -67,7 +71,11 @@ export function readCollectorNumber(props: Record<string, unknown> | undefined):
 
 export function readCtRarityLabel(props: Record<string, unknown> | undefined): string {
   const raw =
-    props?.pokemon_rarity ?? props?.mtg_rarity ?? props?.rarity ?? props?.fab_rarity;
+    props?.pokemon_rarity ??
+    props?.yugioh_rarity ??
+    props?.mtg_rarity ??
+    props?.rarity ??
+    props?.fab_rarity;
   return raw != null && String(raw).trim() ? String(raw).trim() : '—';
 }
 
@@ -77,10 +85,12 @@ export function listCtPropertyExtras(props: Record<string, unknown> | undefined)
     'condition',
     'pokemon_condition',
     'pokemon_language',
+    'yugioh_language',
     'mtg_language',
     'language',
     'fab_language',
     'pokemon_rarity',
+    'yugioh_rarity',
     'mtg_rarity',
     'rarity',
     'fab_rarity',

@@ -17,10 +17,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { API_BASE } from "../../config/api";
+import { API_BASE, getApiTcgHeader } from "../../config/api";
+import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
 import type { PedidoQuoteCandidate } from "../../utils/parse-cardtrader-pedido";
-
-const POKEMON_GAME_ID = 5;
 
 type CtExpansion = { id: number; name?: string; name_en?: string; code?: string };
 
@@ -66,25 +65,26 @@ export function QuoteManualSearchDialog({ open, onClose, onPick }: Props) {
   const [expansion, setExpansion] = useState<CtExpansion | null>(null);
   const [nameQ, setNameQ] = useState("");
   const [submittedQ, setSubmittedQ] = useState("");
+  const cardTraderGameId = cardTraderGameIdForTcg(getApiTcgHeader());
 
   const expansionsQuery = useQuery({
-    queryKey: ["cardtrader", "expansions", POKEMON_GAME_ID],
+    queryKey: ["cardtrader", "expansions", cardTraderGameId],
     enabled: open,
     staleTime: 10 * 60_000,
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/expansions`, {
-        params: { game_id: POKEMON_GAME_ID },
+        params: { game_id: cardTraderGameId },
       });
       return normalizeExpansions(res.data);
     },
   });
 
   const searchQuery = useQuery({
-    queryKey: ["cardtrader", "blueprints", "search", submittedQ],
+    queryKey: ["cardtrader", "blueprints", "search", cardTraderGameId, submittedQ],
     enabled: open && !expansion && submittedQ.length >= 2,
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/blueprints/search`, {
-        params: { q: submittedQ, game_id: POKEMON_GAME_ID },
+        params: { q: submittedQ, game_id: cardTraderGameId },
       });
       const items = Array.isArray((res.data as { items?: SearchItem[] })?.items)
         ? (res.data as { items: SearchItem[] }).items

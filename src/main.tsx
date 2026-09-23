@@ -11,9 +11,12 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { OwnerProvider } from "./modules/owner";
 import { dittoTheme } from "./theme";
 import "./config/api";
-import { PANEL_UI_PREFIX, redirectLegacyPanelPath } from "./config/routes";
+import { YUGIOH_UI_PREFIX, panelBasenameForPath, redirectLegacyPanelPath } from "./config/routes";
+import YugiohRouter from "./yugioh/yugioh-router";
 
-if (!redirectLegacyPanelPath()) {
+const panelBasename = panelBasenameForPath(window.location.pathname);
+if (panelBasename) {
+  const panelTcg = panelBasename === YUGIOH_UI_PREFIX ? "yugioh" : "pokemon";
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -24,25 +27,28 @@ if (!redirectLegacyPanelPath()) {
 
   const localStoragePersister = createSyncStoragePersister({
     storage: window.localStorage,
+    key: `dittos-react-query-${panelTcg}`,
   });
 
   persistQueryClient({
     queryClient,
     persister: localStoragePersister,
+    buster: panelTcg,
   });
-
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ThemeProvider theme={dittoTheme}>
         <CssBaseline />
         <QueryClientProvider client={queryClient}>
           <OwnerProvider>
-            <BrowserRouter basename={PANEL_UI_PREFIX}>
-              <AppRouter />
+            <BrowserRouter basename={panelBasename}>
+              {panelBasename === YUGIOH_UI_PREFIX ? <YugiohRouter /> : <AppRouter />}
             </BrowserRouter>
           </OwnerProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </React.StrictMode>,
   );
+} else {
+  redirectLegacyPanelPath();
 }

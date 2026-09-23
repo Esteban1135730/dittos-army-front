@@ -52,7 +52,6 @@ import {
 import {
   CARDTRADER_CARD_FEE_RATE,
   CARDTRADER_SHIPPING_COP_PER_UNIT,
-  CARDTRADER_SHIPPING_ONLY_COP,
   computeCardtraderUnitCostCop,
 } from "../../utils/cardtrader-cotizar-pricing";
 import { resolveUsdCopRate } from "../../utils/simulate-real-card-price";
@@ -100,7 +99,8 @@ import {
   type CardtraderCartExportPayload,
 } from "../../utils/cardtrader-cart-transfer";
 import { ImportEstebanCartDialog } from "./import-esteban-cart-dialog";
-const CARDTRADER_POKEMON_GAME_ID = 5;
+import { getApiTcgHeader } from "../../config/api";
+import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
 const BLUEPRINTS_PER_PAGE = 96;
 const OFFERS_PER_PAGE = 12;
 
@@ -414,7 +414,12 @@ function SearchGlyph() {
 
 function productLangRaw(p: CtProduct): string | null {
   const props = p.properties_hash;
-  const lang = props?.pokemon_language ?? props?.mtg_language ?? props?.language;
+  const lang =
+    props?.pokemon_language ??
+    props?.yugioh_language ??
+    props?.mtg_language ??
+    props?.language ??
+    props?.fab_language;
   return typeof lang === "string" && lang.trim() ? lang.trim() : null;
 }
 
@@ -532,8 +537,18 @@ function cartLines(cart: CartResponse | null | undefined): {
             meta?.expansion?.name_en ?? meta?.expansion?.name ?? meta?.expansion?.code ?? undefined,
           condition: typeof props?.condition === "string" ? props.condition : undefined,
           language:
-            typeof (props?.pokemon_language ?? props?.mtg_language) === "string"
-              ? String(props?.pokemon_language ?? props?.mtg_language).toUpperCase()
+            typeof (
+              props?.pokemon_language ??
+              props?.yugioh_language ??
+              props?.mtg_language ??
+              props?.language
+            ) === "string"
+              ? String(
+                  props?.pokemon_language ??
+                    props?.yugioh_language ??
+                    props?.mtg_language ??
+                    props?.language,
+                ).toUpperCase()
               : undefined,
           collectorNumber: collectorFromProps?.trim() || undefined,
           blueprintId,
@@ -662,11 +677,13 @@ export default function CotizarCardtraderPage() {
     severity: "success" | "warning" | "error";
   } | null>(null);
 
+  const cardTraderGameId = cardTraderGameIdForTcg(getApiTcgHeader());
+
   const expansionsQuery = useQuery({
-    queryKey: ["cardtrader", "expansions", CARDTRADER_POKEMON_GAME_ID],
+    queryKey: ["cardtrader", "expansions", cardTraderGameId],
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/expansions`, {
-        params: { game_id: CARDTRADER_POKEMON_GAME_ID },
+        params: { game_id: cardTraderGameId },
       });
       return res.data as unknown;
     },
@@ -685,12 +702,12 @@ export default function CotizarCardtraderPage() {
   }, [expansion, blueprintFilter]);
 
   const nameSearchQuery = useQuery({
-    queryKey: ["cardtrader", "blueprints", "search", submittedNameQ],
+    queryKey: ["cardtrader", "blueprints", "search", cardTraderGameId, submittedNameQ],
     enabled: !expansion && submittedNameQ.length >= 2,
     staleTime: 60_000,
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/blueprints/search`, {
-        params: { q: submittedNameQ, game_id: CARDTRADER_POKEMON_GAME_ID },
+        params: { q: submittedNameQ, game_id: cardTraderGameId },
       });
       const items = Array.isArray((res.data as { items?: unknown })?.items)
         ? ((res.data as { items: NameSearchItem[] }).items)
@@ -1292,8 +1309,7 @@ export default function CotizarCardtraderPage() {
 
   const cartCopTotals = useMemo(() => {
     let purchaseCop = 0;
-    let purchasePlusShippingCop = 0;
-    let ivaPlusShippingCop = 0;
+    let feePlusShippingCop = 0;
     let realCostCop = 0;
     let pvpApproxCop = 0;
     let hasAny = false;
@@ -1303,15 +1319,13 @@ export default function CotizarCardtraderPage() {
       hasAny = true;
       const q = Math.max(1, ln.qty);
       purchaseCop += unit.purchaseCop * q;
-      purchasePlusShippingCop += unit.priceShippingOnlyCop * q;
-      ivaPlusShippingCop += unit.ivaPlusShippingCop * q;
+      feePlusShippingCop += unit.feePlusShippingCop * q;
       realCostCop += unit.realCostCop * q;
       pvpApproxCop += unit.pvpApproxCop * q;
     }
     return {
       purchaseCop: hasAny ? purchaseCop : null,
-      purchasePlusShippingCop: hasAny ? purchasePlusShippingCop : null,
-      ivaPlusShippingCop: hasAny ? ivaPlusShippingCop : null,
+      feePlusShippingCop: hasAny ? feePlusShippingCop : null,
       realCostCop: hasAny ? realCostCop : null,
       pvpApproxCop: hasAny ? pvpApproxCop : null,
     };
@@ -1700,7 +1714,15 @@ export default function CotizarCardtraderPage() {
             <TextField
               fullWidth
               label="Buscar carta por nombre o ID"
-              placeholder={expansion ? "Ej. Articuno" : "Ej. Pikachu, ピカチュウ…"}
+              placeholder={
+                expansion
+                  ? cardTraderGameId === 4
+                    ? "Ej. Blue-Eyes"
+                    : "Ej. Articuno"
+                  : cardTraderGameId === 4
+                    ? "Ej. Dark Magician…"
+                    : "Ej. Pikachu, ピカチュウ…"
+              }
               value={blueprintFilter}
               onChange={(e) => {
                 setBlueprintFilter(e.target.value);
@@ -2799,9 +2821,9 @@ export default function CotizarCardtraderPage() {
 
           {copPerUsd !== null && lines.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ px: 2, pb: 0.5, display: "block" }}>
-              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · solo envío{" "}
-              {CARDTRADER_SHIPPING_ONLY_COP} COP + {CARDTRADER_CARD_FEE_RATE * 100}% comisión carta
-              · envío estimado {CARDTRADER_SHIPPING_COP_PER_UNIT} COP/carta · IVA 19%
+              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · costo unitario = base +{" "}
+              {CARDTRADER_CARD_FEE_RATE * 100}% comisión CT + {CARDTRADER_SHIPPING_COP_PER_UNIT} COP
+              envío · PVP sugerido +30%
             </Typography>
           )}
 
@@ -2932,22 +2954,18 @@ export default function CotizarCardtraderPage() {
                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.25 }}>
                           Valores por unidad{ln.qty > 1 ? ` (×${ln.qty} en carrito)` : ""}
                         </Typography>
-                        <CopPriceRow label="Precio retail COP / u." value={unitCost.purchaseCop} />
+                        <CopPriceRow label="Base COP / u." value={unitCost.purchaseCop} />
                         <CopPriceRow
-                          label="Precio solo con envío / u."
-                          value={unitCost.priceShippingOnlyCop}
+                          label="Comisión CT + envío / u."
+                          value={unitCost.feePlusShippingCop}
+                        />
+                        <CopPriceRow
+                          label="Costo unitario / u."
+                          value={unitCost.realCostCop}
                           emphasized="primary"
                         />
                         <CopPriceRow
-                          label="IVA + envío aprox. / u."
-                          value={unitCost.ivaPlusShippingCop}
-                        />
-                        <CopPriceRow
-                          label="Costo real (aprox.) / u."
-                          value={unitCost.realCostCop}
-                        />
-                        <CopPriceRow
-                          label="PVP aprox. (+30%) / u."
+                          label="PVP sugerido (+30%) / u."
                           value={unitCost.pvpApproxCop}
                           emphasized="default"
                         />
@@ -3089,24 +3107,20 @@ export default function CotizarCardtraderPage() {
                       Estimación COP (todas las unidades)
                     </Typography>
                     <CopPriceRow
-                      label="Precio retail (suma unidades)"
+                      label="Base COP (suma unidades)"
                       value={cartCopTotals.purchaseCop ?? 0}
                     />
                     <CopPriceRow
-                      label="Precio solo con envío (suma unidades)"
-                      value={cartCopTotals.purchasePlusShippingCop ?? 0}
+                      label="Comisión CT + envío (suma unidades)"
+                      value={cartCopTotals.feePlusShippingCop ?? 0}
+                    />
+                    <CopPriceRow
+                      label="Costo unitario (suma unidades)"
+                      value={cartCopTotals.realCostCop}
                       emphasized="primary"
                     />
                     <CopPriceRow
-                      label="IVA + envío aprox. (suma unidades)"
-                      value={cartCopTotals.ivaPlusShippingCop ?? 0}
-                    />
-                    <CopPriceRow
-                      label="Costo real (aprox., suma unidades)"
-                      value={cartCopTotals.realCostCop}
-                    />
-                    <CopPriceRow
-                      label="PVP aprox. (+30%, suma unidades)"
+                      label="PVP sugerido (+30%, suma unidades)"
                       value={cartCopTotals.pvpApproxCop ?? 0}
                       emphasized="default"
                     />

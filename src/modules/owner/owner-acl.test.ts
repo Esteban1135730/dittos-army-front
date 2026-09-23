@@ -33,6 +33,15 @@ describe("owner ACL helpers", () => {
     expect(routeToFeature("/generar-pdf-grupos")).toBe("inicio");
   });
 
+  it("routeToFeature ignora el prefijo de TCG", () => {
+    expect(routeToFeature("/yugioh")).toBe("inicio");
+    expect(routeToFeature("/yugioh/add-stock")).toBe("agregar-stock");
+    expect(routeToFeature("/yugioh/stock")).toBe("stock");
+    expect(routeToFeature("/yugioh/cardtrader-transit")).toBe("cardtrader");
+    expect(routeToFeature("/yugioh/ventas")).toBe("ventas");
+    expect(routeToFeature("/pokemon/stock")).toBe("stock");
+  });
+
   it("parseStoredOwner inválido → pablo", () => {
     expect(parseStoredOwner(null)).toBe("pablo");
     expect(parseStoredOwner("nope")).toBe("pablo");
