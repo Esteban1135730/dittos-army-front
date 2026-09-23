@@ -52,6 +52,7 @@ import {
 import {
   CARDTRADER_CARD_FEE_RATE,
   CARDTRADER_SHIPPING_COP_PER_UNIT,
+  allocateCartFeePerUnitCop,
   computeCardtraderUnitCostCop,
 } from "../../utils/cardtrader-cotizar-pricing";
 import { resolveUsdCopRate } from "../../utils/simulate-real-card-price";
@@ -1290,8 +1291,34 @@ export default function CotizarCardtraderPage() {
     });
   }, [cartQuery.data, productMetaById]);
 
+  const subtotalCents = cartQuery.data?.subtotal?.cents ?? 0;
+  const feeCents =
+    (cartQuery.data?.safeguard_fee_amount?.cents ?? 0) +
+    (cartQuery.data?.ct_zero_fee_amount?.cents ?? 0) +
+    (cartQuery.data?.payment_method_fee_fixed_amount?.cents ?? 0) +
+    (cartQuery.data?.payment_method_fee_percentage_amount?.cents ?? 0);
+  const shippingCents = cartQuery.data?.shipping_cost?.cents ?? 0;
+  const grandTotalCents = subtotalCents + feeCents + shippingCents;
+  const currency =
+    cartQuery.data?.total?.currency ??
+    cartQuery.data?.subtotal?.currency ??
+    cartQuery.data?.shipping_cost?.currency;
+
+  const feesCop = useMemo(
+    () => centsToCop(feeCents, currency, convert, copPerUsd),
+    [feeCents, currency, convert, copPerUsd],
+  );
+  const ctShippingCop = useMemo(
+    () => centsToCop(shippingCents, currency, convert, copPerUsd),
+    [shippingCents, currency, convert, copPerUsd],
+  );
+  const usesCartFee = feesCop != null && feesCop > 0 && feeCents > 0;
+
   const lineUnitCosts = useMemo(() => {
     const map = new Map<string, ReturnType<typeof computeCardtraderUnitCostCop> | null>();
+    const purchaseByKey = new Map<string, number>();
+    const allocLines: Array<{ key: string; purchaseCop: number; qty: number }> = [];
+
     for (const ln of lines) {
       const purchaseCop = purchaseCopPerUnit(
         ln.priceCents,
@@ -1299,38 +1326,70 @@ export default function CotizarCardtraderPage() {
         convert,
         copPerUsd,
       );
-      map.set(
-        ln.key,
-        purchaseCop === null ? null : computeCardtraderUnitCostCop(purchaseCop),
-      );
+      if (purchaseCop === null) {
+        map.set(ln.key, null);
+        continue;
+      }
+      purchaseByKey.set(ln.key, purchaseCop);
+      allocLines.push({
+        key: ln.key,
+        purchaseCop,
+        qty: Math.max(1, ln.qty),
+      });
     }
+
+    const feePerUnit = usesCartFee
+      ? allocateCartFeePerUnitCop(allocLines, feesCop!)
+      : allocLines.map(() => undefined as number | undefined);
+
+    allocLines.forEach((ln, i) => {
+      const purchaseCop = purchaseByKey.get(ln.key)!;
+      map.set(ln.key, computeCardtraderUnitCostCop(purchaseCop, feePerUnit[i]));
+    });
     return map;
-  }, [lines, convert, copPerUsd]);
+  }, [lines, convert, copPerUsd, feesCop, usesCartFee]);
 
   const cartCopTotals = useMemo(() => {
     let purchaseCop = 0;
-    let feePlusShippingCop = 0;
-    let realCostCop = 0;
-    let pvpApproxCop = 0;
+    let shippingCop = 0;
+    let feeFromLines = 0;
     let hasAny = false;
+    let totalQty = 0;
     for (const ln of lines) {
       const unit = lineUnitCosts.get(ln.key);
       if (!unit) continue;
       hasAny = true;
       const q = Math.max(1, ln.qty);
+      totalQty += q;
       purchaseCop += unit.purchaseCop * q;
-      feePlusShippingCop += unit.feePlusShippingCop * q;
-      realCostCop += unit.realCostCop * q;
-      pvpApproxCop += unit.pvpApproxCop * q;
+      shippingCop += unit.shippingCop * q;
+      feeFromLines += unit.feeCop * q;
     }
+    if (!hasAny) {
+      return {
+        purchaseCop: null,
+        feeCop: null,
+        shippingCop: null,
+        feePlusShippingCop: null,
+        realCostCop: null,
+        pvpApproxCop: null,
+      };
+    }
+    // Con fee del carrito: la comisión total es exactamente feesCop (no el 5% estimado).
+    const feeCop = usesCartFee ? feesCop! : feeFromLines;
+    const feePlusShippingCop = feeCop + shippingCop;
+    const realCostCop = purchaseCop + feeCop + shippingCop;
+    const pvpApproxCop = realCostCop * (1 + 0.3);
     return {
-      purchaseCop: hasAny ? purchaseCop : null,
-      feePlusShippingCop: hasAny ? feePlusShippingCop : null,
-      realCostCop: hasAny ? realCostCop : null,
-      pvpApproxCop: hasAny ? pvpApproxCop : null,
+      purchaseCop,
+      feeCop,
+      shippingCop,
+      feePlusShippingCop,
+      realCostCop,
+      pvpApproxCop,
+      totalQty,
     };
-  }, [lines, lineUnitCosts]);
-
+  }, [lines, lineUnitCosts, feesCop, usesCartFee]);
   const hasAnyPvpPropio = useMemo(
     () =>
       lines.some((ln) => {
@@ -1603,27 +1662,6 @@ export default function CotizarCardtraderPage() {
 
   const configError =
     axios.isAxiosError(expansionsQuery.error) && expansionsQuery.error.response?.status === 503;
-  const subtotalCents = cartQuery.data?.subtotal?.cents ?? 0;
-  const feeCents =
-    (cartQuery.data?.safeguard_fee_amount?.cents ?? 0) +
-    (cartQuery.data?.ct_zero_fee_amount?.cents ?? 0) +
-    (cartQuery.data?.payment_method_fee_fixed_amount?.cents ?? 0) +
-    (cartQuery.data?.payment_method_fee_percentage_amount?.cents ?? 0);
-  const shippingCents = cartQuery.data?.shipping_cost?.cents ?? 0;
-  const grandTotalCents = subtotalCents + feeCents + shippingCents;
-  const currency =
-    cartQuery.data?.total?.currency ??
-    cartQuery.data?.subtotal?.currency ??
-    cartQuery.data?.shipping_cost?.currency;
-
-  const feesCop = useMemo(
-    () => centsToCop(feeCents, currency, convert, copPerUsd),
-    [feeCents, currency, convert, copPerUsd],
-  );
-  const ctShippingCop = useMemo(
-    () => centsToCop(shippingCents, currency, convert, copPerUsd),
-    [shippingCents, currency, convert, copPerUsd],
-  );
 
   return (
     <Box
@@ -2821,9 +2859,11 @@ export default function CotizarCardtraderPage() {
 
           {copPerUsd !== null && lines.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ px: 2, pb: 0.5, display: "block" }}>
-              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · costo unitario = base +{" "}
-              {CARDTRADER_CARD_FEE_RATE * 100}% comisión CT + {CARDTRADER_SHIPPING_COP_PER_UNIT} COP
-              envío · PVP sugerido +30%
+              Tasa USD→COP: {copPerUsd.toLocaleString("es-CO")} · costo unitario = base + comisión CT
+              {usesCartFee
+                ? " (fee del carrito prorrateado)"
+                : ` (${CARDTRADER_CARD_FEE_RATE * 100}% estimado)`}{" "}
+              + {CARDTRADER_SHIPPING_COP_PER_UNIT} COP envío · PVP sugerido +30%
             </Typography>
           )}
 
@@ -2956,8 +2996,16 @@ export default function CotizarCardtraderPage() {
                         </Typography>
                         <CopPriceRow label="Base COP / u." value={unitCost.purchaseCop} />
                         <CopPriceRow
-                          label="Comisión CT + envío / u."
-                          value={unitCost.feePlusShippingCop}
+                          label={
+                            usesCartFee
+                              ? "Comisión CT / u. (fee carrito)"
+                              : `Comisión CT / u. (${CARDTRADER_CARD_FEE_RATE * 100}% est.)`
+                          }
+                          value={unitCost.feeCop}
+                        />
+                        <CopPriceRow
+                          label={`Envío est. / u. (${CARDTRADER_SHIPPING_COP_PER_UNIT} COP)`}
+                          value={unitCost.shippingCop}
                         />
                         <CopPriceRow
                           label="Costo unitario / u."
@@ -3111,11 +3159,19 @@ export default function CotizarCardtraderPage() {
                       value={cartCopTotals.purchaseCop ?? 0}
                     />
                     <CopPriceRow
-                      label="Comisión CT + envío (suma unidades)"
-                      value={cartCopTotals.feePlusShippingCop ?? 0}
+                      label={
+                        usesCartFee
+                          ? "Comisión CT (igual a Fees CardTrader COP)"
+                          : `Comisión CT (${CARDTRADER_CARD_FEE_RATE * 100}% estimado)`
+                      }
+                      value={cartCopTotals.feeCop ?? 0}
                     />
                     <CopPriceRow
-                      label="Costo unitario (suma unidades)"
+                      label={`Envío estimado (${CARDTRADER_SHIPPING_COP_PER_UNIT} COP × u.)`}
+                      value={cartCopTotals.shippingCop ?? 0}
+                    />
+                    <CopPriceRow
+                      label="Costo total (suma unidades)"
                       value={cartCopTotals.realCostCop}
                       emphasized="primary"
                     />
