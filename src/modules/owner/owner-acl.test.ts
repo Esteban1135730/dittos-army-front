@@ -39,6 +39,10 @@ describe("owner ACL helpers", () => {
     expect(routeToFeature("/yugioh/stock")).toBe("stock");
     expect(routeToFeature("/yugioh/cardtrader-transit")).toBe("cardtrader");
     expect(routeToFeature("/yugioh/ventas")).toBe("ventas");
+    expect(routeToFeature("/yugioh/clientes")).toBe("clientes");
+    expect(routeToFeature("/yugioh/envios")).toBe("clientes");
+    expect(routeToFeature("/yugioh/stock/revision")).toBe("stock");
+    expect(routeToFeature("/yugioh/stock/imprimir-etiquetas-qr")).toBe("stock");
     expect(routeToFeature("/pokemon/stock")).toBe("stock");
   });
 

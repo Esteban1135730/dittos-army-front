@@ -29,6 +29,20 @@ export const CARD_THUMB_SIZES: Record<
 /** Hover preview size — large enough to read the card outside clipped cells. */
 export const CARD_THUMB_HOVER_PREVIEW = CARD_THUMB_SIZES.xl;
 
+/** Preview never smaller than default xl; grows ~1.8× when the thumb is already xl+. */
+export function resolveCardThumbHoverPreview(
+  thumbWidth: number,
+  thumbHeight: number,
+): { width: number; height: number } {
+  const scale = 1.8;
+  const scaledW = Math.round(Math.max(thumbWidth, 1) * scale);
+  const scaledH = Math.round(Math.max(thumbHeight, 1) * scale);
+  return {
+    width: Math.max(CARD_THUMB_HOVER_PREVIEW.width, scaledW),
+    height: Math.max(CARD_THUMB_HOVER_PREVIEW.height, scaledH),
+  };
+}
+
 type CardThumbProps = {
   src?: string | null;
   alt?: string;
@@ -129,6 +143,7 @@ export function CardThumb({
   const showSpinner = pending || waitingImage;
   const canPreview = enlargeOnHover && trimmed.length > 0;
   const clickable = Boolean(canPreview || onClick);
+  const hoverPreview = resolveCardThumbHoverPreview(width, height);
 
   const cancelLeave = () => {
     if (leaveTimerRef.current) {
@@ -267,8 +282,8 @@ export function CardThumb({
             data-testid="card-thumb-preview"
             src={trimmed}
             alt=""
-            width={CARD_THUMB_HOVER_PREVIEW.width}
-            height={CARD_THUMB_HOVER_PREVIEW.height}
+            width={hoverPreview.width}
+            height={hoverPreview.height}
             className="block rounded-md border border-gray-200 bg-white object-contain shadow-xl"
             draggable={false}
             aria-hidden

@@ -404,11 +404,12 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
     queryFn: async () =>
       resolveCt0BatchDraftTcgdex(
         baseDrafts,
-        async ({ expansion, collectorNumber, language, blueprintId }) => {
+        async ({ expansion, collectorNumber, language, blueprintId, name }) => {
           const res = await axios.get(`${API_CARDTRADER}/tcgdex/resolve`, {
             params: {
               expansion,
               collector_number: collectorNumber ?? undefined,
+              name: name?.trim() || undefined,
               language: language !== "—" ? language : undefined,
               blueprint_id: blueprintId && blueprintId > 0 ? blueprintId : undefined,
             },

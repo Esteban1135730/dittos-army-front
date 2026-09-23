@@ -59,3 +59,21 @@ export type CardtraderTransitLineRow = {
   not_arrived_at: string | null;
   created_at: string;
 };
+
+/** Fila de `GET .../transit-lots/open/catalog` (solo restantes en tránsito). */
+export type CardtraderTransitCatalogLine = {
+  transit_line_id: string;
+  transit_lot_id: string;
+  card_id: string;
+  card_name: string;
+  image_url: string;
+  language: string;
+  rareza: string | null;
+  remaining_quantity: number;
+  unit_cost_cop: number;
+  purchase_date: string;
+  created_at: string;
+  expansion: string | null;
+  collector_number: string | null;
+  owner: OwnerKey | string;
+};

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { ThemeProvider } from "@mui/material/styles";
 import { afterEach, describe, expect, it } from "vitest";
 import { dittoTheme } from "../theme";
-import { CARD_THUMB_HOVER_PREVIEW, CardThumb } from "./card-thumb";
+import { CARD_THUMB_HOVER_PREVIEW, CardThumb, resolveCardThumbHoverPreview } from "./card-thumb";
 
 afterEach(cleanup);
 
@@ -105,5 +105,24 @@ describe("CardThumb", () => {
         Object.defineProperty(HTMLImageElement.prototype, "complete", descriptor);
       }
     }
+  });
+
+  it("con size xl el preview de hover es más grande que la miniatura", () => {
+    renderThumb({ enlargeOnHover: true, size: "xl" });
+    const thumb = screen.getByRole("img", { name: "Pikachu" });
+    fireEvent.load(thumb);
+    fireEvent.mouseEnter(thumb.parentElement!);
+
+    const preview = screen.getByTestId("card-thumb-preview");
+    const expected = resolveCardThumbHoverPreview(180, 252);
+    expect(Number(preview.getAttribute("width"))).toBe(expected.width);
+    expect(expected.width).toBeGreaterThan(180);
+    expect(expected.height).toBeGreaterThan(252);
+  });
+});
+
+describe("resolveCardThumbHoverPreview", () => {
+  it("para thumbs pequeños mantiene al menos el tamaño xl por defecto", () => {
+    expect(resolveCardThumbHoverPreview(64, 90)).toEqual(CARD_THUMB_HOVER_PREVIEW);
   });
 });

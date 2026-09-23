@@ -28,6 +28,14 @@ const CardtraderTransitImportPage = lazy(
 const CardtraderReceiptPage = lazy(() => import("../pages/cardtrader-receipt/cardtrader-receipt-page"));
 const VentaAsistidaQrPage = lazy(() => import("../pages/ventas/venta-asistida-qr-page"));
 const ClientesPage = lazy(() => import("../pages/clientes/clientes"));
+const ClienteDetallePage = lazy(() => import("../pages/clientes/cliente-detalle"));
+const ReservarCartasPage = lazy(() => import("../pages/clientes/reservar-cartas"));
+const ImprimirPedidosPage = lazy(() => import("../pages/clientes/imprimir-pedidos"));
+const EnviosPage = lazy(() => import("../pages/envios/envios"));
+const StockReviewStartPage = lazy(() => import("../pages/stock/revision/start-page"));
+const StockReviewVerifyPage = lazy(() => import("../pages/stock/revision/verify-page"));
+const StockReviewResolvePage = lazy(() => import("../pages/stock/revision/resolve-page"));
+const ImprimirEtiquetasQrPage = lazy(() => import("../pages/stock/imprimir-etiquetas-qr-page"));
 
 function RedirectLegacyIncomingShipRound() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -44,6 +52,10 @@ export default function YugiohRouter() {
       <Route path="/" element={<Page><Home /></Page>} />
       <Route path="/stock" element={<Page><StockGrid /></Page>} />
       <Route path="/stock/update/:id" element={<Page><ModificarStock /></Page>} />
+      <Route path="/stock/revision" element={<Page><StockReviewStartPage /></Page>} />
+      <Route path="/stock/revision/:sessionId/resolucion" element={<Page><StockReviewResolvePage /></Page>} />
+      <Route path="/stock/revision/:sessionId" element={<Page><StockReviewVerifyPage /></Page>} />
+      <Route path="/stock/imprimir-etiquetas-qr" element={<Page><ImprimirEtiquetasQrPage /></Page>} />
       <Route path="/add-stock" element={<Page><YugiohAddStockPage /></Page>} />
       <Route path="/add-pvp/:id" element={<Page><AddPVP /></Page>} />
       <Route path="/incoming" element={<Navigate to="/incoming-v2" replace />} />
@@ -64,7 +76,11 @@ export default function YugiohRouter() {
       <Route path="/ventas" element={<Page><SalesDashboard /></Page>} />
       <Route path="/metricas" element={<Page><MetricasPage /></Page>} />
       <Route path="/ventas/escanear-qr" element={<Page><VentaAsistidaQrPage /></Page>} />
+      <Route path="/envios" element={<Page><EnviosPage /></Page>} />
       <Route path="/clientes" element={<Page><ClientesPage /></Page>} />
+      <Route path="/clientes/imprimir-pedidos" element={<Page><ImprimirPedidosPage /></Page>} />
+      <Route path="/clientes/:clientId/reservar" element={<Page><ReservarCartasPage /></Page>} />
+      <Route path="/clientes/:clientId" element={<Page><ClienteDetallePage /></Page>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

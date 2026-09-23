@@ -117,6 +117,7 @@ export type TcgdexResolveFn = (args: {
   collectorNumber: string | null;
   language: string;
   blueprintId?: number;
+  name?: string;
 }) => Promise<TcgdexResolveResponse>;
 
 function formatPaidAtLabel(paidAt: string): string {
@@ -381,9 +382,13 @@ export async function resolveCt0BatchDraftTcgdex(
     expansion: string,
     collectorNumber: string | null,
     language: string,
-    blueprintId?: number,
+    blueprintId: number | undefined,
+    name: string,
   ): Promise<TcgdexResolveResponse> => {
-    const cacheKey = `${language.toLowerCase()}|${expansion.toLowerCase()}|${collectorNumber ?? ''}|${blueprintId ?? ''}`;
+    const identity = collectorNumber?.trim()
+      ? collectorNumber
+      : name.trim().toLowerCase();
+    const cacheKey = `${language.toLowerCase()}|${expansion.toLowerCase()}|${identity}|${blueprintId ?? ''}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
@@ -392,6 +397,7 @@ export async function resolveCt0BatchDraftTcgdex(
       collectorNumber,
       language,
       blueprintId,
+      name,
     });
     cache.set(cacheKey, result);
     return result;
@@ -422,6 +428,7 @@ export async function resolveCt0BatchDraftTcgdex(
         line.collectorNumber,
         line.language,
         line.blueprintId,
+        line.name,
       );
       if (resolved.tcgdex_card_id) {
         lines.push({
@@ -502,7 +509,10 @@ export async function resolveComplementosDraftTcgdex(
   const out: ComplementosDraftLine[] = [];
 
   for (const line of lines) {
-    const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${line.collectorNumber ?? ''}|${line.blueprintId ?? ''}`;
+    const identity = line.collectorNumber?.trim()
+      ? line.collectorNumber
+      : line.name.trim().toLowerCase();
+    const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${identity}|${line.blueprintId ?? ''}`;
     let resolved = cache.get(cacheKey);
     if (!resolved) {
       resolved = await resolveTcgdex({
@@ -510,6 +520,7 @@ export async function resolveComplementosDraftTcgdex(
         collectorNumber: line.collectorNumber,
         language: line.language,
         blueprintId: line.blueprintId,
+        name: line.name,
       });
       cache.set(cacheKey, resolved);
     }

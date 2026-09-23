@@ -87,6 +87,8 @@ const YUGIOH_SECTIONS: NavSection[] = [
     items: [
       { to: "/stock", label: "Stock", icon: IconGrid },
       { to: "/add-stock", label: "Agregar stock", icon: IconPlus },
+      { to: "/stock/revision", label: "Revisión de stock", icon: IconSearch },
+      { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
   CARDTRADER_SECTION,
@@ -97,6 +99,16 @@ const YUGIOH_SECTIONS: NavSection[] = [
     items: [
       { to: "/ventas", label: "Ventas", icon: IconCash },
       { to: "/metricas", label: "Métricas", icon: IconRates },
+    ],
+  },
+  {
+    id: "clientes",
+    label: "Clientes",
+    icon: IconUsers,
+    items: [
+      { to: "/clientes", label: "Clientes", icon: IconUsers },
+      { to: "/envios", label: "Coordinar envíos", icon: IconCart },
+      { to: "/clientes/imprimir-pedidos", label: "Imprimir pedidos", icon: IconPrint },
     ],
   },
 ];

@@ -1796,7 +1796,9 @@ export default function CotizarCardtraderPage() {
             </Stack>
             {!expansion && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-                Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH.
+                {cardTraderGameId === 4
+                  ? "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom)."
+                  : "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH."}
               </Typography>
             )}
           </Box>
