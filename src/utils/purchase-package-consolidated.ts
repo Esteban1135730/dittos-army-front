@@ -4,6 +4,7 @@ import {
   ct0ItemQtyForState,
   filterCt0ItemsInTransit,
   isCt0ComplementItem,
+  resolveCt0GameIdFilter,
 } from './cardtrader-ct0-box';
 import type { IncomingHomologItem } from './incoming-ct0-homolog';
 import { findBatchItemForCtLineName } from './incoming-ct0-homolog';
@@ -142,12 +143,18 @@ export function buildPurchasePackages(args: {
   readCondition: (props: Record<string, unknown> | undefined) => string;
   readLanguage: (props: Record<string, unknown> | undefined) => string;
   variantLabel: (props: Record<string, unknown> | undefined) => string;
+  /** CardTrader `game_id`. Default Pokémon. `null` = todos. */
+  gameId?: number | null;
+  /** @deprecated Preferir `gameId`. */
   pokemonOnly?: boolean;
 }): { packages: PurchasePackage[]; summary: PurchaseConsolidatedSummary } {
-  const pokemonOnly = args.pokemonOnly !== false;
+  const gameId = resolveCt0GameIdFilter({
+    gameId: args.gameId,
+    pokemonOnly: args.pokemonOnly,
+  });
   const packageMap = new Map<string, PurchasePackage>();
 
-  for (const item of filterCt0ItemsInTransit(args.ct0Items, pokemonOnly)) {
+  for (const item of filterCt0ItemsInTransit(args.ct0Items, gameId)) {
     if (isCt0ComplementItem(item)) continue;
     const paidAt = item.paid_at;
     if (!paidAt) continue;

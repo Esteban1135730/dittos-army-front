@@ -8,15 +8,17 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  OWNERS_CONFIG,
   OWNER_STORAGE_KEY,
+  coerceOwnerForTcg,
   getOwnerDefinition,
   isFeatureAllowed,
   parseStoredOwner,
   type FeatureKey,
   type OwnerKey,
+  type TcgKey,
 } from "../../config/owners";
 import { setApiOwnerHeader } from "../../config/api";
+import { panelBasenameForPath, YUGIOH_UI_PREFIX } from "../../config/routes";
 import { isRouteAllowed } from "./owner-acl";
 
 type OwnerContextValue = {
@@ -30,11 +32,19 @@ type OwnerContextValue = {
 
 const OwnerContext = createContext<OwnerContextValue | null>(null);
 
+function panelTcg(): TcgKey {
+  if (typeof window === "undefined") return "pokemon";
+  return panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX
+    ? "yugioh"
+    : "pokemon";
+}
+
 function readInitialOwner(): OwnerKey {
   try {
-    return parseStoredOwner(localStorage.getItem(OWNER_STORAGE_KEY));
+    const stored = parseStoredOwner(localStorage.getItem(OWNER_STORAGE_KEY));
+    return coerceOwnerForTcg(stored, panelTcg());
   } catch {
-    return OWNERS_CONFIG.defaultOwner;
+    return coerceOwnerForTcg(parseStoredOwner(null), panelTcg());
   }
 }
 

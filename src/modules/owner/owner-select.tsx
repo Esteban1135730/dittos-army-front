@@ -1,4 +1,9 @@
-import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
+import {
+  ownersForTcg,
+  type OwnerKey,
+  type TcgKey,
+} from "../../config/owners";
+import { panelBasenameForPath, YUGIOH_UI_PREFIX } from "../../config/routes";
 import { useOwner } from "./owner-context";
 import { PanelSelect } from "../../components/layout/panel-select";
 
@@ -7,18 +12,25 @@ type OwnerSelectProps = {
   onBeforeChange?: (next: OwnerKey) => boolean;
 };
 
+function panelTcg(): TcgKey {
+  return panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX
+    ? "yugioh"
+    : "pokemon";
+}
+
 export function OwnerSelect({ onBeforeChange }: OwnerSelectProps) {
   const { owner, setOwner } = useOwner();
+  const options = ownersForTcg(panelTcg()).map((o) => ({
+    value: o.key,
+    label: o.label,
+  }));
 
   return (
     <PanelSelect
       id="owner-select-label"
       label="Usuario"
       value={owner}
-      options={Object.values(OWNERS_CONFIG.owners).map((o) => ({
-        value: o.key,
-        label: o.label,
-      }))}
+      options={options}
       onChange={(next) => {
         const ownerKey = next as OwnerKey;
         if (onBeforeChange && !onBeforeChange(ownerKey)) return;

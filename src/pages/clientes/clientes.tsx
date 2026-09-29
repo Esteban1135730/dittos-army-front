@@ -461,7 +461,7 @@ export default function ClientesPage() {
     {
       field: "wa",
       headerName: "Mensaje",
-      width: 148,
+      width: 152,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
@@ -471,54 +471,72 @@ export default function ClientesPage() {
           (reservasPorCliente[cid] ?? 0) > 0 || (incomingUnitsPorCliente[cid] ?? 0) > 0;
         const busy = contactoLoadingId === cid;
         return (
-          <Button
-            variant="contained"
-            color="success"
-            size="small"
-            disabled={!tieneWa || busy}
-            onClick={(e) => enviarResumenWhatsApp(c, e)}
-            sx={{ textTransform: "none", fontWeight: 600 }}
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            {busy ? "Enviando…" : "Enviar resumen"}
-          </Button>
+            <Button
+              variant="contained"
+              color="success"
+              size="small"
+              disabled={!tieneWa || busy}
+              onClick={(e) => enviarResumenWhatsApp(c, e)}
+              sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              {busy ? "Enviando…" : "Enviar resumen"}
+            </Button>
+          </Box>
         );
       },
     },
     {
       field: "detalle",
       headerName: "",
-      width: 96,
+      width: 112,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
         const c = params.row as ClientItem;
+        const cid = clientItemId(c);
         return (
-          <Button
-            variant="text"
-            size="small"
-            onClick={(e) => irDetalle(c, e)}
-            sx={{ textTransform: "none", fontWeight: 600 }}
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            Ver ficha
-          </Button>
+            <Button
+              component={Link}
+              to={`/clientes/${cid}`}
+              variant="text"
+              size="small"
+              sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              Ver ficha
+            </Button>
+          </Box>
         );
       },
     },
     {
       field: "reservar",
       headerName: "Acciones",
-      width: 168,
+      width: 200,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
         const c = params.row as ClientItem;
         return (
-          <Stack spacing={0.5} onClick={(e) => e.stopPropagation()}>
+          <Stack
+            direction="row"
+            spacing={0.75}
+            alignItems="center"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <Button
               variant="outlined"
               size="small"
               onClick={(e) => irReservar(c, e)}
-              sx={{ textTransform: "none", fontWeight: 600 }}
+              sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
             >
               Pedido
             </Button>
@@ -527,7 +545,7 @@ export default function ClientesPage() {
               size="small"
               color="info"
               onClick={(e) => irReservaCamino(c, e)}
-              sx={{ textTransform: "none", fontWeight: 600 }}
+              sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
             >
               Reserva
             </Button>
@@ -650,7 +668,7 @@ export default function ClientesPage() {
 
       <Paper variant="outlined" sx={clientesSectionPaperSx}>
         <Box sx={{ width: "100%", overflowX: "auto" }}>
-              <Box sx={{ minWidth: 1100 }}>
+              <Box sx={{ minWidth: 1160 }}>
             <DataGrid
               rows={sortedClientes}
               columns={columns}

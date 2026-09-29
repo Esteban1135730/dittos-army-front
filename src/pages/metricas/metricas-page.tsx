@@ -31,6 +31,12 @@ import {
   YAxis,
 } from "recharts";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
+import {
+  ESTEBAN_STOCK_MARK,
+  OWNERS_CONFIG,
+  otherOwner,
+  type OwnerKey,
+} from "../../config/owners";
 import { formatCOP } from "../../utils/convert";
 import { useOwner } from "../../modules/owner";
 import { fetchMetricsAnalytics } from "./api";
@@ -195,6 +201,17 @@ function cardLabel(name: string | null, id: string): string {
   return name?.trim() ? name : id;
 }
 
+function OwnerChip({ owner }: { owner: OwnerKey }) {
+  const label = OWNERS_CONFIG.owners[owner].label;
+  return (
+    <Chip
+      size="small"
+      label={owner === "esteban" ? `${ESTEBAN_STOCK_MARK} ${label}` : label}
+      color={owner === "esteban" ? "secondary" : "default"}
+    />
+  );
+}
+
 function CardThumb({
   cardId,
   imageUrl,
@@ -248,6 +265,7 @@ function RankingTable({
   rows,
   showProfit,
   showImage,
+  showOwner,
 }: {
   rows: Array<{
     card_id: string;
@@ -257,9 +275,11 @@ function RankingTable({
     revenue_cop: number;
     cost_cop?: number;
     profit_cop?: number;
+    owner?: OwnerKey;
   }>;
   showProfit?: boolean;
   showImage?: boolean;
+  showOwner?: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -295,7 +315,7 @@ function RankingTable({
         <TableBody>
           {rows.map((r, idx) => (
             <TableRow
-              key={r.card_id}
+              key={`${r.owner ?? "solo"}-${r.card_id}-${idx}`}
               sx={{ bgcolor: idx % 2 ? "rgba(248,250,252,0.8)" : "transparent" }}
             >
               <TableCell>
@@ -304,9 +324,18 @@ function RankingTable({
                     <CardThumb cardId={r.card_id} imageUrl={r.image_url} size="sm" />
                   ) : null}
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={650} noWrap>
-                      {cardLabel(r.card_name, r.card_id)}
-                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      alignItems="center"
+                      flexWrap="wrap"
+                      useFlexGap
+                    >
+                      <Typography variant="body2" fontWeight={650} noWrap>
+                        {cardLabel(r.card_name, r.card_id)}
+                      </Typography>
+                      {showOwner && r.owner ? <OwnerChip owner={r.owner} /> : null}
+                    </Stack>
                   </Box>
                 </Stack>
               </TableCell>
@@ -352,6 +381,7 @@ function LoadingState() {
 
 export default function MetricasPage() {
   const { owner } = useOwner();
+  const multiOwner = otherOwner(owner) != null;
   const defaults = useMemo(() => defaultMetricsPeriod(), []);
   const [fromInput, setFromInput] = useState(defaults.from);
   const [toInput, setToInput] = useState(defaults.to);
@@ -359,8 +389,14 @@ export default function MetricasPage() {
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["metrics", "analytics", applied.from, applied.to, owner],
-    queryFn: () => fetchMetricsAnalytics(applied),
+    queryKey: [
+      "metrics",
+      "analytics",
+      applied.from,
+      applied.to,
+      multiOwner ? "pokemon-both" : owner,
+    ],
+    queryFn: () => fetchMetricsAnalytics({ ...applied, owner }),
   });
 
   const applyFilters = () => {
@@ -422,6 +458,9 @@ export default function MetricasPage() {
             <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 560 }}>
               Resumen de ventas e inventario del periodo. Las fechas van por día
               UTC. Distinto del dashboard operativo de ciclo activo en Ventas.
+              {multiOwner
+                ? " Incluye ventas e inventario de Pablo y Esteban."
+                : ""}
             </Typography>
           </Stack>
 
@@ -485,13 +524,21 @@ export default function MetricasPage() {
           </Alert>
         ) : null}
 
-        {data && !apiErrorMsg ? <MetricsBody data={data} /> : null}
+        {data && !apiErrorMsg ? (
+          <MetricsBody data={data} showOwner={multiOwner} />
+        ) : null}
       </Box>
     </Box>
   );
 }
 
-function MetricsBody({ data }: { data: MetricsAnalyticsResponse }) {
+function MetricsBody({
+  data,
+  showOwner,
+}: {
+  data: MetricsAnalyticsResponse;
+  showOwner: boolean;
+}) {
   const s = data.summary;
   const emptySales = s.units_sold === 0;
   const tagChart = (data.sales_by_tag ?? []).filter(
@@ -591,22 +638,40 @@ function MetricsBody({ data }: { data: MetricsAnalyticsResponse }) {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel title="Más vendidas" subtitle="Por unidades" accent="#0f766e">
-            <RankingTable rows={data.top_sellers_by_units} showImage />
+            <RankingTable
+              rows={data.top_sellers_by_units}
+              showImage
+              showOwner={showOwner}
+            />
           </Panel>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel title="Más vendidas" subtitle="Por ingreso" accent="#2563eb">
-            <RankingTable rows={data.top_sellers_by_revenue} showImage />
+            <RankingTable
+              rows={data.top_sellers_by_revenue}
+              showImage
+              showOwner={showOwner}
+            />
           </Panel>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel title="Mayor ganancia" accent="#15803d">
-            <RankingTable rows={data.top_profit} showProfit showImage />
+            <RankingTable
+              rows={data.top_profit}
+              showProfit
+              showImage
+              showOwner={showOwner}
+            />
           </Panel>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel title="Menor ganancia / a pérdida" accent="#b91c1c">
-            <RankingTable rows={data.top_loss_sales} showProfit showImage />
+            <RankingTable
+              rows={data.top_loss_sales}
+              showProfit
+              showImage
+              showOwner={showOwner}
+            />
           </Panel>
         </Grid>
       </Grid>
@@ -835,8 +900,23 @@ function MetricsBody({ data }: { data: MetricsAnalyticsResponse }) {
             </TableHead>
             <TableBody>
               {data.inventory_losses.items.map((i) => (
-                <TableRow key={i.stock_id}>
-                  <TableCell>{cardLabel(i.card_name, i.card_id)}</TableCell>
+                <TableRow key={`${i.owner ?? "solo"}-${i.stock_id}`}>
+                  <TableCell>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      alignItems="center"
+                      flexWrap="wrap"
+                      useFlexGap
+                    >
+                      <Typography variant="body2">
+                        {cardLabel(i.card_name, i.card_id)}
+                      </Typography>
+                      {showOwner && i.owner ? (
+                        <OwnerChip owner={i.owner} />
+                      ) : null}
+                    </Stack>
+                  </TableCell>
                   <TableCell align="right">
                     <MoneyText value={i.cost_cop} kind="cost" />
                   </TableCell>
@@ -865,7 +945,7 @@ function MetricsBody({ data }: { data: MetricsAnalyticsResponse }) {
           <Stack spacing={1.25}>
             {data.dead_stock.items.map((i) => (
               <Box
-                key={`${i.card_id}-${i.stock_id}`}
+                key={`${i.owner ?? "solo"}-${i.card_id}-${i.stock_id}`}
                 sx={{
                   display: "flex",
                   gap: 1.5,
@@ -890,9 +970,21 @@ function MetricsBody({ data }: { data: MetricsAnalyticsResponse }) {
                     mb={0.75}
                   >
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography fontWeight={800} noWrap>
-                        {cardLabel(i.card_name, i.card_id)}
-                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ mb: 0.25 }}
+                      >
+                        <Typography fontWeight={800} noWrap>
+                          {cardLabel(i.card_name, i.card_id)}
+                        </Typography>
+                        {showOwner && i.owner ? (
+                          <OwnerChip owner={i.owner} />
+                        ) : null}
+                      </Stack>
                       <Typography variant="caption" color="text.secondary">
                         {(i.stock_lines ?? 1) > 1
                           ? `${i.stock_lines} unidades en stock · `

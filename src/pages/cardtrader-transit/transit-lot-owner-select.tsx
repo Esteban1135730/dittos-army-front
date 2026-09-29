@@ -1,5 +1,9 @@
 import { FormControl, FormHelperText, InputLabel, MenuItem, Select } from "@mui/material";
-import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
+import { getApiTcgHeader } from "../../config/api";
+import {
+  ownersForTcg,
+  type OwnerKey,
+} from "../../config/owners";
 
 type TransitLotOwnerSelectProps = {
   value: OwnerKey;
@@ -13,6 +17,7 @@ type TransitLotOwnerSelectProps = {
 export function TransitLotOwnerSelect(props: TransitLotOwnerSelectProps) {
   const { value, onChange, disabled, helperText, id = "default" } = props;
   const labelId = `transit-lot-owner-${id}`;
+  const options = ownersForTcg(getApiTcgHeader());
 
   return (
     <FormControl size="small" fullWidth disabled={disabled}>
@@ -23,7 +28,7 @@ export function TransitLotOwnerSelect(props: TransitLotOwnerSelectProps) {
         value={value}
         onChange={(e) => onChange(e.target.value as OwnerKey)}
       >
-        {Object.values(OWNERS_CONFIG.owners).map((o) => (
+        {options.map((o) => (
           <MenuItem key={o.key} value={o.key}>
             {o.label}
           </MenuItem>

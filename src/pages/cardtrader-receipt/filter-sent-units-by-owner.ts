@@ -1,8 +1,9 @@
 import type { OwnerKey } from "../../config/owners";
+import { isOwnerKey } from "../../config/owners";
 import type { PanelHomologItem, SentHomologUnit } from "../../utils/sent-unit-homolog";
 
 function ownerOfItem(item: PanelHomologItem | undefined): OwnerKey {
-  return item?.owner === "esteban" ? "esteban" : "pablo";
+  return isOwnerKey(item?.owner) ? item.owner : "pablo";
 }
 
 function sentMatchesPanelItem(

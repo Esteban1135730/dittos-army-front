@@ -1,5 +1,9 @@
 import type { Ct0BoxItem } from './cardtrader-ct0-box';
-import { ct0ItemUnitsInTransit, filterCt0ItemsInTransit } from './cardtrader-ct0-box';
+import {
+  ct0ItemUnitsInTransit,
+  filterCt0ItemsInTransit,
+  resolveCt0GameIdFilter,
+} from './cardtrader-ct0-box';
 import { cardNameMatchKeys, cardNamesMatchForTransit, normalizeCardNameForMatch } from './incoming-ct0-package-match';
 
 export type IncomingHomologItem = {
@@ -144,6 +148,9 @@ export function buildCt0HomologIndex(args: {
   tcgdxByCt0ItemId?: Record<number, string | null>;
   readLanguage: (props: Record<string, unknown> | undefined) => string;
   readRareza: (props: Record<string, unknown> | undefined) => string | null;
+  /** CardTrader `game_id`. Default Pokémon. `null` = todos. */
+  gameId?: number | null;
+  /** @deprecated Preferir `gameId`. */
   pokemonOnly?: boolean;
 }): Ct0HomologIndex {
   const byCardId = new Map<string, Ct0HomologBucket>();
@@ -151,8 +158,12 @@ export function buildCt0HomologIndex(args: {
   const byNameOnly = new Map<string, Ct0HomologBucket>();
   const tcgdx = args.tcgdxByCt0ItemId ?? {};
   let ct0UnitsTotal = 0;
+  const gameId = resolveCt0GameIdFilter({
+    gameId: args.gameId,
+    pokemonOnly: args.pokemonOnly,
+  });
 
-  for (const item of filterCt0ItemsInTransit(args.ct0Items, args.pokemonOnly !== false)) {
+  for (const item of filterCt0ItemsInTransit(args.ct0Items, gameId)) {
     const qty = ct0ItemUnitsInTransit(item);
     if (qty <= 0) continue;
     ct0UnitsTotal += qty;

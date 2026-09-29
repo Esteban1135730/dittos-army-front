@@ -26,6 +26,8 @@ export type Ct0NoLlegadasRegisterPanelProps = {
   ct0Items: Ct0BoxItem[];
   openLots: CardtraderTransitLotRow[];
   loading?: boolean;
+  /** CardTrader `game_id` del panel activo. */
+  gameId?: number | null;
 };
 
 type MarkNotArrivedResult = {
@@ -37,13 +39,13 @@ type MarkNotArrivedResult = {
 export default function Ct0NoLlegadasRegisterPanel(
   props: Ct0NoLlegadasRegisterPanelProps,
 ) {
-  const { ct0Items, openLots, loading } = props;
+  const { ct0Items, openLots, loading, gameId } = props;
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState("");
 
   const missingItems = useMemo(
-    () => filterCt0MissingItems(ct0Items),
-    [ct0Items],
+    () => filterCt0MissingItems(ct0Items, gameId),
+    [ct0Items, gameId],
   );
 
   const lotIdsKey = openLots.map((l) => l.lot_id).join(",");

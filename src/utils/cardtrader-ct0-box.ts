@@ -1,5 +1,6 @@
 import type { CtMoney } from './cardtrader-order-pricing';
 import { moneyToUnits } from './cardtrader-order-pricing';
+import { CARDTRADER_POKEMON_GAME_ID } from '../config/cardtrader-games';
 
 export type Ct0QuantityState = 'ok' | 'pending' | 'missing';
 
@@ -35,7 +36,29 @@ export const CT0_BOX_STATE_TABS = [
 
 export type Ct0BoxStateTab = (typeof CT0_BOX_STATE_TABS)[number]['id'];
 
-const POKEMON_GAME_ID = 5;
+/** `null` = no filtrar por juego. Por defecto Pokémon (compat). */
+export type Ct0GameIdFilter = number | null;
+
+export function filterCt0ItemsByGameId(
+  items: Ct0BoxItem[],
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
+): Ct0BoxItem[] {
+  if (gameId == null) return items;
+  return items.filter((i) => i.game_id === gameId);
+}
+
+/**
+ * Resuelve filtro de juego: `gameId` explícito gana;
+ * `pokemonOnly: false` → sin filtro; si no → Pokémon.
+ */
+export function resolveCt0GameIdFilter(args: {
+  gameId?: number | null;
+  pokemonOnly?: boolean;
+}): Ct0GameIdFilter {
+  if (args.gameId !== undefined) return args.gameId;
+  if (args.pokemonOnly === false) return null;
+  return CARDTRADER_POKEMON_GAME_ID;
+}
 
 export function ct0ItemQtyForState(item: Ct0BoxItem, state: Ct0QuantityState): number {
   return Math.max(0, Math.floor(item.quantity?.[state] ?? 0));
@@ -91,10 +114,9 @@ export function isCt0ComplementItem(item: Ct0BoxItem): boolean {
 
 export function filterCt0ComplementItems(
   items: Ct0BoxItem[],
-  pokemonOnly = true,
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
 ): Ct0BoxItem[] {
-  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
-  return rows.filter(isCt0ComplementItem);
+  return filterCt0ItemsByGameId(items, gameId).filter(isCt0ComplementItem);
 }
 
 /** Ítem CT0 marcado como no disponible / no llegará. */
@@ -104,10 +126,9 @@ export function isCt0MissingItem(item: Ct0BoxItem): boolean {
 
 export function filterCt0MissingItems(
   items: Ct0BoxItem[],
-  pokemonOnly = true,
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
 ): Ct0BoxItem[] {
-  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
-  return rows.filter(isCt0MissingItem);
+  return filterCt0ItemsByGameId(items, gameId).filter(isCt0MissingItem);
 }
 
 export type TransitLineCt0Ref = {
@@ -158,24 +179,35 @@ export function ct0ItemUnitsAll(item: Ct0BoxItem): number {
   );
 }
 
-export function filterCt0ItemsAll(items: Ct0BoxItem[], pokemonOnly = true): Ct0BoxItem[] {
-  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
-  return rows.filter((item) => ct0ItemUnitsAll(item) > 0);
+export function filterCt0ItemsAll(
+  items: Ct0BoxItem[],
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
+): Ct0BoxItem[] {
+  return filterCt0ItemsByGameId(items, gameId).filter(
+    (item) => ct0ItemUnitsAll(item) > 0,
+  );
 }
 
 export function ct0ItemLineUsdInTransit(item: Ct0BoxItem): number {
   return ct0LineWeight(item, 'ok') + ct0LineWeight(item, 'pending');
 }
 
-export function filterCt0ItemsInTransit(items: Ct0BoxItem[], pokemonOnly = true): Ct0BoxItem[] {
-  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
-  return rows.filter((item) => ct0ItemUnitsInTransit(item) > 0);
+export function filterCt0ItemsInTransit(
+  items: Ct0BoxItem[],
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
+): Ct0BoxItem[] {
+  return filterCt0ItemsByGameId(items, gameId).filter(
+    (item) => ct0ItemUnitsInTransit(item) > 0,
+  );
 }
 
 /** Agrupa checkouts CT Zero con cartas en tránsito (ok + pending). */
-export function groupCt0ItemsIntoTransitLots(items: Ct0BoxItem[]): Ct0PurchaseLot[] {
+export function groupCt0ItemsIntoTransitLots(
+  items: Ct0BoxItem[],
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
+): Ct0PurchaseLot[] {
   const map = new Map<string, Ct0BoxItem[]>();
-  for (const item of filterCt0ItemsInTransit(items)) {
+  for (const item of filterCt0ItemsInTransit(items, gameId)) {
     const key = ct0LotKey(item);
     const list = map.get(key) ?? [];
     list.push(item);
@@ -307,9 +339,9 @@ export function groupCt0ItemsIntoLots(
 export function filterCt0BoxItems(
   items: Ct0BoxItem[],
   tab: Ct0BoxStateTab,
-  pokemonOnly = true,
+  gameId: Ct0GameIdFilter = CARDTRADER_POKEMON_GAME_ID,
 ): Ct0BoxItem[] {
-  let rows = pokemonOnly ? items.filter((i) => i.game_id === POKEMON_GAME_ID) : items;
+  let rows = filterCt0ItemsByGameId(items, gameId);
   if (tab === 'all') return rows;
   return rows.filter((item) => ct0ItemQtyForState(item, tab) > 0);
 }

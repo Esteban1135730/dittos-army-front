@@ -292,8 +292,10 @@ export function buildCt0IncomingBatchDrafts(args: {
   existingTransitLots?: ExistingTransitLotRef[];
   /** Lotes legacy (compras en camino) solo para sugerir COP. */
   legacyIncomingBundles?: IncomingBatchBundleForCt0Draft[];
+  /** CardTrader `game_id`. Default Pokémon. `null` = todos. */
+  gameId?: number | null;
 }): Ct0BatchDraft[] {
-  const inTransit = filterCt0ItemsInTransit(args.ct0Items);
+  const inTransit = filterCt0ItemsInTransit(args.ct0Items, args.gameId);
   const ct0ById = new Map(inTransit.map((item) => [item.id, item]));
 
   const { packages } = buildPurchasePackages({
@@ -304,6 +306,7 @@ export function buildCt0IncomingBatchDrafts(args: {
     readLanguage: readCtLanguage,
     variantLabel: (props) =>
       operationalRarezaLabel(inferOperationalRarezaFromCtProperties(props)),
+    gameId: args.gameId,
   });
 
   // Normalize stored keys to minute precision so they match pkg.packageKey

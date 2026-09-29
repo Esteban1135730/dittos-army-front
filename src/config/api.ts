@@ -83,9 +83,6 @@ export function apiUrl(path: string): string {
   return `${getApiOrigin()}${withTcgPrefix(path)}`;
 }
 
-/** Active owner for Axios default instance (034). */
-let activeApiOwner: OwnerKey = OWNERS_CONFIG.defaultOwner;
-
 /** Active TCG for Axios — Yu-Gi-Oh panel hits the same Nest routes with X-Tcg. */
 let activeApiTcg: ApiTcg =
   panelBasenameForPath(
@@ -93,6 +90,10 @@ let activeApiTcg: ApiTcg =
   ) === YUGIOH_UI_PREFIX
     ? "yugioh"
     : "pokemon";
+
+/** Active owner for Axios default instance (034). */
+let activeApiOwner: OwnerKey =
+  activeApiTcg === "yugioh" ? "tefa" : OWNERS_CONFIG.defaultOwner;
 
 declare module "axios" {
   interface AxiosRequestConfig {
@@ -143,5 +144,5 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
-setApiOwnerHeader(OWNERS_CONFIG.defaultOwner);
+setApiOwnerHeader(activeApiOwner);
 setApiTcgHeader(activeApiTcg);

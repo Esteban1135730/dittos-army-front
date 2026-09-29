@@ -103,6 +103,18 @@ describe('cardtrader-ct0-box', () => {
     expect(buildComplementosPackageKey([3, 1, 2])).toBe('complementos:1-2-3');
   });
 
+  it('filtra missing por game_id', () => {
+    const missing = filterCt0MissingItems(
+      [
+        item({ id: 10, quantity: { missing: 1 }, name: 'A', game_id: 5 }),
+        item({ id: 11, quantity: { missing: 1 }, name: 'B', game_id: 4 }),
+        item({ id: 12, quantity: { ok: 1 }, name: 'C', game_id: 5 }),
+      ],
+      4,
+    );
+    expect(missing.map((i) => i.id)).toEqual([11]);
+  });
+
   it('detecta missing y empareja solo por ct0_item_id', () => {
     expect(
       isCt0MissingItem(item({ id: 1, quantity: { missing: 1 } })),

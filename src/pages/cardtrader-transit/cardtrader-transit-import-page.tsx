@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { apiUrl } from "../../config/api";
+import { apiUrl, getApiTcgHeader } from "../../config/api";
+import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
 import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
 import {
   type IncomingBatchBundleForCt0Draft,
@@ -20,8 +21,11 @@ import {
 const API_CARDTRADER = apiUrl("/cardtrader");
 
 export default function CardtraderTransitImportPage() {
+  const cardTraderGameId = cardTraderGameIdForTcg(getApiTcgHeader());
+  const tcgLabel = cardTraderGameId === 4 ? "Yu-Gi-Oh" : "Pokémon";
+
   const boxQuery = useQuery<Ct0BoxItem[]>({
-    queryKey: ["cardtrader", "ct0-box-items", "import"],
+    queryKey: ["cardtrader", "ct0-box-items", "import", cardTraderGameId],
     queryFn: async () => {
       const res = await axios.get(`${API_CARDTRADER}/ct0-box-items`);
       return Array.isArray(res.data) ? (res.data as Ct0BoxItem[]) : [];
@@ -123,8 +127,9 @@ export default function CardtraderTransitImportPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Importar desde CT Zero</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Registra checkouts CT Zero con previsualización TCGdex. Revisa que cada carta tenga
-            imagen en catálogo antes de confirmar. Los ítems a $0 van en Complementos; los{" "}
+            Solo ítems <strong>{tcgLabel}</strong> (game_id {cardTraderGameId}). Registra
+            checkouts CT Zero con previsualización TCGdex. Revisa que cada carta tenga imagen
+            en catálogo antes de confirmar. Los ítems a $0 van en Complementos; los{" "}
             <code>missing</code> en Cartas no llegadas.
           </p>
         </div>
@@ -137,12 +142,14 @@ export default function CardtraderTransitImportPage() {
         ct0Items={boxQuery.data ?? []}
         registeredPackageKeys={registeredKeysQuery.data ?? []}
         loading={boxQuery.isLoading || registeredKeysQuery.isLoading}
+        gameId={cardTraderGameId}
       />
 
       <Ct0NoLlegadasRegisterPanel
         ct0Items={boxQuery.data ?? []}
         openLots={transitLotsQuery.data ?? []}
         loading={boxQuery.isLoading || transitLotsQuery.isLoading}
+        gameId={cardTraderGameId}
       />
 
       <Ct0IncomingRegisterPanel
@@ -151,6 +158,7 @@ export default function CardtraderTransitImportPage() {
         existingTransitLots={existingTransitLots}
         legacyIncomingBundles={legacyBundlesQuery.data ?? []}
         loading={loading}
+        gameId={cardTraderGameId}
       />
     </div>
   );

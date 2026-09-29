@@ -12,7 +12,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { apiUrl } from "../../config/api";
+import { apiUrl, getApiTcgHeader } from "../../config/api";
 import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
 import {
   buildComplementosPackageKey,
@@ -27,7 +27,11 @@ import {
 } from "../../utils/ct0-incoming-batch-draft";
 import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
 import { TransitLotOwnerSelect } from "../cardtrader-transit/transit-lot-owner-select";
-import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
+import {
+  OWNERS_CONFIG,
+  defaultOwnerForTcg,
+  type OwnerKey,
+} from "../../config/owners";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 const API_TCG_FIND = apiUrl("/tcg-dex/card/find");
@@ -44,19 +48,23 @@ export type Ct0ComplementosRegisterPanelProps = {
   ct0Items: Ct0BoxItem[];
   registeredPackageKeys?: string[];
   loading?: boolean;
+  /** CardTrader `game_id` del panel activo. */
+  gameId?: number | null;
 };
 
 export default function Ct0ComplementosRegisterPanel(
   props: Ct0ComplementosRegisterPanelProps,
 ) {
-  const { ct0Items, registeredPackageKeys = [], loading } = props;
+  const { ct0Items, registeredPackageKeys = [], loading, gameId } = props;
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState("");
-  const [owner, setOwner] = useState<OwnerKey>(OWNERS_CONFIG.defaultOwner);
+  const [owner, setOwner] = useState<OwnerKey>(() =>
+    defaultOwnerForTcg(getApiTcgHeader()),
+  );
 
   const complementItems = useMemo(
-    () => filterCt0ComplementItems(ct0Items),
-    [ct0Items],
+    () => filterCt0ComplementItems(ct0Items, gameId),
+    [ct0Items, gameId],
   );
 
   const packageKey = useMemo(

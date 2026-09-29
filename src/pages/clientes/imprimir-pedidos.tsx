@@ -85,7 +85,9 @@ export default function ImprimirPedidosPage() {
     },
   });
 
-  const stockOwners: OwnerKey[] = [activeOwner, secondaryOwner];
+  const stockOwners: OwnerKey[] = secondaryOwner
+    ? [activeOwner, secondaryOwner]
+    : [activeOwner];
   const stockQueries = useQueries({
     queries: stockOwners.map((owner) => ({
       queryKey: ["stock", owner] as const,
@@ -103,13 +105,14 @@ export default function ImprimirPedidosPage() {
     const byOwner = [stockActiveData, stockOtherData];
     byOwner.forEach((data, i) => {
       const owner = stockOwners[i];
+      if (!owner) return;
       for (const s of stockRowsFromQueryData<StockItem>(data)) {
         if (!s._id) continue;
         map.set(`${owner}:${s._id}`, s.card_name ?? "Carta");
       }
     });
     return map;
-  }, [stockActiveData, stockOtherData, activeOwner, secondaryOwner]);
+  }, [stockActiveData, stockOtherData, stockOwners]);
 
   const clientesMap = useMemo(() => {
     const map: Record<string, ClientItem> = {};

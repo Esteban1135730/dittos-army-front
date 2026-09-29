@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
-import { OWNERS_CONFIG, isOwnerKey, type OwnerKey } from "../../config/owners";
+import { OWNERS_CONFIG, defaultOwnerForTcg, isOwnerKey, type OwnerKey } from "../../config/owners";
+import { getApiTcgHeader } from "../../config/api";
 import {
   API_CARDTRADER_TRANSIT_LOTS,
   type CardtraderTransitLineRow,
@@ -16,7 +17,9 @@ export default function CardtraderTransitLotDetailPage() {
   const queryClient = useQueryClient();
   const [purchaseDate, setPurchaseDate] = useState("");
   const [totalCopCardsCost, setTotalCopCardsCost] = useState("");
-  const [owner, setOwner] = useState<OwnerKey>(OWNERS_CONFIG.defaultOwner);
+  const [owner, setOwner] = useState<OwnerKey>(() =>
+    defaultOwnerForTcg(getApiTcgHeader()),
+  );
   const [savingMeta, setSavingMeta] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
@@ -46,7 +49,7 @@ export default function CardtraderTransitLotDetailPage() {
     const dd = String(d.getDate()).padStart(2, "0");
     setPurchaseDate(`${yyyy}-${mm}-${dd}`);
     setTotalCopCardsCost(String(Math.round(lotMeta.total_cop_cards_cost)));
-    setOwner(isOwnerKey(lotMeta.owner) ? lotMeta.owner : OWNERS_CONFIG.defaultOwner);
+    setOwner(isOwnerKey(lotMeta.owner) ? lotMeta.owner : defaultOwnerForTcg(getApiTcgHeader()));
   }, [lotMeta?.lot_id, lotMeta?.purchase_date, lotMeta?.total_cop_cards_cost, lotMeta?.owner]);
 
   const saveLotMeta = async () => {

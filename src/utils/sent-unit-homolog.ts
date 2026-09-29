@@ -8,6 +8,7 @@ import {
 } from './transit-card-match';
 import { normalizeCardNameForMatch } from './incoming-ct0-package-match';
 import type { OrderTransitLine } from './order-transit-packages';
+import type { OwnerKey } from '../config/owners';
 
 const NAME_STOPWORDS = new Set([
   'ex',
@@ -25,7 +26,7 @@ export type PanelHomologItem = {
   transit_line_id: string;
   transit_lot_id: string;
   /** Dueño del lote de tránsito (037). Default pablo si el API no lo envía. */
-  owner?: 'pablo' | 'esteban';
+  owner?: OwnerKey;
   card_id: string;
   card_name: string;
   image_url: string;

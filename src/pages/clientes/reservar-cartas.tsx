@@ -144,6 +144,9 @@ export default function ReservarCartasPage() {
   const queryClient = useQueryClient();
   const { owner: activeOwner } = useOwner();
   const secondaryOwner = otherOwner(activeOwner);
+  const stockOwnerKeys: OwnerKey[] = secondaryOwner
+    ? [activeOwner, secondaryOwner]
+    : [activeOwner];
   const { convert } = useExchangeRates();
   const [precios, setPrecios] = useState<Record<string, string>>({});
   const [preciosReservadas, setPreciosReservadas] = useState<Record<string, string>>({});
@@ -196,7 +199,7 @@ export default function ReservarCartasPage() {
   const cerrarModalEditar = () => setModalEditarCliente(false);
 
   const stockQueries = useQueries({
-    queries: [activeOwner, secondaryOwner].map((owner) => ({
+    queries: stockOwnerKeys.map((owner) => ({
       queryKey: ["stock", owner] as const,
       queryFn: async (): Promise<StockItem[]> => {
         const res = await axios.get(API_STOCK, { ownerOverride: owner });
@@ -205,10 +208,12 @@ export default function ReservarCartasPage() {
     })),
   });
   const stockActive = stockQueries[0]?.data ?? EMPTY_STOCK;
-  const stockOther = stockQueries[1]?.data ?? EMPTY_STOCK;
+  const stockOther = secondaryOwner
+    ? (stockQueries[1]?.data ?? EMPTY_STOCK)
+    : EMPTY_STOCK;
   const loadingStock = stockQueries.every((q) => q.isLoading || q.isPending);
   const stockActiveFailed = Boolean(stockQueries[0]?.isError);
-  const stockOtherFailed = Boolean(stockQueries[1]?.isError);
+  const stockOtherFailed = Boolean(secondaryOwner && stockQueries[1]?.isError);
 
   useEffect(() => {
     void ensureBulkProduct().then((r) => {
@@ -375,7 +380,9 @@ export default function ReservarCartasPage() {
   const stockCatalogAll = useMemo((): ReservaCatalogRow[] => {
     return [
       ...stockActive.map((s) => ({ ...s, owner: activeOwner })),
-      ...stockOther.map((s) => ({ ...s, owner: secondaryOwner })),
+      ...(secondaryOwner
+        ? stockOther.map((s) => ({ ...s, owner: secondaryOwner }))
+        : []),
     ];
   }, [stockActive, stockOther, activeOwner, secondaryOwner]);
 
@@ -386,10 +393,12 @@ export default function ReservarCartasPage() {
           ...s,
           owner: activeOwner,
         })),
-        ...filterStockInReservaCatalog(stockOther).map((s) => ({
-          ...s,
-          owner: secondaryOwner,
-        })),
+        ...(secondaryOwner
+          ? filterStockInReservaCatalog(stockOther).map((s) => ({
+              ...s,
+              owner: secondaryOwner,
+            }))
+          : []),
       ]),
     [stockActive, stockOther, activeOwner, secondaryOwner],
   );
@@ -1416,7 +1425,9 @@ export default function ReservarCartasPage() {
               : `No se pudo cargar el stock de ${
                   stockActiveFailed
                     ? OWNERS_CONFIG.owners[activeOwner].label
-                    : OWNERS_CONFIG.owners[secondaryOwner].label
+                    : secondaryOwner
+                      ? OWNERS_CONFIG.owners[secondaryOwner].label
+                      : "otro owner"
                 }. Se muestra el que sí cargó.`}
           </Alert>
         ) : null}

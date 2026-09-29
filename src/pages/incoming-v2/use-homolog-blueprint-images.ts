@@ -26,11 +26,10 @@ export function useHomologBlueprintImages(units: HomologImageUnit[]) {
   }, [units]);
 
   const expansionsQuery = useQuery({
-    queryKey: ['cardtrader', 'expansions', 'pokemon', 'homolog-v2'],
+    queryKey: ['cardtrader', 'expansions', 'all-games', 'homolog-v2'],
     queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER}/expansions`, {
-        params: { game_id: 5 },
-      });
+      // Recepción Pablo: todos los TCG (sin filtrar game_id).
+      const res = await axios.get(`${API_CARDTRADER}/expansions`);
       return res.data;
     },
     staleTime: 60 * 60 * 1000,

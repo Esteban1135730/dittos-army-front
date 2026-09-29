@@ -101,7 +101,10 @@ import {
 } from "../../utils/cardtrader-cart-transfer";
 import { ImportEstebanCartDialog } from "./import-esteban-cart-dialog";
 import { getApiTcgHeader } from "../../config/api";
-import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
+import {
+  CARDTRADER_YUGIOH_GAME_ID,
+  cardTraderGameIdForTcg,
+} from "../../config/cardtrader-games";
 const BLUEPRINTS_PER_PAGE = 96;
 const OFFERS_PER_PAGE = 12;
 
@@ -1754,10 +1757,10 @@ export default function CotizarCardtraderPage() {
               label="Buscar carta por nombre o ID"
               placeholder={
                 expansion
-                  ? cardTraderGameId === 4
+                  ? cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
                     ? "Ej. Blue-Eyes"
                     : "Ej. Articuno"
-                  : cardTraderGameId === 4
+                  : cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
                     ? "Ej. Dark Magician…"
                     : "Ej. Pikachu, ピカチュウ…"
               }
@@ -1796,7 +1799,7 @@ export default function CotizarCardtraderPage() {
             </Stack>
             {!expansion && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-                {cardTraderGameId === 4
+                {cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
                   ? "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom)."
                   : "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH."}
               </Typography>

@@ -41,7 +41,8 @@ import type { TcgdexResolveResponse } from "../../utils/cardtrader-order-item-ma
 import { API_CARDTRADER_TRANSIT_LOTS } from "./cardtrader-transit-types";
 import { TransitLotOwnerSelect } from "./transit-lot-owner-select";
 import { useCt0DraftTcgdexImages } from "../../utils/use-ct0-draft-tcgdex-images";
-import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
+import { OWNERS_CONFIG, defaultOwnerForTcg, type OwnerKey } from "../../config/owners";
+import { getApiTcgHeader } from "../../config/api";
 
 const API_CARDTRADER = apiUrl("/cardtrader");
 
@@ -371,10 +372,19 @@ export type Ct0IncomingRegisterPanelProps = {
   legacyIncomingBundles: IncomingBatchBundleForCt0Draft[];
   loading?: boolean;
   compact?: boolean;
+  /** CardTrader `game_id` del panel activo. */
+  gameId?: number | null;
 };
 
 export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanelProps) {
-  const { ct0Items, existingTransitLots, legacyIncomingBundles, loading, compact } = props;
+  const {
+    ct0Items,
+    existingTransitLots,
+    legacyIncomingBundles,
+    loading,
+    compact,
+    gameId,
+  } = props;
   const queryClient = useQueryClient();
 
   const baseDrafts = useMemo(
@@ -383,8 +393,9 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
         ct0Items,
         existingTransitLots,
         legacyIncomingBundles,
+        gameId,
       }),
-    [ct0Items, existingTransitLots, legacyIncomingBundles],
+    [ct0Items, existingTransitLots, legacyIncomingBundles, gameId],
   );
 
   const resolveQuery = useQuery({
@@ -481,7 +492,8 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
         const body = buildTransitLotPayloadFromDraft(
           draft,
           cop,
-          ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner,
+          ownerByPackageKey[draft.packageKey] ?? defaultOwnerForTcg(getApiTcgHeader()),
+
         );
         const res = await axios.post(API_CARDTRADER_TRANSIT_LOTS, body);
         const lotId = res.data?.lot_id as string;
@@ -645,7 +657,7 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
               onCopChange={(value) =>
                 setCopByPackageKey((prev) => ({ ...prev, [draft.packageKey]: value }))
               }
-              owner={ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner}
+              owner={ownerByPackageKey[draft.packageKey] ?? defaultOwnerForTcg(getApiTcgHeader())}
               onOwnerChange={(next) =>
                 setOwnerByPackageKey((prev) => ({ ...prev, [draft.packageKey]: next }))
               }
@@ -668,7 +680,7 @@ export default function Ct0IncomingRegisterPanel(props: Ct0IncomingRegisterPanel
             {eligible.map((draft) => {
               const cop = suggestedCopForDraft(draft, copByPackageKey) ?? 0;
               const owner =
-                ownerByPackageKey[draft.packageKey] ?? OWNERS_CONFIG.defaultOwner;
+                ownerByPackageKey[draft.packageKey] ?? defaultOwnerForTcg(getApiTcgHeader());
               return (
                 <Paper key={draft.packageKey} variant="outlined" sx={{ p: 1.5 }}>
                   <Typography variant="subtitle2">{draft.paidAtLabel}</Typography>

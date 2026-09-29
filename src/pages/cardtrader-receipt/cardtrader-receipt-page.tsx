@@ -17,6 +17,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiBase, apiUrl } from '../../config/api';
+import { useOwner } from '../../modules/owner';
 import { LoadingScreen } from '../../components/loading';
 import {
   buildCreateTandaCardsPayload,
@@ -215,6 +216,7 @@ export default function CardtraderReceiptPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { owner } = useOwner();
   const { rates } = useExchangeRates();
   const { data: activeData, isLoading } = useHomologActive();
 
@@ -783,7 +785,8 @@ export default function CardtraderReceiptPage() {
           Recepción CT
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Registra el envío de CardTrader como stock, luego PVP y etiquetas.
+          Solo en panel Pokémon / Pablo. Admite lotes de todos los TCG (Pokémon y
+          Yu-Gi-Oh): sincroniza sent, cruza con tránsito y pasa a stock.
         </Typography>
       </Box>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -828,6 +831,20 @@ export default function CardtraderReceiptPage() {
       </Stepper>
     </Paper>
   );
+
+  if (owner !== 'pablo') {
+    return (
+      <Box className="p-4 max-w-xl mx-auto">
+        <Alert severity="info" sx={{ mb: 2 }}>
+          La recepción CardTrader (todos los TCG) solo está disponible para{' '}
+          <strong>Pablo</strong> en el panel Pokémon.
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/')}>
+          Volver al inicio
+        </Button>
+      </Box>
+    );
+  }
 
   if (isLoading) {
     return (

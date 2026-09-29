@@ -176,7 +176,9 @@ export default function ClienteDetallePage() {
     Boolean(pedidoAbiertoId),
   );
 
-  const stockOwners: OwnerKey[] = [activeOwner, secondaryOwner];
+  const stockOwners: OwnerKey[] = secondaryOwner
+    ? [activeOwner, secondaryOwner]
+    : [activeOwner];
   const stockQueries = useQueries({
     queries: stockOwners.map((owner) => ({
       queryKey: ["stock", owner] as const,
@@ -192,7 +194,14 @@ export default function ClienteDetallePage() {
     () =>
       buildStockByOwnerId([
         { owner: activeOwner, rows: stockRowsFromQueryData<StockListItem>(stockActiveData) },
-        { owner: secondaryOwner, rows: stockRowsFromQueryData<StockListItem>(stockOtherData) },
+        ...(secondaryOwner
+          ? [
+              {
+                owner: secondaryOwner,
+                rows: stockRowsFromQueryData<StockListItem>(stockOtherData),
+              },
+            ]
+          : []),
       ]),
     [stockActiveData, stockOtherData, activeOwner, secondaryOwner],
   );

@@ -60,7 +60,7 @@ const TOP_LINKS: NavLeaf[] = [
   { to: "/generar-pdf-grupos", label: "PDF grupos", icon: IconDocument },
 ];
 
-const CARDTRADER_SECTION: NavSection = {
+const CARDTRADER_SECTION_POKEMON: NavSection = {
   id: "cardtrader",
   label: "CardTrader",
   icon: IconTruck,
@@ -68,6 +68,21 @@ const CARDTRADER_SECTION: NavSection = {
     { to: "/cardtrader-transit", label: "Tránsito", icon: IconTruck },
     { to: "/cardtrader-transit/import", label: "Importar CT Zero", icon: IconDownload },
     { to: "/cardtrader-receipt", label: "Recepción CT", icon: IconInbox },
+    { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
+    { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
+    { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
+    { to: "/cotizar/pedido-cliente", label: "Pegar cotización", icon: IconCart },
+  ],
+};
+
+/** Yu-Gi-Oh: sin recepción CT (solo en Pokémon / Pablo; admite todos los TCG allí). */
+const CARDTRADER_SECTION_YUGIOH: NavSection = {
+  id: "cardtrader",
+  label: "CardTrader",
+  icon: IconTruck,
+  items: [
+    { to: "/cardtrader-transit", label: "Tránsito", icon: IconTruck },
+    { to: "/cardtrader-transit/import", label: "Importar CT Zero", icon: IconDownload },
     { to: "/incoming-v2", label: "Homologación CT", icon: IconLayers },
     { to: "/incoming-v2/novedad-stock", label: "Cartas con novedad", icon: IconAlert },
     { to: "/cotizar", label: "Cotizar carta", icon: IconTag },
@@ -91,7 +106,7 @@ const YUGIOH_SECTIONS: NavSection[] = [
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
-  CARDTRADER_SECTION,
+  CARDTRADER_SECTION_YUGIOH,
   {
     id: "dashboards",
     label: "Dashboards",
@@ -127,7 +142,7 @@ const SECTIONS: NavSection[] = [
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
-  CARDTRADER_SECTION,
+  CARDTRADER_SECTION_POKEMON,
   {
     id: "ventas",
     label: "Ventas",
@@ -270,7 +285,7 @@ export default function PanelNav({
   onNavigate,
   onBeforeOwnerChange,
 }: PanelNavProps) {
-  const { allowedFeatures } = useOwner();
+  const { owner, allowedFeatures } = useOwner();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -282,12 +297,19 @@ export default function PanelNav({
     isRouteAllowed(item.to, allowedFeatures),
   );
 
-  const visibleSections = sections.map((section) => ({
-    ...section,
-    items: section.items.filter((item) =>
-      isRouteAllowed(item.to, allowedFeatures),
-    ),
-  })).filter((section) => section.items.length > 0);
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        if (!isRouteAllowed(item.to, allowedFeatures)) return false;
+        // Recepción CT: solo Pokémon / Pablo (admite todos los TCG en ese flujo).
+        if (item.to === "/cardtrader-receipt") {
+          return !yugioh && owner === "pablo";
+        }
+        return true;
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">

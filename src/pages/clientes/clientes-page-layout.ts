@@ -52,7 +52,7 @@ export const clientesToolbarSx: SxProps<Theme> = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 2,
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
 };
 
 export const clientesDetailGridSx: SxProps<Theme> = {
@@ -113,6 +113,8 @@ export const clientesDataGridSx: SxProps<Theme> = (theme) => ({
   "& .MuiDataGrid-cell": {
     borderColor: "divider",
     py: 1,
+    display: "flex",
+    alignItems: "center",
   },
   "& .row-pedido-alerta": { bgcolor: theme.palette.ditto.semantic.warningBg },
   "& .row-pedido-critico": { bgcolor: theme.palette.ditto.semantic.errorBg },
