@@ -19,6 +19,7 @@ const ROUTE_FEATURE_RULES: Array<{ prefix: string; feature: FeatureKey }> = [
   { prefix: "/ventas", feature: "ventas" },
   { prefix: "/metricas", feature: "ventas" },
   { prefix: "/add-stock", feature: "agregar-stock" },
+  { prefix: "/stock/fotos-inventario", feature: "stock-inventario-fotos" },
   { prefix: "/stock", feature: "stock" },
   { prefix: "/propiedad", feature: "propiedad" },
   { prefix: "/envios", feature: "clientes" },

@@ -14,6 +14,7 @@ import {
   IconDownload,
   IconPrint,
   IconQr,
+  IconScan,
   IconSearch,
 } from "../../../components/layout/panel-nav-icons";
 import { formatCOP } from "../../../utils/convert";
@@ -30,11 +31,15 @@ type StockToolbarProps = {
   limpiandoPvp: boolean;
   actualizandoTienda: boolean;
   canExportTienda: boolean;
+  canInventoryPhotos?: boolean;
+  exportandoInventarioFotos?: boolean;
   onExportPdf: () => void;
   onExportQr: () => void;
   onPrintCatalog: () => void;
   onClearAllPvp: () => void;
   onUpdateStore: () => void;
+  onOpenPhotoCapture?: () => void;
+  onExportInventoryPhotosPdf?: () => void;
 };
 
 function BusyIcon({ busy, children }: { busy: boolean; children: ReactNode }) {
@@ -53,11 +58,15 @@ export function StockToolbar({
   limpiandoPvp,
   actualizandoTienda,
   canExportTienda,
+  canInventoryPhotos = false,
+  exportandoInventarioFotos = false,
   onExportPdf,
   onExportQr,
   onPrintCatalog,
   onClearAllPvp,
   onUpdateStore,
+  onOpenPhotoCapture,
+  onExportInventoryPhotosPdf,
 }: StockToolbarProps) {
   return (
     <Stack
@@ -107,6 +116,28 @@ export function StockToolbar({
             Catálogo
           </Button>
         </ButtonGroup>
+
+        {canInventoryPhotos ? (
+          <ButtonGroup variant="outlined" size="small">
+            <Button
+              onClick={onOpenPhotoCapture}
+              startIcon={<IconScan />}
+            >
+              Fotografiar
+            </Button>
+            <Button
+              onClick={onExportInventoryPhotosPdf}
+              disabled={exportandoInventarioFotos}
+              startIcon={
+                <BusyIcon busy={exportandoInventarioFotos}>
+                  <IconDocument />
+                </BusyIcon>
+              }
+            >
+              PDF inventario
+            </Button>
+          </ButtonGroup>
+        ) : null}
 
         {canExportTienda ? (
           <Button

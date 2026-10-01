@@ -16,10 +16,13 @@ describe("apiUrl", () => {
     expect(apiUrl("/pokemon/client")).toBe(`${origin}${API_TCG_PREFIX}/client`);
   });
 
-  it("no prefija /card-images ni /health", () => {
+  it("no prefija /card-images, /stock-photos ni /health", () => {
     const origin = getApiOrigin();
     expect(apiUrl("/card-images/swsh3/a.png")).toBe(
       `${origin}/card-images/swsh3/a.png`,
+    );
+    expect(apiUrl("/stock-photos/pablo/sv8-1/abc.jpg")).toBe(
+      `${origin}/stock-photos/pablo/sv8-1/abc.jpg`,
     );
     expect(apiUrl("/health")).toBe(`${origin}/health`);
     expect(apiUrl("/yugioh/sets")).toBe(`${origin}/yugioh/sets`);

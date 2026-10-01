@@ -59,8 +59,29 @@ import {
 } from "../../clientes/cliente-types";
 import { normalizeClientList } from "../../clientes/cliente-id";
 import { useOwner } from "../../../modules/owner";
+import {
+  exportStockInventoryPdf,
+  filterStockWithInventoryPhotosForPdf,
+} from "../export-stock-inventory-pdf";
+import { InventoryPhotoViewDialog } from "../fotos-inventario/inventory-photo-view-dialog";
+import type {
+  InventoryPhotoSessionMode,
+  MissingPhotoRow,
+} from "../fotos-inventario/inventory-photo-session";
 
 export type StockItem = StockListItem;
+
+function toMissingPhotoRow(row: StockItem): MissingPhotoRow {
+  return {
+    _id: row._id,
+    card_id: row.card_id,
+    card_name: row.card_name,
+    image_url: row.image_url,
+    language: row.language,
+    rareza: row.rareza ?? null,
+    card_state: row.card_state,
+  };
+}
 
 function rarezaFromListRow(item: StockListItem): string | null {
   let rz =
@@ -154,8 +175,15 @@ function stockIncluidoEnCalculos(item: StockListItem): boolean {
 export default function StockGrid() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can } = useOwner();
+  const { can, owner } = useOwner();
   const canExportTienda = can("export-tienda");
+  const canInventoryPhotos = can("stock-inventario-fotos");
+  const [inventoryPhotoView, setInventoryPhotoView] = useState<{
+    stockId: string;
+    cardName: string;
+    photoPath: string;
+    row: MissingPhotoRow;
+  } | null>(null);
   const [busqueda, setBusqueda] = useState("");
   /** Tags seleccionados en el filtro: la fila debe incluir todos (AND). */
   const [filtroTags, setFiltroTags] = useState<StockTagId[]>([]);
@@ -222,6 +250,19 @@ export default function StockGrid() {
     queryFn: async () => {
       const res = await axios.get(API_RESERVA);
       return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
+  const { data: inventoryPhotoIndex = {} } = useQuery<
+    Record<string, string>
+  >({
+    queryKey: ["stock-inventory-photos-index", owner],
+    enabled: canInventoryPhotos,
+    queryFn: async () => {
+      const res = await axios.get<Record<string, string>>(
+        apiUrl("/stock/inventory-photos/index"),
+      );
+      return res.data ?? {};
     },
   });
 
@@ -588,10 +629,19 @@ export default function StockGrid() {
         <StockRowActions
           row={params.row as StockItem}
           marcandoPropiedad={marcandoPropiedad}
+          inventoryPhotoPath={inventoryPhotoIndex[(params.row as StockItem)._id]}
           onModificar={handleModificar}
           onMarcarPropiedad={handleMarcarPropiedad}
           onVender={handleAbrirModalVenta}
           onEliminar={handleOpenDeleteDialog}
+          onViewInventoryPhoto={(row, photoPath) =>
+            setInventoryPhotoView({
+              stockId: row._id,
+              cardName: row.card_name,
+              photoPath,
+              row: toMissingPhotoRow(row),
+            })
+          }
         />
       ),
     },
@@ -799,6 +849,7 @@ export default function StockGrid() {
 
   const [exportando, setExportando] = useState(false);
   const [exportandoBarcode, setExportandoBarcode] = useState(false);
+  const [exportandoInventarioFotos, setExportandoInventarioFotos] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
   const [limpiandoPvp, setLimpiandoPvp] = useState(false);
   const [actualizandoTienda, setActualizandoTienda] = useState(false);
@@ -831,6 +882,47 @@ export default function StockGrid() {
       convert.toCopFromEur,
       () => setExportando(false)
     );
+  };
+
+  const openInventoryPhotoSession = (mode: InventoryPhotoSessionMode) => {
+    if (!inventoryPhotoView) return;
+    const { stockId, photoPath, row } = inventoryPhotoView;
+    setInventoryPhotoView(null);
+    navigate("/stock/fotos-inventario", {
+      state: {
+        stockId,
+        mode,
+        photoPath,
+        row,
+      },
+    });
+  };
+
+  const handleExportInventoryPhotosPdf = async () => {
+    try {
+      setExportandoInventarioFotos(true);
+      const rows = filterStockWithInventoryPhotosForPdf(
+        stock,
+        inventoryPhotoIndex,
+      );
+      const result = await exportStockInventoryPdf(rows, {
+        toCopFromEur: convert.toCopFromEur,
+        photoIndex: inventoryPhotoIndex,
+        owner,
+      });
+      const imgNote =
+        result.imageFailures > 0
+          ? ` (${result.imageFailures} foto(s) no se pudieron cargar)`
+          : "";
+      window.alert(
+        `PDF generado: ${result.rows} carta(s) con foto${imgNote}.`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo generar el PDF.";
+      window.alert(msg);
+    } finally {
+      setExportandoInventarioFotos(false);
+    }
   };
 
   const hayFiltrosVisibles =
@@ -965,11 +1057,15 @@ export default function StockGrid() {
         limpiandoPvp={limpiandoPvp}
         actualizandoTienda={actualizandoTienda}
         canExportTienda={canExportTienda}
+        canInventoryPhotos={canInventoryPhotos}
+        exportandoInventarioFotos={exportandoInventarioFotos}
         onExportPdf={handleExportar}
         onExportQr={handleExportarQr}
         onPrintCatalog={handleImprimirCatalogo}
         onClearAllPvp={handleLimpiarTodosPvp}
         onUpdateStore={handleActualizarInformacionTienda}
+        onOpenPhotoCapture={() => navigate("/stock/fotos-inventario")}
+        onExportInventoryPhotosPdf={() => void handleExportInventoryPhotosPdf()}
       />
 
       <div className="flex flex-wrap items-center gap-1.5 mb-1.5 text-sm text-gray-700">
@@ -1227,6 +1323,15 @@ export default function StockGrid() {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        <InventoryPhotoViewDialog
+          open={inventoryPhotoView != null}
+          cardName={inventoryPhotoView?.cardName ?? ""}
+          photoPath={inventoryPhotoView?.photoPath ?? null}
+          onClose={() => setInventoryPhotoView(null)}
+          onEditPhoto={() => openInventoryPhotoSession("edit")}
+          onRetakePhoto={() => openInventoryPhotoSession("retake")}
+        />
     </div>
   );
 }

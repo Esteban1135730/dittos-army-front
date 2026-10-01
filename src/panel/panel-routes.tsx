@@ -42,6 +42,9 @@ const StockLostCardsPage = lazy(() => import("../pages/stock/lost-cards"));
 const ImprimirEtiquetasQrPage = lazy(
   () => import("../pages/stock/imprimir-etiquetas-qr-page"),
 );
+const StockFotosInventarioPage = lazy(
+  () => import("../pages/stock/fotos-inventario/stock-fotos-inventario-page"),
+);
 const AperturaSelladoPage = lazy(
   () => import("../pages/stock/apertura-sellado/apertura-sellado"),
 );
@@ -97,6 +100,10 @@ export function PanelRoutes({ surface, AddStockPage }: PanelRoutesProps) {
         <Route
           path="/stock/imprimir-etiquetas-qr"
           element={<LayoutPage><ImprimirEtiquetasQrPage /></LayoutPage>}
+        />
+        <Route
+          path="/stock/fotos-inventario"
+          element={<LayoutPage><StockFotosInventarioPage /></LayoutPage>}
         />
         {isPokemon ? (
           <>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   IconBookmark,
   IconCart,
+  IconScan,
   IconTag,
 } from "../../../components/layout/panel-nav-icons";
 import { isQuantityProduct } from "../../../constants/bulk-product";
@@ -12,10 +13,12 @@ import { IconPencil, IconTrash } from "./stock-action-icons";
 type StockRowActionsProps = {
   row: StockListItem;
   marcandoPropiedad: string | null;
+  inventoryPhotoPath?: string | null;
   onModificar: (id: string) => void;
   onMarcarPropiedad: (id: string, cardId: string) => void;
   onVender: (row: StockListItem) => void;
   onEliminar: (row: StockListItem) => void;
+  onViewInventoryPhoto?: (row: StockListItem, photoPath: string) => void;
 };
 
 export function StockRowActions({
@@ -25,6 +28,8 @@ export function StockRowActions({
   onMarcarPropiedad,
   onVender,
   onEliminar,
+  inventoryPhotoPath,
+  onViewInventoryPhoto,
 }: StockRowActionsProps) {
   const soldOrOwned = row.card_state === "vendida" || row.card_state === "propiedad";
   const owned = row.card_state === "propiedad";
@@ -44,6 +49,18 @@ export function StockRowActions({
       alignItems="center"
       onClick={(e) => e.stopPropagation()}
     >
+      {inventoryPhotoPath && onViewInventoryPhoto ? (
+        <Tooltip title="Ver foto de inventario (PDF)">
+          <IconButton
+            size="small"
+            aria-label="Ver foto de inventario"
+            color="info"
+            onClick={() => onViewInventoryPhoto(row, inventoryPhotoPath)}
+          >
+            <IconScan />
+          </IconButton>
+        </Tooltip>
+      ) : null}
       <Tooltip title="Modificar">
         <IconButton
           size="small"

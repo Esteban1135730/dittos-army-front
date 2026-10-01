@@ -64,6 +64,9 @@ function withTcgPrefix(path: string): string {
   if (normalized.startsWith("/card-images")) {
     return normalized;
   }
+  if (normalized.startsWith("/stock-photos")) {
+    return normalized;
+  }
   if (normalized === "/health" || normalized.startsWith("/health?")) {
     return normalized;
   }

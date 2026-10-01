@@ -140,6 +140,7 @@ const SECTIONS: NavSection[] = [
       { to: "/stock/revision", label: "Revisión de stock", icon: IconSearch },
       { to: "/stock/perdidas", label: "Cartas perdidas", icon: IconAlert },
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
+      { to: "/stock/fotos-inventario", label: "Fotos inventario", icon: IconScan },
     ],
   },
   CARDTRADER_SECTION_POKEMON,

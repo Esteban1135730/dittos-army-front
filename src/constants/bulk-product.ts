@@ -2,6 +2,7 @@
 
 import { apiUrl } from "../config/api";
 import { rewriteCardImagesUrl } from "../utils/card-images-url";
+import { isStockPhotoUrl } from "../utils/stock-photo-url";
 
 export const BULK_CARD_ID = "da-bulk";
 export const BULK_CARD_NAME = "bulk";
@@ -53,7 +54,9 @@ export function resolveStockImageUrl(
   imageUrl: string | null | undefined,
 ): string {
   const url = String(imageUrl ?? "").trim();
-  if (url) return rewriteCardImagesUrl(url, apiUrl);
+  if (url && !isStockPhotoUrl(url)) {
+    return rewriteCardImagesUrl(url, apiUrl);
+  }
   if (reservaCatalogPinRank(cardId) < RESERVA_PINNED_CARD_IDS.length) {
     return BULK_DUMMY_IMAGE_URL;
   }
