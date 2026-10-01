@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  duplicateUnitScanMessage,
+  NO_MORE_COPIES_MESSAGE,
   rejectReasonMessage,
   reservedScanNotice,
+  scanRejectMessage,
 } from "./reject-reason-message";
 
 describe("rejectReasonMessage", () => {
@@ -40,6 +43,37 @@ describe("reservedScanNotice", () => {
     });
   });
 
+  it("aviso de éxito cuando se cargó otra copia del carrito", () => {
+    const notice = reservedScanNotice({ copy_fallback: true });
+    expect(notice).toEqual({
+      severity: "success",
+      message: "Se agregó otra copia disponible.",
+    });
+  });
+
+  it("menciona el idioma cargado en el aviso de copia", () => {
+    const notice = reservedScanNotice({
+      copy_fallback: true,
+      language: "JA",
+    });
+    expect(notice).toEqual({
+      severity: "success",
+      message: "Se agregó otra copia disponible (JA).",
+    });
+  });
+
+  it("la carta vendida conserva su aviso aunque también haya copy_fallback", () => {
+    const notice = reservedScanNotice({
+      copy_fallback: true,
+      sold_language_fallback: true,
+      substituted: true,
+      language: "EN",
+    });
+    expect(notice?.message).toBe(
+      "La carta escaneada ya estaba vendida; se cargó la misma carta en EN.",
+    );
+  });
+
   it("aviso cuando se sustituyó una carta ya vendida", () => {
     const notice = reservedScanNotice({
       substituted: true,
@@ -55,5 +89,30 @@ describe("reservedScanNotice", () => {
 
   it("sin aviso para escaneos normales", () => {
     expect(reservedScanNotice({})).toBeNull();
+  });
+});
+
+describe("mensajes de último recurso", () => {
+  it("unidad ya excluida y sin copia: no quedan más copias", () => {
+    expect(
+      scanRejectMessage(
+        { reject_reason: "sin_stock", product_kind: "unit" },
+        { requestedId: "a", excludeIds: ["a"] },
+      ),
+    ).toBe(NO_MORE_COPIES_MESSAGE);
+  });
+
+  it("vendida que no está en el carrito conserva el aviso de vendida", () => {
+    expect(
+      scanRejectMessage(
+        { reject_reason: "ya_vendida", product_kind: "unit" },
+        { requestedId: "a", excludeIds: [] },
+      ),
+    ).toBe("Esta carta ya está vendida.");
+  });
+
+  it("duplicate de una unidad no dice que ya está en el carrito", () => {
+    expect(duplicateUnitScanMessage("unit")).toBe(NO_MORE_COPIES_MESSAGE);
+    expect(duplicateUnitScanMessage(undefined)).toBe(NO_MORE_COPIES_MESSAGE);
   });
 });

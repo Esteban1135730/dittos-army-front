@@ -682,6 +682,7 @@ export default function ClientesPage() {
               disableRowSelectionOnClick
               autoHeight
               rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
+              getRowHeight={() => "auto"}
               density={PANEL_DATAGRID_DENSITY}
               sx={clientesDataGridSx}
             />

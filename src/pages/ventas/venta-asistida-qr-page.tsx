@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Drawer,
   IconButton,
   Paper,
   Snackbar,
@@ -23,7 +24,9 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { useBarcodeScanner } from "../../components/barcode-scanner/use-barcode-scanner";
 import { useLaserBarcodeInput } from "../../components/barcode-scanner/use-laser-barcode-input";
 import { ScannerErrorBoundary } from "../../components/barcode-scanner/scanner-error-boundary";
@@ -33,12 +36,23 @@ import { resolveStockImageUrl } from "../../constants/bulk-product";
 import { CardThumb } from "../../components/card-thumb";
 import { parseStockQrPayloadMulti } from "../../modules/stock-barcode";
 import {
-  rejectReasonMessage,
-  reservedScanNotice,
-  useVentaAsistidaCart,
-  lineProfitCop,
-  expandCartLinesToSellBatchItems,
   cartUnitCount,
+  duplicateUnitScanMessage,
+  expandCartLinesToSellBatchItems,
+  groupCounterSearchRows,
+  isQrFavorite,
+  lineProfitCop,
+  loadQrFavorites,
+  pickGroupScanStockId,
+  reservedScanNotice,
+  saveQrFavorites,
+  scanRejectMessage,
+  toggleQrFavorite,
+  useVentaAsistidaCart,
+  type CartLine,
+  type CounterSearchGroup,
+  type CounterSearchRow,
+  type QrFavorite,
   type ReservedScanNotice,
   type SellBatchResult,
   type StockScanView,
@@ -58,6 +72,50 @@ const sectionPaper = {
   bgcolor: "background.paper",
   boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
 } as const;
+
+const sideMenuPaper = {
+  ...sectionPaper,
+  p: { xs: 1.5, md: 2 },
+  display: "flex",
+  flexDirection: "column",
+  gap: 1.25,
+  minHeight: 0,
+  height: "100%",
+  maxHeight: "100%",
+  overflow: "hidden",
+} as const;
+
+function formatSearchPrice(
+  pvp: number | null,
+  currency: string | null,
+): string | null {
+  if (pvp == null || !(pvp > 0)) return null;
+  if (!currency || currency === "COP") return formatCOP(pvp);
+  return `${currency} ${pvp}`;
+}
+
+function FavoriteStar({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <IconButton
+      size="small"
+      aria-label={active ? "Quitar de favoritos" : "Agregar a favoritos"}
+      aria-pressed={active}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      sx={{ color: active ? "warning.main" : "text.disabled" }}
+    >
+      {active ? "★" : "☆"}
+    </IconButton>
+  );
+}
 
 function SummaryCard({
   label,
@@ -97,6 +155,244 @@ function SummaryCard({
   );
 }
 
+function SideMenuFrame({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <Paper sx={sideMenuPaper}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography variant="subtitle1" fontWeight={700}>
+          {title}
+        </Typography>
+        {count != null ? <Chip label={count} size="small" /> : null}
+      </Stack>
+      {children}
+    </Paper>
+  );
+}
+
+function FavoritesMenu({
+  favorites,
+  canScan,
+  onAdd,
+  onToggle,
+}: {
+  favorites: QrFavorite[];
+  canScan: boolean;
+  onAdd: (fav: QrFavorite) => void;
+  onToggle: (fav: QrFavorite) => void;
+}) {
+  return (
+    <SideMenuFrame title="Favoritos" count={favorites.length}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
+        {favorites.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Marca una carta con la estrella para tenerla en este menú.
+          </Typography>
+        ) : (
+          <Stack spacing={0.75}>
+            {favorites.map((fav) => {
+              const img = resolveStockImageUrl(fav.card_id, fav.image_url);
+              return (
+                <Stack
+                  key={`${fav.owner}-${fav.stock_id}-${fav.card_id}-${fav.language}-${fav.rareza ?? ""}`}
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  onClick={() => {
+                    if (!canScan) return;
+                    onAdd(fav);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !canScan) return;
+                    e.preventDefault();
+                    onAdd(fav);
+                  }}
+                  sx={{
+                    px: 0.75,
+                    py: 0.75,
+                    borderRadius: 1.5,
+                    border: "1px solid",
+                    borderColor: "grey.200",
+                    cursor: canScan ? "pointer" : "default",
+                    "&:hover": { bgcolor: "grey.50" },
+                  }}
+                >
+                  <CardThumb src={img} alt={fav.card_name || "carta"} size="sm" />
+                  <Box minWidth={0} flex={1}>
+                    <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.25 }}>
+                      {fav.card_name || "Sin nombre"}
+                    </Typography>
+                    {fav.language ? (
+                      <Chip
+                        label={fav.language}
+                        size="small"
+                        variant="outlined"
+                        sx={{ height: 20, fontSize: 10, mt: 0.5 }}
+                      />
+                    ) : null}
+                  </Box>
+                  <FavoriteStar active onToggle={() => onToggle(fav)} />
+                </Stack>
+              );
+            })}
+          </Stack>
+        )}
+      </Box>
+    </SideMenuFrame>
+  );
+}
+
+function SearchMenu({
+  searchInput,
+  onSearchInput,
+  searchLoading,
+  searchError,
+  debouncedSearch,
+  searchGroups,
+  canScan,
+  unitExcludeIds,
+  activeOwner,
+  favorites,
+  onAddGroup,
+  onToggleFavorite,
+}: {
+  searchInput: string;
+  onSearchInput: (value: string) => void;
+  searchLoading: boolean;
+  searchError: string | null;
+  debouncedSearch: string;
+  searchGroups: CounterSearchGroup[];
+  canScan: boolean;
+  unitExcludeIds: string[];
+  activeOwner: OwnerKey;
+  favorites: QrFavorite[];
+  onAddGroup: (group: CounterSearchGroup) => void;
+  onToggleFavorite: (fav: QrFavorite) => void;
+}) {
+  return (
+    <SideMenuFrame title="Buscar">
+      <TextField
+        fullWidth
+        size="small"
+        label="Nombre de la carta"
+        placeholder="Escribe para buscar"
+        value={searchInput}
+        autoComplete="off"
+        onChange={(e) => onSearchInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || searchGroups.length !== 1 || !canScan) return;
+          e.preventDefault();
+          onAddGroup(searchGroups[0]);
+        }}
+        inputProps={{ "aria-label": "Buscar carta por nombre" }}
+      />
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
+        {searchLoading ? (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="caption" color="text.secondary">
+              Buscando…
+            </Typography>
+          </Stack>
+        ) : null}
+        {searchError ? (
+          <Alert severity="warning" variant="outlined">
+            {searchError}
+          </Alert>
+        ) : null}
+        {debouncedSearch && !searchLoading && !searchError && searchGroups.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Sin resultados vendibles.
+          </Typography>
+        ) : null}
+        <Stack spacing={0.75}>
+          {searchGroups.map((group) => {
+            const price = formatSearchPrice(group.pvp, group.pvp_currency);
+            const img = resolveStockImageUrl(group.card_id, group.image_url);
+            const fav = {
+              stock_id:
+                pickGroupScanStockId(group.stock_ids, unitExcludeIds) ??
+                group.stock_ids[0],
+              card_id: group.card_id,
+              card_name: group.card_name,
+              image_url: img,
+              language: group.language,
+              rareza: group.rareza,
+              owner: activeOwner,
+            } satisfies QrFavorite;
+            return (
+              <Stack
+                key={group.key}
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                onClick={() => {
+                  if (!canScan) return;
+                  onAddGroup(group);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !canScan) return;
+                  e.preventDefault();
+                  onAddGroup(group);
+                }}
+                sx={{
+                  px: 0.75,
+                  py: 0.75,
+                  borderRadius: 1.5,
+                  border: "1px solid",
+                  borderColor: "grey.200",
+                  cursor: canScan ? "pointer" : "default",
+                  "&:hover": { bgcolor: "grey.50" },
+                }}
+              >
+                <CardThumb src={img} alt={group.card_name || "carta"} size="sm" />
+                <Box minWidth={0} flex={1}>
+                  <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.25 }}>
+                    {group.card_name || "Sin nombre"}
+                  </Typography>
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                    {group.language ? (
+                      <Chip label={group.language} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+                    ) : null}
+                    {group.rareza ? (
+                      <Chip label={group.rareza} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+                    ) : null}
+                    <Chip
+                      label={`${group.count} ${group.count === 1 ? "disponible" : "disponibles"}`}
+                      size="small"
+                      sx={{ height: 20, fontSize: 10 }}
+                    />
+                  </Stack>
+                  {price ? (
+                    <Typography variant="caption" fontWeight={700} display="block" sx={{ mt: 0.25 }}>
+                      {price}
+                    </Typography>
+                  ) : null}
+                </Box>
+                <FavoriteStar
+                  active={isQrFavorite(favorites, fav)}
+                  onToggle={() => onToggleFavorite(fav)}
+                />
+              </Stack>
+            );
+          })}
+        </Stack>
+      </Box>
+    </SideMenuFrame>
+  );
+}
+
 function VentaAsistidaQrContent() {
   const queryClient = useQueryClient();
   const { owner: activeOwner } = useOwner();
@@ -110,6 +406,17 @@ function VentaAsistidaQrContent() {
   const [sellMessage, setSellMessage] = useState<string | null>(null);
   const [bulkWarn, setBulkWarn] = useState<string | null>(null);
   const [ownerAmbiguousMsg, setOwnerAmbiguousMsg] = useState<string | null>(null);
+  const theme = useTheme();
+  const isWide = useMediaQuery(theme.breakpoints.up("md"), { noSsr: true });
+  const [sideMenu, setSideMenu] = useState<"favorites" | "search" | null>(null);
+  const [favorites, setFavorites] = useState<QrFavorite[]>(() => loadQrFavorites());
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchHits, setSearchHits] = useState<CounterSearchRow[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const focusLaserRef = useRef<() => void>(() => {});
+  const inFlightRef = useRef(false);
 
   const canScan = !scanLoading && !selling;
 
@@ -132,32 +439,87 @@ function VentaAsistidaQrContent() {
     });
   }, []);
 
-  const handleScan = useCallback(
-    async (raw: string) => {
-      const trimmed = raw.trim();
+  useEffect(() => {
+    saveQrFavorites(favorites);
+  }, [favorites]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (!debouncedSearch) {
+      setSearchHits([]);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+    const ac = new AbortController();
+    setSearchLoading(true);
+    setSearchError(null);
+    void axios
+      .get<CounterSearchRow[] | null>(
+        apiUrl(`/stock?q=${encodeURIComponent(debouncedSearch)}`),
+        { signal: ac.signal },
+      )
+      .then((res) => {
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setSearchHits(
+          rows.map((row) => ({
+            ...row,
+            _id: String(row._id ?? ""),
+            card_id: String(row.card_id ?? ""),
+          })),
+        );
+      })
+      .catch((e: unknown) => {
+        if (axios.isCancel(e)) return;
+        if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") return;
+        setSearchHits([]);
+        setSearchError("No se pudo buscar en el stock.");
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setSearchLoading(false);
+      });
+    return () => ac.abort();
+  }, [debouncedSearch]);
+
+  const unitExcludeIds = useMemo(
+    () =>
+      cart.lines
+        .filter((l) => l.product_kind !== "quantity")
+        .map((l) => l.stock_id),
+    [cart.lines],
+  );
+
+  const searchGroups = useMemo(
+    () => groupCounterSearchRows(searchHits),
+    [searchHits],
+  );
+
+  const addByStockId = useCallback(
+    async (
+      stockId: string,
+      scanOwner: OwnerKey | null | undefined,
+      source: "scanner" | "manual",
+    ) => {
+      if (inFlightRef.current || selling) return;
+      inFlightRef.current = true;
       setScanError(null);
       setScanNotice(null);
       setOwnerAmbiguousMsg(null);
-
-      const parsed = parseStockQrPayloadMulti(trimmed);
-      if (!parsed) {
-        setScanError(
-          "QR no reconocido. Usa etiquetas DA-STOCK:… o ESTEBAN-STOCK:….",
-        );
-        setCameraOn(false);
-        return;
-      }
-
-      const { stockId, owner: prefixOwner } = parsed;
-
       setScanLoading(true);
+      let added = false;
       try {
         const excludeIds = cart.lines
           .filter((l) => l.product_kind !== "quantity")
           .map((l) => l.stock_id);
         const params = new URLSearchParams();
         params.set("multi", "1");
-        if (prefixOwner) params.set("scan_owner", prefixOwner);
+        if (scanOwner) params.set("scan_owner", scanOwner);
         if (excludeIds.length > 0) {
           params.set("exclude", excludeIds.join(","));
         }
@@ -167,13 +529,14 @@ function VentaAsistidaQrContent() {
         const view = res.data;
 
         if (!view.sellable) {
-          setScanError(rejectReasonMessage(view.reject_reason));
-          setCameraOn(false);
+          setScanError(
+            scanRejectMessage(view, { requestedId: stockId, excludeIds }),
+          );
+          if (source === "scanner") setCameraOn(false);
           return;
         }
 
-        const lineOwner: OwnerKey =
-          view.owner ?? prefixOwner ?? activeOwner;
+        const lineOwner: OwnerKey = view.owner ?? scanOwner ?? activeOwner;
 
         if (view.owner_ambiguous_resolved) {
           setOwnerAmbiguousMsg(
@@ -198,22 +561,70 @@ function VentaAsistidaQrContent() {
         });
 
         if (addResult === "duplicate") {
-          setScanError("Esta carta ya está en el carrito.");
-        } else {
-          setScanError(null);
-          setScanNotice(reservedScanNotice(view));
+          setScanError(duplicateUnitScanMessage(view.product_kind));
+          if (source === "scanner") setCameraOn(false);
+          return;
         }
+        setScanError(null);
+        setScanNotice(reservedScanNotice(view));
+        added = true;
       } catch (e) {
         const msg = axios.isAxiosError(e)
           ? (e.response?.data?.message as string) || e.message
           : "No se pudo cargar la carta.";
         setScanError(msg);
+        if (source === "scanner") setCameraOn(false);
       } finally {
+        inFlightRef.current = false;
         setScanLoading(false);
-        setCameraOn(mode === "camera");
+        if (source === "scanner") setCameraOn(mode === "camera");
+        if (added && mode === "laser") focusLaserRef.current();
       }
     },
-    [cart, mode, activeOwner],
+    [cart, mode, activeOwner, selling],
+  );
+
+  const handleScan = useCallback(
+    async (raw: string) => {
+      const trimmed = raw.trim();
+      const parsed = parseStockQrPayloadMulti(trimmed);
+      if (!parsed) {
+        setScanError(
+          "QR no reconocido. Usa etiquetas DA-STOCK:… o ESTEBAN-STOCK:….",
+        );
+        setScanNotice(null);
+        setCameraOn(false);
+        return;
+      }
+      await addByStockId(parsed.stockId, parsed.owner ?? null, "scanner");
+    },
+    [addByStockId],
+  );
+
+  const toggleFavorite = useCallback((next: QrFavorite) => {
+    setFavorites((prev) => toggleQrFavorite(prev, next));
+  }, []);
+
+  const favoriteFromLine = useCallback(
+    (line: CartLine): QrFavorite => ({
+      stock_id: line.stock_id,
+      card_id: line.card_id,
+      card_name: line.card_name,
+      image_url: line.image_url,
+      language: line.language,
+      rareza: line.rareza,
+      owner: line.owner,
+    }),
+    [],
+  );
+
+  const addSearchGroup = useCallback(
+    (group: CounterSearchGroup) => {
+      const stockId = pickGroupScanStockId(group.stock_ids, unitExcludeIds);
+      if (!stockId) return;
+      void addByStockId(stockId, activeOwner, "manual");
+    },
+    [addByStockId, activeOwner, unitExcludeIds],
   );
 
   const laser = useLaserBarcodeInput({
@@ -224,6 +635,7 @@ function VentaAsistidaQrContent() {
       void handleScan(text);
     },
   });
+  focusLaserRef.current = laser.focus;
 
   const { videoRef, status, errorMessage, start } = useBarcodeScanner({
     enabled: mode === "camera" && cameraOn && canScan,
@@ -282,14 +694,49 @@ function VentaAsistidaQrContent() {
   const formatProfit = (value: number) =>
     `${value > 0 ? "+" : ""}COP ${formatCOP(Math.round(value))}`;
 
+  const renderFavoritesMenu = () => (
+    <FavoritesMenu
+      favorites={favorites}
+      canScan={canScan}
+      onAdd={(fav) => void addByStockId(fav.stock_id, fav.owner, "manual")}
+      onToggle={toggleFavorite}
+    />
+  );
+
+  const renderSearchMenu = () => (
+    <SearchMenu
+      searchInput={searchInput}
+      onSearchInput={setSearchInput}
+      searchLoading={searchLoading}
+      searchError={searchError}
+      debouncedSearch={debouncedSearch}
+      searchGroups={searchGroups}
+      canScan={canScan}
+      unitExcludeIds={unitExcludeIds}
+      activeOwner={activeOwner}
+      favorites={favorites}
+      onAddGroup={addSearchGroup}
+      onToggleFavorite={toggleFavorite}
+    />
+  );
+
   return (
-    <Box sx={{ maxWidth: 1200, mx: "auto", pb: 3 }}>
+    <Box
+      sx={{
+        pb: { xs: 1, md: 0 },
+        height: { md: "calc(100dvh - 24px)" },
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        overflow: { md: "hidden" },
+      }}
+    >
       <Stack
         direction={{ xs: "column", sm: "row" }}
         alignItems={{ sm: "center" }}
         justifyContent="space-between"
         spacing={1}
-        mb={3}
+        mb={1.5}
       >
         <Box>
           <Typography variant="overline" color="primary.main" fontWeight={700}>
@@ -299,29 +746,56 @@ function VentaAsistidaQrContent() {
             variant="h5"
             fontWeight={800}
             lineHeight={1.2}
-            sx={{ fontSize: { xs: "1.5rem", sm: "2.125rem" } }}
+            sx={{ fontSize: { xs: "1.35rem", sm: "1.75rem" } }}
           >
             Venta asistida QR
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Escanea, revisa el carrito y confirma la venta del lote.
-          </Typography>
         </Box>
-        <Button component={Link} to="/ventas" variant="outlined" size="small">
-          ← Volver a ventas
-        </Button>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {isWide ? null : (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => setSideMenu("favorites")}
+              >
+                Favoritos ({favorites.length})
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => setSideMenu("search")}
+              >
+                Buscar
+              </Button>
+            </>
+          )}
+          <Button component={Link} to="/ventas" variant="outlined" size="small">
+            ← Volver a ventas
+          </Button>
+        </Stack>
       </Stack>
 
       <Box
         sx={{
+          flex: { md: 1 },
+          minHeight: 0,
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", lg: "minmax(320px, 5fr) minmax(0, 7fr)" },
-          gap: 2.5,
-          alignItems: "start",
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: "minmax(260px, 300px) minmax(0, 1fr) minmax(300px, 360px)",
+          },
+          gap: 2,
+          alignItems: "stretch",
         }}
       >
+        {isWide ? renderFavoritesMenu() : null}
+        <Stack
+          spacing={2}
+          sx={{ minWidth: 0, minHeight: 0, height: { md: "100%" } }}
+        >
         {/* Escaneo */}
-        <Paper sx={sectionPaper}>
+        <Paper sx={{ ...sectionPaper, p: { xs: 1.5, sm: 2 } }}>
           <Typography variant="subtitle1" fontWeight={700} gutterBottom>
             Escanear
           </Typography>
@@ -455,7 +929,7 @@ function VentaAsistidaQrContent() {
         </Paper>
 
         {/* Carrito */}
-        <Paper sx={{ ...sectionPaper, display: "flex", flexDirection: "column", minHeight: 420 }}>
+        <Paper sx={{ ...sectionPaper, p: { xs: 1.5, sm: 2 }, display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
             <Typography variant="subtitle1" fontWeight={700}>
               Carrito
@@ -529,7 +1003,7 @@ function VentaAsistidaQrContent() {
                     <TableCell align="right" width={110}>
                       Ganancia
                     </TableCell>
-                    <TableCell align="center" width={72} />
+                    <TableCell align="center" width={104} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -630,14 +1104,21 @@ function VentaAsistidaQrContent() {
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
-                          <Button
-                            size="small"
-                            color="inherit"
-                            onClick={() => cart.removeLine(line.stock_id)}
-                            sx={{ minWidth: 0, color: "text.secondary" }}
-                          >
-                            ✕
-                          </Button>
+                          <Stack direction="row" alignItems="center" justifyContent="center">
+                            <FavoriteStar
+                              active={isQrFavorite(favorites, line)}
+                              onToggle={() => toggleFavorite(favoriteFromLine(line))}
+                            />
+                            <Button
+                              size="small"
+                              color="inherit"
+                              aria-label="Quitar del carrito"
+                              onClick={() => cart.removeLine(line.stock_id)}
+                              sx={{ minWidth: 0, color: "text.secondary" }}
+                            >
+                              ✕
+                            </Button>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     );
@@ -676,7 +1157,48 @@ function VentaAsistidaQrContent() {
             </Button>
           </Stack>
         </Paper>
+        </Stack>
+        {isWide ? renderSearchMenu() : null}
       </Box>
+
+      <Drawer
+        anchor="left"
+        open={!isWide && sideMenu === "favorites"}
+        onClose={() => setSideMenu(null)}
+      >
+        <Box
+          sx={{
+            width: 320,
+            maxWidth: "88vw",
+            height: "100%",
+            p: 1.5,
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {!isWide ? renderFavoritesMenu() : null}
+        </Box>
+      </Drawer>
+      <Drawer
+        anchor="right"
+        open={!isWide && sideMenu === "search"}
+        onClose={() => setSideMenu(null)}
+      >
+        <Box
+          sx={{
+            width: 340,
+            maxWidth: "92vw",
+            height: "100%",
+            p: 1.5,
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {!isWide ? renderSearchMenu() : null}
+        </Box>
+      </Drawer>
 
       <Snackbar
         open={sellMessage != null}

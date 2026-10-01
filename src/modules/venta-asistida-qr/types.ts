@@ -32,6 +32,8 @@ export type StockScanView = {
   scanned_stock_id?: string;
   reserved_fallback?: boolean;
   sold_language_fallback?: boolean;
+  /** La unidad escaneada ya estaba en el carrito; se cargó otra copia vendible. */
+  copy_fallback?: boolean;
   owner?: OwnerKey;
   owner_ambiguous_resolved?: boolean;
 };
