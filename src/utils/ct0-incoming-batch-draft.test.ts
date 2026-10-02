@@ -6,6 +6,7 @@ import {
   buildInitialCopByPackageKey,
   buildTransitLotPayloadFromDraft,
   purchaseDateFromPaidAt,
+  resolveComplementosDraftTcgdex,
   resolveCt0BatchDraftTcgdex,
   suggestedCopForDraft,
 } from './ct0-incoming-batch-draft';
@@ -427,6 +428,70 @@ describe('ct0-incoming-batch-draft', () => {
     const resolved = await resolveCt0BatchDraftTcgdex(drafts, resolve);
     expect(resolved[0].status).toBe('ready');
     expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolveCt0BatchDraftTcgdex conserva el orden de líneas aunque las respuestas lleguen desordenadas', async () => {
+    const paidAt = '2026-05-31T10:00:00.000Z';
+    const drafts = buildCt0IncomingBatchDrafts({
+      ct0Items: [1, 2, 3].map((n) =>
+        ct0Item({
+          id: 30 + n,
+          paid_at: paidAt,
+          name: `Card ${n}`,
+          quantity: { pending: 1 },
+          properties: { collector_number: String(n), pokemon_language: 'en' },
+        }),
+      ),
+    });
+    const before = drafts[0].lines.map((l) => l.lineKey);
+
+    const resolve = vi.fn(async ({ collectorNumber }: { collectorNumber: string | null }) => {
+      await new Promise((r) => setTimeout(r, 10 - Number(collectorNumber) * 3));
+      return {
+        tcgdex_card_id: collectorNumber === '2' ? null : `sv8-${collectorNumber}`,
+        tcgdex_set_id: 'sv8',
+        locale: 'en',
+        error: collectorNumber === '2' ? 'no match' : null,
+      };
+    });
+
+    const [draft] = await resolveCt0BatchDraftTcgdex(drafts, resolve);
+    expect(draft.lines.map((l) => l.lineKey)).toEqual(before);
+    expect(draft.status).toBe('homolog_error');
+    expect(draft.unresolvedCount).toBe(1);
+    const byNumber = Object.fromEntries(draft.lines.map((l) => [l.collectorNumber, l]));
+    expect(byNumber['1'].tcgdexCardId).toBe('sv8-1');
+    expect(byNumber['2'].tcgdexError).toBe('no match');
+    expect(byNumber['3'].tcgdexCardId).toBe('sv8-3');
+  });
+
+  it('resolveComplementosDraftTcgdex conserva orden, mapea errores y no repite claves', async () => {
+    const base = {
+      productId: 1,
+      blueprintId: 100,
+      expansion: 'Surging Sparks',
+      language: 'en',
+      qty: 1,
+      rareza: null,
+    };
+    const lines = [
+      { ...base, lineKey: 'comp-1', ct0ItemId: 1, name: 'A', collectorNumber: '1' },
+      { ...base, lineKey: 'comp-2', ct0ItemId: 2, name: 'B', collectorNumber: '2' },
+      { ...base, lineKey: 'comp-3', ct0ItemId: 3, name: 'A bis', collectorNumber: '1' },
+    ];
+    const resolve = vi.fn(async ({ collectorNumber }: { collectorNumber: string | null }) => ({
+      tcgdex_card_id: collectorNumber === '2' ? null : 'sv8-1',
+      tcgdex_set_id: 'sv8',
+      locale: 'en',
+      error: null,
+    }));
+
+    const out = await resolveComplementosDraftTcgdex(lines, resolve);
+    expect(out.map((l) => l.lineKey)).toEqual(['comp-1', 'comp-2', 'comp-3']);
+    expect(out[0].tcgdexCardId).toBe('sv8-1');
+    expect(out[1]).toMatchObject({ tcgdexCardId: null, tcgdexError: 'sin homologación TCGdex' });
+    expect(out[2].tcgdexCardId).toBe('sv8-1');
+    expect(resolve).toHaveBeenCalledTimes(2);
   });
 
   it('aplica COP legacy con fechas desfasadas por zona horaria', () => {

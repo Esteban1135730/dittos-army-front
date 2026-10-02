@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Alert,
@@ -16,8 +16,9 @@ import {
 } from "@mui/material";
 import { formatCOP } from "../../utils/convert";
 import { apiUrl } from "../../config/api";
-import DashboardCharts from "./dashboard-charts";
 import { normalizeDashboardOverview, profitTone, stateLabel } from "./dashboard-utils";
+
+const DashboardCharts = lazy(() => import("./dashboard-charts"));
 
 const QUICK_LINKS = [
   { to: "/stock", label: "Stock" },
@@ -307,7 +308,9 @@ export default function Home() {
 
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 12, lg: 8 }}>
-              <DashboardCharts data={data} />
+              <Suspense fallback={<Skeleton variant="rounded" height={320} />}>
+                <DashboardCharts data={data} />
+              </Suspense>
             </Grid>
             <Grid size={{ xs: 12, lg: 4 }}>
               <Stack spacing={2.5}>

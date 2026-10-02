@@ -1,6 +1,7 @@
-import { jsPDF } from "jspdf";
-import { autoTable } from "jspdf-autotable";
+import type { jsPDF } from "jspdf";
 import { fetchCartImageDataUrl } from "../../utils/cardtrader-cart-image";
+import { mapWithConcurrency } from "../../utils/concurrency";
+import { loadJsPdfWithAutoTable } from "../../utils/pdf-libs";
 import { formatCOP } from "../../utils/convert";
 import {
   buildGruposPdfFooterContacts,
@@ -253,13 +254,16 @@ export async function downloadTransitCatalogPdf(opts: {
   const imageByLine = new Map<TransitCatalogPdfLine, string | null>();
   let imageFailures = 0;
 
-  for (const line of pdfLines) {
-    const dataUrl = line.imageUrl?.trim()
-      ? await fetchCartImageDataUrl(line.imageUrl, opts.apiBase)
-      : null;
+  const dataUrls = await mapWithConcurrency(pdfLines, (line) =>
+    line.imageUrl?.trim()
+      ? fetchCartImageDataUrl(line.imageUrl, opts.apiBase)
+      : Promise.resolve(null),
+  );
+  pdfLines.forEach((line, i) => {
+    const dataUrl = dataUrls[i];
     imageByLine.set(line, dataUrl);
     if (!dataUrl) imageFailures += 1;
-  }
+  });
 
   const imageAtRow: Array<string | null | "skip"> = tableRows.map((row) =>
     row.kind === "group" ? "skip" : (imageByLine.get(row.line) ?? null),
@@ -272,7 +276,8 @@ export async function downloadTransitCatalogPdf(opts: {
     throw err instanceof Error ? err : new Error("No se pudo cargar el logo de El Nido TCG.");
   }
 
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" }) as JsPdfWithAutoTable;
+  const { jsPDF: JsPdf, autoTable } = await loadJsPdfWithAutoTable();
+  const doc = new JsPdf({ unit: "mm", format: "a4", orientation: "portrait" }) as JsPdfWithAutoTable;
   const margin = 14;
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();

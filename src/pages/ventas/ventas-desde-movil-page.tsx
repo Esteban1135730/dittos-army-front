@@ -72,13 +72,14 @@ export default function VentasDesdeMovilPage() {
     queryKey: QUERY_KEY,
     queryFn: listMobilePendingSales,
     refetchInterval: 4_000,
-    refetchOnWindowFocus: true,
   });
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-    await queryClient.invalidateQueries({ queryKey: ["stock"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["stock"] }),
+    ]);
   };
 
   const acceptMut = useMutation({

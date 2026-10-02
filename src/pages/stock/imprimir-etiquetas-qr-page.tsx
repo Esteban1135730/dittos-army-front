@@ -19,7 +19,11 @@ import {
   isQuantityProduct,
   resolveStockImageUrl,
 } from "../../constants/bulk-product";
-import { filterStockVisibleInGrid } from "../../utils/stock-grid-visible";
+import {
+  STOCK_LIST_QUERY_KEY,
+  fetchStockListRaw,
+  selectStockVisibleInGrid,
+} from "../../api/list-queries";
 import {
   downloadOpenLabelQrLabelsCsv,
   openStockQrLabelsPrintWindow,
@@ -39,6 +43,8 @@ import {
   parseStockOwnersQuery,
 } from "../../modules/receipt-wizard";
 import type { OwnerKey } from "../../config/owners";
+
+const EMPTY_STOCK: StockListItem[] = [];
 
 function rarezaLabel(item: StockListItem): string | null {
   let rz =
@@ -150,16 +156,10 @@ export default function ImprimirEtiquetasQrPage() {
 
   const fromReceipt = receiptStockIds.length > 0;
 
-  const { data: stock = [], isLoading: loadingStock } = useQuery<
-    StockListItem[]
-  >({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(apiUrl("/stock"));
-      return Array.isArray(res.data)
-        ? filterStockVisibleInGrid(res.data)
-        : [];
-    },
+  const { data: stock = EMPTY_STOCK, isLoading: loadingStock } = useQuery({
+    queryKey: STOCK_LIST_QUERY_KEY,
+    queryFn: () => fetchStockListRaw(),
+    select: selectStockVisibleInGrid,
     // Tras create-tanda / PVP del wizard, no reutilizar caché obsoleta.
     refetchOnMount: fromReceipt ? "always" : true,
   });
@@ -178,12 +178,8 @@ export default function ImprimirEtiquetasQrPage() {
   const receiptStockQueries = useQueries({
     queries: receiptOwnerKeys.map((owner) => ({
       queryKey: ["stock", owner] as const,
-      queryFn: async () => {
-        const res = await axios.get(apiUrl("/stock"), { ownerOverride: owner });
-        return Array.isArray(res.data)
-          ? filterStockVisibleInGrid(res.data)
-          : [];
-      },
+      queryFn: () => fetchStockListRaw(owner),
+      select: selectStockVisibleInGrid,
       enabled: fromReceipt,
       refetchOnMount: "always" as const,
     })),
@@ -609,6 +605,8 @@ export default function ImprimirEtiquetasQrPage() {
                       <img
                         src={resolveStockImageUrl(item.card_id, item.image_url)}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-12 h-16 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
                       />
                     ) : (
@@ -687,6 +685,8 @@ export default function ImprimirEtiquetasQrPage() {
                       <img
                         src={resolveStockImageUrl(item.card_id, item.image_url)}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-20 h-28 md:w-24 md:h-32 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0 shadow-sm"
                       />
                     ) : (
@@ -809,6 +809,8 @@ export default function ImprimirEtiquetasQrPage() {
                       <img
                         src={imageUrl}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-16 h-24 md:w-20 md:h-28 object-contain rounded-md bg-white border border-gray-200 flex-shrink-0"
                       />
                     ) : (

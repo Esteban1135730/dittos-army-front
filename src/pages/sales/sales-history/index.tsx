@@ -13,6 +13,9 @@ import {
 } from "../../../theme/panel-density";
 import { LoadingScreen } from "../../../components/loading";
 import { isZeroProfitCardId } from "../../../constants/bulk-product";
+import { useEventCallback } from "../../../utils/use-event-callback";
+
+const EMPTY_HISTORY: SaleHistoryItem[] = [];
 
 type SaleHistoryItem = {
   _id: string;
@@ -66,8 +69,10 @@ export default function SalesHistory() {
     try {
       setVolviendoId(saleId);
       await axios.post(`${API_BASE}/sales/reopen/${saleId}`);
-      await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
-      await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sales-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+      ]);
     } catch (err: unknown) {
       const msg =
         (err as any)?.response?.data?.message ?? "No se pudo mover la venta a ventas actuales.";
@@ -78,7 +83,7 @@ export default function SalesHistory() {
   };
 
   const {
-    data: sales = [],
+    data: sales = EMPTY_HISTORY,
     isLoading,
     error,
   } = useQuery<SaleHistoryItem[]>({
@@ -104,7 +109,9 @@ export default function SalesHistory() {
     });
   }, [ventasValidas, busqueda]);
 
-  const columns: GridColDef[] = [
+  const onVolverAVentasActuales = useEventCallback(handleVolverAVentasActuales);
+
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: "image_url",
       headerName: "Imagen",
@@ -272,7 +279,7 @@ export default function SalesHistory() {
       renderCell: (params) => (
         <button
           type="button"
-          onClick={() => handleVolverAVentasActuales(params.row._id)}
+          onClick={() => onVolverAVentasActuales(params.row._id)}
           disabled={volviendoId === params.row._id}
           className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
@@ -280,7 +287,7 @@ export default function SalesHistory() {
         </button>
       ),
     },
-  ];
+  ], [convert, onVolverAVentasActuales, volviendoId]);
 
   if (isLoading)
     return <LoadingScreen message="Cargando histórico de ventas…" />;

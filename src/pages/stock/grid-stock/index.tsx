@@ -12,7 +12,7 @@ import {
   Snackbar,
 } from "@mui/material";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { exportToPDF, exportCatalogToPDF } from "../../../utils/pdf";
 import { useExchangeRates } from "../../../utils/tasa";
@@ -46,21 +46,56 @@ import {
   openStockQrLabelsPrintWindow,
   type StockQrExportRow,
 } from "../../../modules/stock-barcode";
-import { filterStockVisibleInGrid } from "../../../utils/stock-grid-visible";
 import {
   mapReservedClientByStockId,
   stockReservationStateLabel,
 } from "../../../utils/reserved-client-by-stock";
 import {
-  API_CLIENT,
   API_RESERVA,
   type ClientItem,
   type ReservaItem,
 } from "../../clientes/cliente-types";
-import { normalizeClientList } from "../../clientes/cliente-id";
+import {
+  CLIENTES_QUERY_KEY,
+  STOCK_LIST_QUERY_KEY,
+  fetchClientesRaw,
+  fetchStockListRaw,
+  selectClientList,
+  selectStockVisibleInGrid,
+} from "../../../api/list-queries";
 import { useOwner } from "../../../modules/owner";
+import { useEventCallback } from "../../../utils/use-event-callback";
 
 export type StockItem = StockListItem;
+
+const EMPTY_STOCK: StockItem[] = [];
+const EMPTY_RESERVAS: ReservaItem[] = [];
+const EMPTY_CLIENTES: ClientItem[] = [];
+
+const getStockRowId = (row: StockItem) => row._id;
+
+const getStockRowClassName = (params: { row: StockItem }) => {
+  const tienePvp = params.row.pvp && params.row.pvp > 0;
+  if (params.row.card_state === "propiedad") {
+    return "propiedad-row";
+  }
+  return !tienePvp ? "sin-pvp-row" : "";
+};
+
+const STOCK_GRID_SX = {
+  "& .sin-pvp-row": {
+    backgroundColor: "#fee2e2 !important", // rojo claro
+    "&:hover": {
+      backgroundColor: "#fecaca !important", // rojo más oscuro al hover
+    },
+  },
+  "& .propiedad-row": {
+    backgroundColor: "#ffe4e6 !important",
+    "&:hover": {
+      backgroundColor: "#fecdd3 !important",
+    },
+  },
+} as const;
 
 function rarezaFromListRow(item: StockListItem): string | null {
   let rz =
@@ -188,14 +223,18 @@ export default function StockGrid() {
     severity: "success" | "error";
   }>({ open: false, message: "", severity: "success" });
 
-  const toast = (message: string, severity: "success" | "error") =>
-    setSnackbar({ open: true, message, severity });
+  const toast = useCallback(
+    (message: string, severity: "success" | "error") =>
+      setSnackbar({ open: true, message, severity }),
+    [],
+  );
+  const busquedaDiferida = useDeferredValue(busqueda);
 
   useEffect(() => {
     void ensureBulkProduct().then((r) => {
       if (!r.ok) {
         toast(r.error ?? "No se pudo asegurar el SKU bulk", "error");
-      } else {
+      } else if (r.data?.created) {
         void queryClient.invalidateQueries({ queryKey: ["stock"] });
       }
     });
@@ -204,20 +243,16 @@ export default function StockGrid() {
   }, []);
 
   const {
-    data: stock = [],
+    data: stock = EMPTY_STOCK,
     isLoading,
     error,
-  } = useQuery<StockItem[]>({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(apiUrl("/stock"));
-      return Array.isArray(res.data)
-        ? filterStockVisibleInGrid(res.data)
-        : [];
-    },
+  } = useQuery({
+    queryKey: STOCK_LIST_QUERY_KEY,
+    queryFn: () => fetchStockListRaw(),
+    select: selectStockVisibleInGrid,
   });
 
-  const { data: reservas = [] } = useQuery<ReservaItem[]>({
+  const { data: reservas = EMPTY_RESERVAS } = useQuery<ReservaItem[]>({
     queryKey: ["reservas"],
     queryFn: async () => {
       const res = await axios.get(API_RESERVA);
@@ -225,12 +260,10 @@ export default function StockGrid() {
     },
   });
 
-  const { data: clientes = [] } = useQuery<ClientItem[]>({
-    queryKey: ["clientes"],
-    queryFn: async () => {
-      const res = await axios.get(API_CLIENT);
-      return normalizeClientList(res.data);
-    },
+  const { data: clientes = EMPTY_CLIENTES } = useQuery({
+    queryKey: CLIENTES_QUERY_KEY,
+    queryFn: fetchClientesRaw,
+    select: selectClientList,
   });
 
   const reservedClientByStockId = useMemo(
@@ -328,8 +361,8 @@ export default function StockGrid() {
   // Filtrar stock por búsqueda y por tags (AND entre tags seleccionados, o solo sin tags)
   const stockFiltrado = useMemo(() => {
     let rows = stockOrdenado;
-    if (busqueda.trim()) {
-      const terminoBusqueda = busqueda.toLowerCase().trim();
+    if (busquedaDiferida.trim()) {
+      const terminoBusqueda = busquedaDiferida.toLowerCase().trim();
       rows = rows.filter((item) =>
         (item.card_name ?? "").toLowerCase().includes(terminoBusqueda)
       );
@@ -346,7 +379,7 @@ export default function StockGrid() {
       });
     }
     return rows;
-  }, [stockOrdenado, busqueda, filtroTags, filtroSinTags]);
+  }, [stockOrdenado, busquedaDiferida, filtroTags, filtroSinTags]);
 
   // Contar cartas únicas sin PVP (agrupadas por card_id)
   const cartasSinPvp = useMemo(() => {
@@ -544,7 +577,13 @@ export default function StockGrid() {
     }
   };
 
-  const columns: GridColDef[] = [
+  const onModificar = useEventCallback(handleModificar);
+  const onMarcarPropiedad = useEventCallback(handleMarcarPropiedad);
+  const onVender = useEventCallback(handleAbrirModalVenta);
+  const onEliminar = useEventCallback(handleOpenDeleteDialog);
+  const onToggleRowTag = useEventCallback(handleToggleRowTag);
+
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: "image_url",
       headerName: "Imagen",
@@ -588,10 +627,10 @@ export default function StockGrid() {
         <StockRowActions
           row={params.row as StockItem}
           marcandoPropiedad={marcandoPropiedad}
-          onModificar={handleModificar}
-          onMarcarPropiedad={handleMarcarPropiedad}
-          onVender={handleAbrirModalVenta}
-          onEliminar={handleOpenDeleteDialog}
+          onModificar={onModificar}
+          onMarcarPropiedad={onMarcarPropiedad}
+          onVender={onVender}
+          onEliminar={onEliminar}
         />
       ),
     },
@@ -657,7 +696,7 @@ export default function StockGrid() {
                   type="checkbox"
                   checked={tags.includes(tagId)}
                   disabled={busy}
-                  onChange={() => void handleToggleRowTag(row, tagId)}
+                  onChange={() => void onToggleRowTag(row, tagId)}
                   className="rounded border-gray-400"
                 />
                 {STOCK_TAG_LABEL[tagId]}
@@ -795,7 +834,20 @@ export default function StockGrid() {
       },
       width: 200,
     },
-  ];
+  ], [
+    convert,
+    marcandoPropiedad,
+    onEliminar,
+    onMarcarPropiedad,
+    onModificar,
+    onToggleRowTag,
+    onVender,
+    pvpSavingRowId,
+    queryClient,
+    reservedClientByStockId,
+    tagSavingRowId,
+    toast,
+  ]);
 
   const [exportando, setExportando] = useState(false);
   const [exportandoBarcode, setExportandoBarcode] = useState(false);
@@ -834,7 +886,7 @@ export default function StockGrid() {
   };
 
   const hayFiltrosVisibles =
-    busqueda.trim().length > 0 || filtroTags.length > 0 || filtroSinTags;
+    busquedaDiferida.trim().length > 0 || filtroTags.length > 0 || filtroSinTags;
 
   const handleExportarQr = async () => {
     try {
@@ -1176,7 +1228,7 @@ export default function StockGrid() {
             <DataGrid
               rows={stockFiltrado}
               columns={columns}
-              getRowId={(row) => row._id}
+              getRowId={getStockRowId}
               pageSizeOptions={[20, 30, 40]}
               rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
               density={PANEL_DATAGRID_DENSITY}
@@ -1188,27 +1240,8 @@ export default function StockGrid() {
               pagination
               disableRowSelectionOnClick
               autosizeOptions={{ includeHeaders: true }}
-              getRowClassName={(params) => {
-                const tienePvp = params.row.pvp && params.row.pvp > 0;
-                if (params.row.card_state === "propiedad") {
-                  return "propiedad-row";
-                }
-                return !tienePvp ? "sin-pvp-row" : "";
-              }}
-              sx={{
-                "& .sin-pvp-row": {
-                  backgroundColor: "#fee2e2 !important", // rojo claro
-                  "&:hover": {
-                    backgroundColor: "#fecaca !important", // rojo más oscuro al hover
-                  },
-                },
-                "& .propiedad-row": {
-                  backgroundColor: "#ffe4e6 !important",
-                  "&:hover": {
-                    backgroundColor: "#fecdd3 !important",
-                  },
-                },
-              }}
+              getRowClassName={getStockRowClassName}
+              sx={STOCK_GRID_SX}
             />
           </div>
         </div>

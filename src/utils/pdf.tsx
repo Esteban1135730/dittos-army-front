@@ -1,13 +1,33 @@
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import type { StockItem } from "../pages/stock/grid-stock";
 import { formatCOP } from "./convert";
+
+async function loadPdfLibs() {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  return { jsPDF, html2canvas };
+}
+
+async function loadPdfLibsOrNotify(onFinish?: () => void) {
+  try {
+    return await loadPdfLibs();
+  } catch (err) {
+    console.error("No se pudo cargar el generador de PDF", err);
+    alert("No se pudo cargar el generador de PDF. Recarga la página e intenta de nuevo.");
+    if (onFinish) onFinish();
+    return null;
+  }
+}
 
 export const exportToPDF = async (
   stock: StockItem[],
   convertToCOP: (euros: number) => number | null,
   onFinish?: () => void
 ) => {
+  const libs = await loadPdfLibsOrNotify(onFinish);
+  if (!libs) return;
+  const { jsPDF, html2canvas } = libs;
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
   const cardWidth = 130;
@@ -135,6 +155,9 @@ export const exportCatalogToPDF = async (
     return;
   }
 
+  const libs = await loadPdfLibsOrNotify(onFinish);
+  if (!libs) return;
+  const { jsPDF, html2canvas } = libs;
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
   const cardWidth = 130;

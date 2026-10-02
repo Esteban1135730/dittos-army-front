@@ -119,16 +119,12 @@ export function useStockReviewSession(sessionId: string | undefined) {
 export function useStockReviewMutations() {
   const queryClient = useQueryClient();
 
-  const invalidate = async (sessionId?: string) => {
-    await queryClient.invalidateQueries({ queryKey: ["stock-review"] });
-    if (sessionId) {
-      await queryClient.invalidateQueries({
-        queryKey: ["stock-review", "session", sessionId],
-      });
-    }
-    await queryClient.invalidateQueries({ queryKey: ["stock"] });
-    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-    await queryClient.invalidateQueries({ queryKey: ["stock", "perdidas"] });
+  const invalidate = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["stock-review"] }),
+      queryClient.invalidateQueries({ queryKey: ["stock"] }),
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+    ]);
   };
 
   const createSession = useMutation({

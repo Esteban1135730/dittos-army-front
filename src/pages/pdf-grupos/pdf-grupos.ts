@@ -1,4 +1,5 @@
-import { jsPDF } from "jspdf";
+import type { jsPDF } from "jspdf";
+import { loadJsPdf } from "../../utils/pdf-libs";
 
 /** Página carta (US Letter) en mm: 8.5 × 11 in. */
 export const GRUPOS_PDF_FORMAT = "letter" as const;
@@ -419,8 +420,9 @@ export async function downloadGruposPdf(opts: {
     throw new Error("No se pudieron preparar los iconos del pie.");
   }
 
+  const JsPdf = await loadJsPdf();
   try {
-    const doc = new jsPDF({
+    const doc = new JsPdf({
       unit: "mm",
       format: GRUPOS_PDF_FORMAT,
       orientation: "portrait",

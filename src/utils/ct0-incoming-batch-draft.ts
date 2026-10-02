@@ -24,6 +24,7 @@ import {
 } from './cardtrader-order-item-map';
 import { operationalRarezaLabel } from '../constants/item-rareza';
 import { OWNERS_CONFIG, type OwnerKey } from '../config/owners';
+import { mapWithConcurrency } from './concurrency';
 
 export type Ct0BatchDraftLine = {
   lineKey: string;
@@ -379,9 +380,9 @@ export async function resolveCt0BatchDraftTcgdex(
   drafts: Ct0BatchDraft[],
   resolveTcgdex: TcgdexResolveFn,
 ): Promise<Ct0BatchDraft[]> {
-  const cache = new Map<string, TcgdexResolveResponse>();
+  const cache = new Map<string, Promise<TcgdexResolveResponse>>();
 
-  const resolveOne = async (
+  const resolveOne = (
     expansion: string,
     collectorNumber: string | null,
     language: string,
@@ -395,16 +396,32 @@ export async function resolveCt0BatchDraftTcgdex(
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const result = await resolveTcgdex({
+    const pending = resolveTcgdex({
       expansion,
       collectorNumber,
       language,
       blueprintId,
       name,
     });
-    cache.set(cacheKey, result);
-    return result;
+    cache.set(cacheKey, pending);
+    return pending;
   };
+
+  const linesToResolve = drafts.flatMap((draft) =>
+    draft.status === 'already_registered' ? [] : draft.lines,
+  );
+  const resolvedList = await mapWithConcurrency(linesToResolve, (line) =>
+    resolveOne(
+      line.expansion,
+      line.collectorNumber,
+      line.language,
+      line.blueprintId,
+      line.name,
+    ),
+  );
+  const resolvedByLine = new Map(
+    linesToResolve.map((line, i) => [line, resolvedList[i]] as const),
+  );
 
   const out: Ct0BatchDraft[] = [];
 
@@ -426,13 +443,7 @@ export async function resolveCt0BatchDraftTcgdex(
     let unresolvedCount = 0;
 
     for (const line of draft.lines) {
-      const resolved = await resolveOne(
-        line.expansion,
-        line.collectorNumber,
-        line.language,
-        line.blueprintId,
-        line.name,
-      );
+      const resolved = resolvedByLine.get(line)!;
       if (resolved.tcgdex_card_id) {
         lines.push({
           ...line,
@@ -508,40 +519,38 @@ export async function resolveComplementosDraftTcgdex(
   lines: Omit<ComplementosDraftLine, 'tcgdexCardId' | 'tcgdexError'>[],
   resolveTcgdex: TcgdexResolveFn,
 ): Promise<ComplementosDraftLine[]> {
-  const cache = new Map<string, TcgdexResolveResponse>();
-  const out: ComplementosDraftLine[] = [];
+  const cache = new Map<string, Promise<TcgdexResolveResponse>>();
 
-  for (const line of lines) {
+  return mapWithConcurrency(lines, async (line): Promise<ComplementosDraftLine> => {
     const identity = line.collectorNumber?.trim()
       ? line.collectorNumber
       : line.name.trim().toLowerCase();
     const cacheKey = `${line.language.toLowerCase()}|${line.expansion.toLowerCase()}|${identity}|${line.blueprintId ?? ''}`;
-    let resolved = cache.get(cacheKey);
-    if (!resolved) {
-      resolved = await resolveTcgdex({
+    let pending = cache.get(cacheKey);
+    if (!pending) {
+      pending = resolveTcgdex({
         expansion: line.expansion,
         collectorNumber: line.collectorNumber,
         language: line.language,
         blueprintId: line.blueprintId,
         name: line.name,
       });
-      cache.set(cacheKey, resolved);
+      cache.set(cacheKey, pending);
     }
+    const resolved = await pending;
     if (resolved.tcgdex_card_id) {
-      out.push({
+      return {
         ...line,
         tcgdexCardId: resolved.tcgdex_card_id,
         tcgdexError: null,
-      });
-    } else {
-      out.push({
-        ...line,
-        tcgdexCardId: null,
-        tcgdexError: resolved.error ?? 'sin homologación TCGdex',
-      });
+      };
     }
-  }
-  return out;
+    return {
+      ...line,
+      tcgdexCardId: null,
+      tcgdexError: resolved.error ?? 'sin homologación TCGdex',
+    };
+  });
 }
 
 export function buildComplementosTransitLotPayload(

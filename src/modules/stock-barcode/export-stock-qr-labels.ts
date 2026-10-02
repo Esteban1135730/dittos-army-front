@@ -1,4 +1,3 @@
-import QRCode from "qrcode";
 import type { StockQrExportRow } from "./types";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { formatCOP } from "../../utils/convert";
@@ -15,6 +14,10 @@ const ROWS = 12;
 export const QR_LABELS_COLS = COLS;
 export const QR_LABELS_ROWS = ROWS;
 export const QR_LABELS_PER_PAGE = COLS * ROWS;
+
+async function loadQrCode() {
+  return (await import("qrcode")).default;
+}
 
 /** Una línea corta para etiqueta pequeña. */
 function shortCardName(name: string, max = 24): string {
@@ -58,6 +61,7 @@ export async function openStockQrLabelsPrintWindow(
     throw new Error("No hay líneas de stock para exportar.");
   }
 
+  const QRCode = await loadQrCode();
   const cards = await Promise.all(
     rows.map(async (row) => ({
       ...row,
@@ -241,6 +245,7 @@ export async function openStockQrLabelsThermalPrintWindow(
   /** QR compacto: deja ancho al texto; alto 30 mm. */
   const qrMm = 20;
 
+  const QRCode = await loadQrCode();
   const cards = await Promise.all(
     rows.map(async (row) => ({
       ...row,

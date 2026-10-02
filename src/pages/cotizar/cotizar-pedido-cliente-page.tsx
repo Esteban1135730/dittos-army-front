@@ -858,6 +858,7 @@ export default function CotizarPedidoClientePage() {
     enabled: lines.length > 0,
 
     staleTime: 15_000,
+    refetchOnWindowFocus: true,
 
     queryFn: async () => {
 

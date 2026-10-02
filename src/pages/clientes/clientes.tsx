@@ -27,20 +27,26 @@ import ImportWhatsAppFromListDialog from "./import-whatsapp-from-list-dialog";
 import {
   ALERTA_HORAS_AMARILLO,
   ALERTA_HORAS_ROJO,
-  API_CLIENT,
   API_RESERVA,
-  API_STOCK,
   type ClientItem,
   type ReservaIncomingItem,
   type ReservaItem,
 } from "./cliente-types";
+import {
+  CLIENTES_QUERY_KEY,
+  STOCK_LIST_QUERY_KEY,
+  fetchClientesRaw,
+  fetchStockListRaw,
+  selectClientList,
+} from "../../api/list-queries";
+import { useEventCallback } from "../../utils/use-event-callback";
 import { abrirWhatsAppConTexto, buildWhatsAppPedidoText } from "./mensaje-reserva-pedido";
 import { aggregateReservasTotales, reservaLineQuantity } from "./clientes-resumen-pedidos";
 import { formatCOP } from "../../utils/convert";
 import { useExchangeRates } from "../../utils/tasa";
 import { findPedidoAbierto, type PedidoItem } from "./pedido-types";
 import { descripcionEntrega, formatFechaTentativa, pedidoStatusLabel } from "./pedido-entrega-label";
-import { clientItemId, normalizeClientList } from "./cliente-id";
+import { clientItemId } from "./cliente-id";
 import { fetchPedidosByClient } from "./fetch-pedidos";
 import { entregaUrgenciaLabel } from "./pedido-ui-utils";
 import {
@@ -58,6 +64,11 @@ import {
 export type { ClientItem } from "./cliente-types";
 
 type ListFilter = "todos" | "con_pedido" | "con_reserva" | "urgentes";
+
+const EMPTY_CLIENTES: ClientItem[] = [];
+const EMPTY_STOCK: StockListItem[] = [];
+const getClientRowId = (row: ClientItem) => clientItemId(row);
+const getAutoRowHeight = () => "auto" as const;
 
 export default function ClientesPage() {
   const navigate = useNavigate();
@@ -79,12 +90,10 @@ export default function ClientesPage() {
   const [busquedaNombre, setBusquedaNombre] = useState("");
   const [contactoLoadingId, setContactoLoadingId] = useState<string | null>(null);
 
-  const { data: clientes = [], isLoading } = useQuery<ClientItem[]>({
-    queryKey: ["clientes"],
-    queryFn: async () => {
-      const res = await axios.get(API_CLIENT);
-      return normalizeClientList(res.data);
-    },
+  const { data: clientes = EMPTY_CLIENTES, isLoading } = useQuery({
+    queryKey: CLIENTES_QUERY_KEY,
+    queryFn: fetchClientesRaw,
+    select: selectClientList,
   });
 
   const { data: reservas = [] } = useQuery<ReservaItem[]>({
@@ -103,12 +112,9 @@ export default function ClientesPage() {
     },
   });
 
-  const { data: stockRaw = [] } = useQuery<StockListItem[]>({
-    queryKey: ["stock"],
-    queryFn: async () => {
-      const res = await axios.get(API_STOCK);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const { data: stockRaw = EMPTY_STOCK } = useQuery({
+    queryKey: STOCK_LIST_QUERY_KEY,
+    queryFn: () => fetchStockListRaw(),
   });
 
   const stockMap = useMemo(() => {
@@ -318,7 +324,11 @@ export default function ClientesPage() {
     navigate(`/clientes/${clientItemId(cliente)}`);
   };
 
-  const columns: GridColDef[] = [
+  const onEnviarResumenWhatsApp = useEventCallback(enviarResumenWhatsApp);
+  const onIrReservar = useEventCallback(irReservar);
+  const onIrReservaCamino = useEventCallback(irReservaCamino);
+
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: "principal",
       headerName: "Cliente",
@@ -480,7 +490,7 @@ export default function ClientesPage() {
               color="success"
               size="small"
               disabled={!tieneWa || busy}
-              onClick={(e) => enviarResumenWhatsApp(c, e)}
+              onClick={(e) => onEnviarResumenWhatsApp(c, e)}
               sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
             >
               {busy ? "Enviando…" : "Enviar resumen"}
@@ -535,7 +545,7 @@ export default function ClientesPage() {
             <Button
               variant="outlined"
               size="small"
-              onClick={(e) => irReservar(c, e)}
+              onClick={(e) => onIrReservar(c, e)}
               sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
             >
               Pedido
@@ -544,7 +554,7 @@ export default function ClientesPage() {
               variant="outlined"
               size="small"
               color="info"
-              onClick={(e) => irReservaCamino(c, e)}
+              onClick={(e) => onIrReservaCamino(c, e)}
               sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
             >
               Reserva
@@ -553,11 +563,20 @@ export default function ClientesPage() {
         );
       },
     },
-  ];
+  ], [
+    alertLevelPorCliente,
+    contactoLoadingId,
+    incomingUnitsPorCliente,
+    onEnviarResumenWhatsApp,
+    onIrReservaCamino,
+    onIrReservar,
+    pedidoAbiertoPorCliente,
+    reservasPorCliente,
+  ]);
 
-  const onRowClick = (params: GridRowParams<ClientItem>) => {
+  const onRowClick = useEventCallback((params: GridRowParams<ClientItem>) => {
     irDetalle(params.row);
-  };
+  });
 
   if (isLoading) {
     return <LoadingScreen message="Cargando clientes…" />;
@@ -672,7 +691,7 @@ export default function ClientesPage() {
             <DataGrid
               rows={sortedClientes}
               columns={columns}
-              getRowId={(row) => clientItemId(row)}
+              getRowId={getClientRowId}
               getRowClassName={getRowClassName}
               onRowClick={onRowClick}
               pageSizeOptions={[15, 25, 50, 100]}
@@ -682,7 +701,7 @@ export default function ClientesPage() {
               disableRowSelectionOnClick
               autoHeight
               rowHeight={PANEL_DATAGRID_ROW_HEIGHT}
-              getRowHeight={() => "auto"}
+              getRowHeight={getAutoRowHeight}
               density={PANEL_DATAGRID_DENSITY}
               sx={clientesDataGridSx}
             />
@@ -702,10 +721,12 @@ export default function ClientesPage() {
         onClose={() => setImportWhatsAppOpen(false)}
         clientes={clientes}
         onImported={async (summary) => {
-          await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-          await queryClient.invalidateQueries({ queryKey: ["pedidos"] });
-          await queryClient.invalidateQueries({ queryKey: ["reservas"] });
-          await queryClient.invalidateQueries({ queryKey: ["stock"] });
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["clientes"] }),
+            queryClient.invalidateQueries({ queryKey: ["pedidos"] }),
+            queryClient.invalidateQueries({ queryKey: ["reservas"] }),
+            queryClient.invalidateQueries({ queryKey: ["stock"] }),
+          ]);
           showSnackbar(summary, "success");
         }}
       />

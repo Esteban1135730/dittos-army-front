@@ -6,7 +6,8 @@ import type { StockListItem } from "../../types/stock";
 import { paginatePedidoLineItems } from "./pedido-print-sheets";
 import { openPedidoTermicaPrintWindow, pedidoTermicaMuestraAbono } from "./pedido-termica-print";
 import { mergePedidoSelection } from "./pedido-print-selection";
-import { API_CLIENT, API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
+import { API_RESERVA, API_STOCK, type ClientItem, type ReservaItem } from "./cliente-types";
+import { CLIENTES_QUERY_KEY, fetchClientesRaw, selectClientList } from "../../api/list-queries";
 import { otherOwner, type OwnerKey } from "../../config/owners";
 import { useOwner } from "../../modules/owner";
 import type { PedidoTermicaLinea } from "./pedido-termica-print";
@@ -32,6 +33,8 @@ type PedidoCard = {
   items: PedidoTermicaLinea[];
   total: number;
 };
+
+const EMPTY_CLIENTES: ClientItem[] = [];
 
 const CARD_WIDTH_MM = 63;
 const CARD_HEIGHT_MM = 88;
@@ -69,12 +72,10 @@ export default function ImprimirPedidosPage() {
     return () => window.removeEventListener("afterprint", clear);
   }, []);
 
-  const { data: clientes = [] } = useQuery<ClientItem[]>({
-    queryKey: ["clientes"],
-    queryFn: async () => {
-      const res = await axios.get(API_CLIENT);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const { data: clientes = EMPTY_CLIENTES } = useQuery({
+    queryKey: CLIENTES_QUERY_KEY,
+    queryFn: fetchClientesRaw,
+    select: selectClientList,
   });
 
   const { data: reservas = [] } = useQuery<ReservaItem[]>({

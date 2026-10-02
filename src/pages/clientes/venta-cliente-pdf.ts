@@ -1,6 +1,7 @@
-import { jsPDF } from "jspdf";
-import { autoTable } from "jspdf-autotable";
+import type { jsPDF } from "jspdf";
 import { formatCOP } from "../../utils/convert";
+import { mapWithConcurrency } from "../../utils/concurrency";
+import { loadJsPdfWithAutoTable } from "../../utils/pdf-libs";
 
 export type VentaPdfStockMeta = {
   card_id: string;
@@ -186,23 +187,13 @@ export async function downloadVentaClientePdf(opts: {
     throw new Error("Sin líneas para el PDF de venta.");
   }
 
-  const imageDataUrls: Array<string | null> = [];
-  let imageFailures = 0;
+  const imageDataUrls: Array<string | null> = await mapWithConcurrency(groups, (group) =>
+    group.image_url?.trim() ? loadImageDataUrl(group.image_url) : Promise.resolve(null),
+  );
+  const imageFailures = imageDataUrls.filter((d) => !d).length;
 
-  for (const group of groups) {
-    if (!group.image_url?.trim()) {
-      imageDataUrls.push(null);
-      imageFailures += 1;
-      continue;
-    }
-    const dataUrl = await loadImageDataUrl(group.image_url);
-    imageDataUrls.push(dataUrl);
-    if (!dataUrl) {
-      imageFailures += 1;
-    }
-  }
-
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" }) as JsPdfWithAutoTable;
+  const { jsPDF: JsPdf, autoTable } = await loadJsPdfWithAutoTable();
+  const doc = new JsPdf({ unit: "mm", format: "a4", orientation: "portrait" }) as JsPdfWithAutoTable;
   const margin = 14;
   const pageWidth = doc.internal.pageSize.getWidth();
   const maxWidth = pageWidth - margin * 2;

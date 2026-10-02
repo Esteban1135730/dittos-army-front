@@ -5,34 +5,40 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import axios from "axios";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { OwnerProvider } from "./modules/owner";
 import { dittoTheme } from "./theme";
 import "./config/api";
+import {
+  createPanelQueryClient,
+  installStaleOnWriteInterceptor,
+  shouldPersistQuery,
+} from "./config/query-client";
 import { currentPanelTcg, panelBasenameForPath, redirectLegacyPanelPath } from "./config/routes";
+
+/** Subir al cambiar qué se persiste: descarta cachés antiguas guardadas en localStorage. */
+const QUERY_PERSIST_VERSION = "v2";
 
 const panelBasename = panelBasenameForPath(window.location.pathname);
 if (panelBasename) {
   const panelTcg = currentPanelTcg();
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: 1000 * 60 * 60 * 24, // 24 hours
-      },
-    },
-  });
+  const queryClient = createPanelQueryClient();
+  installStaleOnWriteInterceptor(queryClient, axios);
 
   const localStoragePersister = createSyncStoragePersister({
     storage: window.localStorage,
     key: `dittos-react-query-${panelTcg}`,
+    throttleTime: 3000,
   });
 
   persistQueryClient({
     queryClient,
     persister: localStoragePersister,
-    buster: panelTcg,
+    buster: `${panelTcg}:${QUERY_PERSIST_VERSION}`,
+    dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
   });
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>

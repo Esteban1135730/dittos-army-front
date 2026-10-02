@@ -34,7 +34,7 @@ import { apiUrl } from "../../config/api";
 import { ensureBulkProduct } from "../../api/ensure-bulk";
 import { resolveStockImageUrl } from "../../constants/bulk-product";
 import { CardThumb } from "../../components/card-thumb";
-import { parseStockQrPayloadMulti } from "../../modules/stock-barcode";
+import { parseStockQrPayloadMulti } from "../../modules/stock-barcode/stock-barcode-payload";
 import {
   cartUnitCount,
   duplicateUnitScanMessage,
@@ -668,8 +668,10 @@ function VentaAsistidaQrContent() {
       const failed = data.results.filter((r) => !r.success);
 
       cart.removeSold(soldIds);
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
-      await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stock"] }),
+        queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+      ]);
 
       if (failed.length === 0) {
         setSellMessage(`Se vendieron ${data.sold_count} unidades.`);

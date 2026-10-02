@@ -1,7 +1,8 @@
-import { jsPDF } from "jspdf";
-import { autoTable } from "jspdf-autotable";
+import type { jsPDF } from "jspdf";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
 import { fetchCartImageDataUrl } from "../../utils/cardtrader-cart-image";
+import { mapWithConcurrency } from "../../utils/concurrency";
+import { loadJsPdfWithAutoTable } from "../../utils/pdf-libs";
 
 /** Campos mínimos de una unidad sent / tránsito para el PDF (sin datos sensibles). */
 export type SentUnitsPdfSource = {
@@ -225,20 +226,17 @@ export async function exportSentUnitsByBlueprintToPdf(
   }
 
   const apiBase = opts?.apiBase?.trim() || "";
-  const imageDataUrls: Array<string | null> = [];
-  let imageFailures = 0;
-
-  for (const row of rows) {
-    const dataUrl = apiBase
-      ? await resolveSentUnitImageDataUrl(row.imageUrl, apiBase)
+  const imageDataUrls: Array<string | null> = await mapWithConcurrency(rows, async (row) =>
+    apiBase
+      ? resolveSentUnitImageDataUrl(row.imageUrl, apiBase)
       : row.imageUrl?.startsWith("data:")
         ? row.imageUrl
-        : null;
-    imageDataUrls.push(dataUrl);
-    if (!dataUrl) imageFailures += 1;
-  }
+        : null,
+  );
+  const imageFailures = imageDataUrls.filter((d) => !d).length;
 
-  const doc = new jsPDF({
+  const { jsPDF: JsPdf, autoTable } = await loadJsPdfWithAutoTable();
+  const doc = new JsPdf({
     unit: "mm",
     format: "a4",
     orientation: "portrait",
