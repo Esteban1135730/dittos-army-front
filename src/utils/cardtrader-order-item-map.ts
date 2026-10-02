@@ -12,16 +12,43 @@ function isActiveTruthy(value: unknown): boolean {
   return false;
 }
 
+/** Claves de idioma en properties CardTrader, por juego (orden de prioridad). */
+export const CT_LANGUAGE_KEYS = [
+  'pokemon_language',
+  'yugioh_language',
+  'mtg_language',
+  'onepiece_language',
+  'language',
+  'fab_language',
+] as const;
+
+/** Claves de rareza en properties / fixed_properties CardTrader. */
+export const CT_RARITY_KEYS = [
+  'pokemon_rarity',
+  'yugioh_rarity',
+  'mtg_rarity',
+  'onepiece_rarity',
+  'rarity',
+  'fab_rarity',
+] as const;
+
+export const CT_CONDITION_KEYS = ['condition', 'pokemon_condition'] as const;
+
+/** Primer valor de texto no vacío entre `keys` (recortado), o null. */
+export function pickCtProperty(
+  props: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+): string | null {
+  if (!props) return null;
+  for (const key of keys) {
+    const value = props[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 export function readCtLanguage(props: Record<string, unknown> | undefined): string {
-  const raw =
-    props?.pokemon_language ??
-    props?.yugioh_language ??
-    props?.mtg_language ??
-    props?.language ??
-    props?.fab_language;
-  const s = String(raw ?? '')
-    .trim()
-    .toLowerCase();
+  const s = (pickCtProperty(props, CT_LANGUAGE_KEYS) ?? '').toLowerCase();
   if (!s) return '—';
   const alias: Record<string, string> = { jp: 'ja', jpn: 'ja' };
   return alias[s] ?? s;
@@ -53,8 +80,7 @@ export function inferOperationalRarezaFromCtProperties(
 }
 
 export function readCtCondition(props: Record<string, unknown> | undefined): string {
-  const raw = props?.condition ?? props?.pokemon_condition;
-  return raw != null && String(raw).trim() ? String(raw).trim() : '—';
+  return pickCtProperty(props, CT_CONDITION_KEYS) ?? '—';
 }
 
 export function readCollectorNumber(props: Record<string, unknown> | undefined): string | null {
@@ -70,30 +96,15 @@ export function readCollectorNumber(props: Record<string, unknown> | undefined):
 }
 
 export function readCtRarityLabel(props: Record<string, unknown> | undefined): string {
-  const raw =
-    props?.pokemon_rarity ??
-    props?.yugioh_rarity ??
-    props?.mtg_rarity ??
-    props?.rarity ??
-    props?.fab_rarity;
-  return raw != null && String(raw).trim() ? String(raw).trim() : '—';
+  return pickCtProperty(props, CT_RARITY_KEYS) ?? '—';
 }
 
 export function listCtPropertyExtras(props: Record<string, unknown> | undefined): string[] {
   if (!props) return [];
-  const skip = new Set([
-    'condition',
-    'pokemon_condition',
-    'pokemon_language',
-    'yugioh_language',
-    'mtg_language',
-    'language',
-    'fab_language',
-    'pokemon_rarity',
-    'yugioh_rarity',
-    'mtg_rarity',
-    'rarity',
-    'fab_rarity',
+  const skip = new Set<string>([
+    ...CT_CONDITION_KEYS,
+    ...CT_LANGUAGE_KEYS,
+    ...CT_RARITY_KEYS,
     'collector_number',
     'cmc',
     'tournament_legal',

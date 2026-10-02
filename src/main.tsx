@@ -11,12 +11,11 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { OwnerProvider } from "./modules/owner";
 import { dittoTheme } from "./theme";
 import "./config/api";
-import { YUGIOH_UI_PREFIX, panelBasenameForPath, redirectLegacyPanelPath } from "./config/routes";
-import YugiohRouter from "./yugioh/yugioh-router";
+import { currentPanelTcg, panelBasenameForPath, redirectLegacyPanelPath } from "./config/routes";
 
 const panelBasename = panelBasenameForPath(window.location.pathname);
 if (panelBasename) {
-  const panelTcg = panelBasename === YUGIOH_UI_PREFIX ? "yugioh" : "pokemon";
+  const panelTcg = currentPanelTcg();
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -42,7 +41,7 @@ if (panelBasename) {
         <QueryClientProvider client={queryClient}>
           <OwnerProvider>
             <BrowserRouter basename={panelBasename}>
-              {panelBasename === YUGIOH_UI_PREFIX ? <YugiohRouter /> : <AppRouter />}
+              <AppRouter />
             </BrowserRouter>
           </OwnerProvider>
         </QueryClientProvider>

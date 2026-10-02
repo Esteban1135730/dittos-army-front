@@ -101,11 +101,43 @@ import {
 } from "../../utils/cardtrader-cart-transfer";
 import { ImportEstebanCartDialog } from "./import-esteban-cart-dialog";
 import { getApiTcgHeader } from "../../config/api";
+import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
+import type { TcgKey } from "../../config/owners";
 import {
-  CARDTRADER_YUGIOH_GAME_ID,
-  cardTraderGameIdForTcg,
-} from "../../config/cardtrader-games";
+  CT_CONDITION_KEYS,
+  CT_LANGUAGE_KEYS,
+  pickCtProperty,
+} from "../../utils/cardtrader-order-item-map";
 const BLUEPRINTS_PER_PAGE = 96;
+
+/** Pistas del buscador por TCG: `inExpansion` filtra la expansión elegida; `byName` busca en CT. */
+const SEARCH_HINTS: Record<
+  TcgKey,
+  { inExpansion: string; byName: string; caption: string }
+> = {
+  pokemon: {
+    inExpansion: "Ej. Articuno",
+    byName: "Ej. Pikachu, ピカチュウ…",
+    caption: "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH.",
+  },
+  yugioh: {
+    inExpansion: "Ej. Blue-Eyes",
+    byName: "Ej. Dark Magician…",
+    caption:
+      "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom).",
+  },
+  magic: {
+    inExpansion: "Ej. Lightning Bolt",
+    byName: "Ej. Sol Ring…",
+    caption:
+      "Pulsa Buscar o Enter. Puedes escribir parte del nombre en inglés (p. ej. Bolt, Sol Ring).",
+  },
+  onepiece: {
+    inExpansion: "Ej. Zoro",
+    byName: "Ej. Monkey.D.Luffy…",
+    caption: "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Luffy, Nami).",
+  },
+};
 const OFFERS_PER_PAGE = 12;
 
 type CtExpansion = {
@@ -417,19 +449,11 @@ function SearchGlyph() {
 }
 
 function productLangRaw(p: CtProduct): string | null {
-  const props = p.properties_hash;
-  const lang =
-    props?.pokemon_language ??
-    props?.yugioh_language ??
-    props?.mtg_language ??
-    props?.language ??
-    props?.fab_language;
-  return typeof lang === "string" && lang.trim() ? lang.trim() : null;
+  return pickCtProperty(p.properties_hash, CT_LANGUAGE_KEYS);
 }
 
 function productConditionValue(p: CtProduct): string | null {
-  const raw = p.properties_hash?.condition ?? p.properties_hash?.pokemon_condition;
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  return pickCtProperty(p.properties_hash, CT_CONDITION_KEYS);
 }
 
 function productLanguageValue(p: CtProduct): string | null {
@@ -540,20 +564,7 @@ function cartLines(cart: CartResponse | null | undefined): {
           expansion:
             meta?.expansion?.name_en ?? meta?.expansion?.name ?? meta?.expansion?.code ?? undefined,
           condition: typeof props?.condition === "string" ? props.condition : undefined,
-          language:
-            typeof (
-              props?.pokemon_language ??
-              props?.yugioh_language ??
-              props?.mtg_language ??
-              props?.language
-            ) === "string"
-              ? String(
-                  props?.pokemon_language ??
-                    props?.yugioh_language ??
-                    props?.mtg_language ??
-                    props?.language,
-                ).toUpperCase()
-              : undefined,
+          language: pickCtProperty(props, CT_LANGUAGE_KEYS)?.toUpperCase(),
           collectorNumber: collectorFromProps?.trim() || undefined,
           blueprintId,
           imageUrl:
@@ -681,7 +692,9 @@ export default function CotizarCardtraderPage() {
     severity: "success" | "warning" | "error";
   } | null>(null);
 
-  const cardTraderGameId = cardTraderGameIdForTcg(getApiTcgHeader());
+  const panelTcg = getApiTcgHeader();
+  const cardTraderGameId = cardTraderGameIdForTcg(panelTcg);
+  const searchHints = SEARCH_HINTS[panelTcg];
 
   const expansionsQuery = useQuery({
     queryKey: ["cardtrader", "expansions", cardTraderGameId],
@@ -1755,15 +1768,7 @@ export default function CotizarCardtraderPage() {
             <TextField
               fullWidth
               label="Buscar carta por nombre o ID"
-              placeholder={
-                expansion
-                  ? cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                    ? "Ej. Blue-Eyes"
-                    : "Ej. Articuno"
-                  : cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                    ? "Ej. Dark Magician…"
-                    : "Ej. Pikachu, ピカチュウ…"
-              }
+              placeholder={expansion ? searchHints.inExpansion : searchHints.byName}
               value={blueprintFilter}
               onChange={(e) => {
                 setBlueprintFilter(e.target.value);
@@ -1799,9 +1804,7 @@ export default function CotizarCardtraderPage() {
             </Stack>
             {!expansion && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-                {cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                  ? "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom)."
-                  : "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH."}
+                {searchHints.caption}
               </Typography>
             )}
           </Box>

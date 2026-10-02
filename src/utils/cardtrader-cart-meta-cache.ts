@@ -1,6 +1,12 @@
 /** Metadata de productos CardTrader añadidos al carrito (panel /cotizar). */
 
 import { cartVariantLabelsFromPropertiesHash } from "./cardtrader-cart-variants";
+import {
+  CT_CONDITION_KEYS,
+  CT_LANGUAGE_KEYS,
+  CT_RARITY_KEYS,
+  pickCtProperty,
+} from "./cardtrader-order-item-map";
 
 export const CARDTRADER_CART_META_TTL_MS = 48 * 60 * 60 * 1000;
 
@@ -163,20 +169,11 @@ export function buildCartMetaFromOffer(args: {
   blueprintImageUrl?: string;
 }): CardtraderCartItemMeta {
   const props = args.product.properties_hash;
-  const languageRaw =
-    props?.pokemon_language ??
-    props?.yugioh_language ??
-    props?.mtg_language ??
-    props?.language;
-  const conditionRaw = props?.condition ?? props?.pokemon_condition;
+  const languageRaw = pickCtProperty(props, CT_LANGUAGE_KEYS);
+  const conditionRaw = pickCtProperty(props, CT_CONDITION_KEYS);
   const fixed = args.blueprint?.fixed_properties;
   const rarityRaw =
-    fixed?.pokemon_rarity ??
-    (fixed as { yugioh_rarity?: string } | undefined)?.yugioh_rarity ??
-    fixed?.mtg_rarity ??
-    fixed?.rarity ??
-    props?.pokemon_rarity ??
-    props?.yugioh_rarity;
+    pickCtProperty(fixed, CT_RARITY_KEYS) ?? pickCtProperty(props, CT_RARITY_KEYS);
 
   const expansionName = args.expansion?.name_en ?? args.expansion?.name;
   const imageUrl =
@@ -191,16 +188,15 @@ export function buildCartMetaFromOffer(args: {
   return {
     name: args.product.name_en?.trim() || undefined,
     expansion: typeof expansionName === "string" ? expansionName : undefined,
-    condition: typeof conditionRaw === "string" ? conditionRaw : undefined,
-    language:
-      typeof languageRaw === "string" ? String(languageRaw).trim().toUpperCase() : undefined,
+    condition: conditionRaw ?? undefined,
+    language: languageRaw?.toUpperCase(),
     collectorNumber:
       typeof fixed?.collector_number === "string" && fixed.collector_number.trim()
         ? fixed.collector_number.trim()
         : undefined,
     blueprintId: args.product.blueprint_id ?? args.blueprint?.id,
     imageUrl,
-    rarity: typeof rarityRaw === "string" && rarityRaw.trim() ? rarityRaw.trim() : undefined,
+    rarity: rarityRaw ?? undefined,
     ...(variants.length > 0 ? { variants } : {}),
   };
 }

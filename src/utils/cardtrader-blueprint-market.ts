@@ -1,3 +1,5 @@
+import { CT_RARITY_KEYS, pickCtProperty } from "./cardtrader-order-item-map";
+
 export type BlueprintMarketPrice = {
   cents: number;
   currency: string;
@@ -91,20 +93,13 @@ export function extractBlueprintRarity(blueprint: unknown): string | null {
   if (!blueprint || typeof blueprint !== "object") return null;
   const fixed = (blueprint as { fixed_properties?: Record<string, unknown> }).fixed_properties;
   if (!fixed || typeof fixed !== "object") return null;
-  const raw =
-    fixed.pokemon_rarity ?? fixed.mtg_rarity ?? fixed.rarity ?? fixed.fab_rarity;
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  return raw.trim();
+  return pickCtProperty(fixed, CT_RARITY_KEYS);
 }
 
 function readProductRarity(product: Record<string, unknown>): string | null {
   const props = product.properties_hash;
   if (!props || typeof props !== "object") return null;
-  const hash = props as Record<string, unknown>;
-  const raw =
-    hash.pokemon_rarity ?? hash.mtg_rarity ?? hash.rarity ?? hash.fab_rarity;
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  return raw.trim();
+  return pickCtProperty(props as Record<string, unknown>, CT_RARITY_KEYS);
 }
 
 /** Rareza por blueprint desde el primer producto del marketplace (fallback). */

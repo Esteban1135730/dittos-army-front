@@ -1,12 +1,13 @@
 import type { FeatureKey } from "../../config/owners";
+import { TCG_UI_PREFIX } from "../../config/routes";
 
 /**
  * Map pathname → feature key for ACL (034).
- * More specific prefixes first. `/pokemon` and `/yugioh` se ignoran.
+ * More specific prefixes first. Los prefijos TCG (`/pokemon`, `/yugioh`…) se ignoran.
  */
 function panelPath(pathname: string): string {
   const path = pathname.split("?")[0] || "/";
-  for (const prefix of ["/pokemon", "/yugioh"]) {
+  for (const prefix of Object.values(TCG_UI_PREFIX)) {
     if (path === prefix) return "/";
     if (path.startsWith(`${prefix}/`)) return path.slice(prefix.length);
   }

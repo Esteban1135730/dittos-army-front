@@ -1,19 +1,15 @@
 import type { CtMarketplaceProduct } from "./cardtrader-marketplace-offers";
+import {
+  CT_CONDITION_KEYS,
+  CT_LANGUAGE_KEYS,
+  CT_RARITY_KEYS,
+} from "./cardtrader-order-item-map";
 
 /** Claves de properties_hash que no son “extras” (estado, idioma, metadatos de carta). */
-const NON_EXTRA_KEYS = new Set([
-  "condition",
-  "pokemon_condition",
-  "pokemon_language",
-  "yugioh_language",
-  "mtg_language",
-  "language",
-  "fab_language",
-  "pokemon_rarity",
-  "yugioh_rarity",
-  "mtg_rarity",
-  "rarity",
-  "fab_rarity",
+const NON_EXTRA_KEYS = new Set<string>([
+  ...CT_CONDITION_KEYS,
+  ...CT_LANGUAGE_KEYS,
+  ...CT_RARITY_KEYS,
   "collector_number",
   "cmc",
   "tournament_legal",

@@ -3,6 +3,8 @@ import {
   ESTEBAN_STOCK_MARK,
   coerceOwnerForTcg,
   defaultOwnerForTcg,
+  getOwnerDefinition,
+  isOwnerKey,
   otherOwner,
   ownersForTcg,
 } from "./owners";
@@ -22,6 +24,25 @@ describe("owners helpers (044)", () => {
     ]);
     expect(defaultOwnerForTcg("yugioh")).toBe("tefa");
     expect(coerceOwnerForTcg("pablo", "yugioh")).toBe("tefa");
+  });
+
+  it("Magic solo Pablo (pablo-magic); One Piece solo Ali", () => {
+    expect(ownersForTcg("magic").map((o) => o.key)).toEqual(["pablo-magic"]);
+    expect(ownersForTcg("onepiece").map((o) => o.key)).toEqual(["ali"]);
+    expect(getOwnerDefinition("pablo-magic")).toMatchObject({
+      label: "Pablo",
+      dbName: "magic-pablo",
+      stockQrPrefix: "MAGIC-STOCK:",
+    });
+    expect(getOwnerDefinition("ali")).toMatchObject({
+      dbName: "onepiece-ali",
+      stockQrPrefix: "ALI-STOCK:",
+    });
+    expect(coerceOwnerForTcg("pablo", "magic")).toBe("pablo-magic");
+    expect(coerceOwnerForTcg("tefa", "onepiece")).toBe("ali");
+    expect(otherOwner("ali")).toBeNull();
+    expect(isOwnerKey("pablo-magic")).toBe(true);
+    expect(isOwnerKey("otro")).toBe(false);
   });
 
   it("marca Esteban es U+263C", () => {

@@ -22,11 +22,16 @@ describe("apiUrl", () => {
       `${origin}/card-images/swsh3/a.png`,
     );
     expect(apiUrl("/health")).toBe(`${origin}/health`);
-    expect(apiUrl("/yugioh/sets")).toBe(`${origin}/yugioh/sets`);
+  });
+
+  it("catálogo externo va bajo /pokemon (TCG por X-Tcg)", () => {
+    const origin = getApiOrigin();
+    expect(apiUrl("/catalog/sets")).toBe(`${origin}${API_TCG_PREFIX}/catalog/sets`);
   });
 
   it("resolveAxiosTcg respeta override", () => {
     expect(resolveAxiosTcg({}, "pokemon")).toBe("pokemon");
     expect(resolveAxiosTcg({ tcgOverride: "yugioh" }, "pokemon")).toBe("yugioh");
+    expect(resolveAxiosTcg({ tcgOverride: "onepiece" }, "magic")).toBe("onepiece");
   });
 });

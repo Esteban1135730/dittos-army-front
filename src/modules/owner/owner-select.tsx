@@ -1,9 +1,5 @@
-import {
-  ownersForTcg,
-  type OwnerKey,
-  type TcgKey,
-} from "../../config/owners";
-import { panelBasenameForPath, YUGIOH_UI_PREFIX } from "../../config/routes";
+import { ownersForTcg, type OwnerKey } from "../../config/owners";
+import { currentPanelTcg } from "../../config/routes";
 import { useOwner } from "./owner-context";
 import { PanelSelect } from "../../components/layout/panel-select";
 
@@ -12,15 +8,9 @@ type OwnerSelectProps = {
   onBeforeChange?: (next: OwnerKey) => boolean;
 };
 
-function panelTcg(): TcgKey {
-  return panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX
-    ? "yugioh"
-    : "pokemon";
-}
-
 export function OwnerSelect({ onBeforeChange }: OwnerSelectProps) {
   const { owner, setOwner } = useOwner();
-  const options = ownersForTcg(panelTcg()).map((o) => ({
+  const options = ownersForTcg(currentPanelTcg()).map((o) => ({
     value: o.key,
     label: o.label,
   }));
