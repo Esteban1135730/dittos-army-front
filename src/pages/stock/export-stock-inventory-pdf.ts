@@ -1,4 +1,6 @@
-import { jsPDF } from "jspdf";
+import type { jsPDF } from "jspdf";
+import { loadJsPdf } from "../../utils/pdf-libs";
+import { mapWithConcurrency } from "../../utils/concurrency";
 import lockupUrl from "../pdf-grupos/el-nido-tcg-lockup.png";
 import {
   buildGruposPdfFooterContacts,
@@ -398,15 +400,17 @@ export async function exportStockInventoryPdf(
   const prepared: PreparedRow[] = [];
   let imageFailures = 0;
 
-  for (const row of eligible) {
-    const url = resolveInventoryPhotoUrlForPdf(row, opts.photoIndex);
-    const dataUrl = await fetchStockImageDataUrl(url);
+  const dataUrls = await mapWithConcurrency(eligible, (row) =>
+    fetchStockImageDataUrl(resolveInventoryPhotoUrlForPdf(row, opts.photoIndex)),
+  );
+  eligible.forEach((row, i) => {
+    const dataUrl = dataUrls[i];
     if (!dataUrl) {
       imageFailures += 1;
-      continue;
+      return;
     }
     prepared.push({ row, dataUrl });
-  }
+  });
 
   if (prepared.length === 0) {
     throw new Error("No se pudieron cargar las fotos de inventario para el PDF.");
@@ -417,7 +421,8 @@ export async function exportStockInventoryPdf(
   const logoW = logoImg.naturalWidth || logoImg.width;
   const logoH = logoImg.naturalHeight || logoImg.height;
 
-  const doc = new jsPDF({
+  const JsPdf = await loadJsPdf();
+  const doc = new JsPdf({
     orientation: "portrait",
     unit: "mm",
     format: GRUPOS_PDF_FORMAT,

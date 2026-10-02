@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PANEL_UI_PREFIX, panelPath, panelBasenameForPath } from "./routes";
+import { PANEL_UI_PREFIX, panelPath, panelBasenameForPath, tcgForPath } from "./routes";
 
 describe("panelPath", () => {
   it("antepone /pokemon", () => {
@@ -15,5 +15,13 @@ describe("panelPath", () => {
     expect(panelBasenameForPath("/yugioh/stock")).toBe("/yugioh");
     expect(panelBasenameForPath("/pokemon/stock")).toBe("/pokemon");
     expect(panelBasenameForPath("/stock")).toBeNull();
+  });
+
+  it("reconoce /magic y /onepiece", () => {
+    expect(panelBasenameForPath("/magic/cotizar")).toBe("/magic");
+    expect(panelBasenameForPath("/onepiece")).toBe("/onepiece");
+    expect(tcgForPath("/magic/stock")).toBe("magic");
+    expect(tcgForPath("/onepiece/add-stock")).toBe("onepiece");
+    expect(tcgForPath("/magical")).toBeNull();
   });
 });

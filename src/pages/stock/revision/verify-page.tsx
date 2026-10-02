@@ -16,7 +16,7 @@ import {
 import axios from "axios";
 import { LoadingScreen } from "../../../components/loading";
 import { useLaserBarcodeInput } from "../../../components/barcode-scanner/use-laser-barcode-input";
-import { parseStockQrPayload } from "../../../modules/stock-barcode";
+import { parseStockQrPayload } from "../../../modules/stock-barcode/stock-barcode-payload";
 import {
   useStockReviewMutations,
   useStockReviewSession,

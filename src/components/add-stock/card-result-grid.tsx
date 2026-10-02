@@ -57,7 +57,13 @@ export function CardResultGrid({
                 : "border-gray-200"
             }`}
           >
-            <img src={card.image} alt={card.name} className="w-full h-40 object-contain mb-2" />
+            <img
+              src={card.image}
+              alt={card.name}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-40 object-contain mb-2"
+            />
             <h3 className="text-lg font-semibold text-gray-800">
               {card.name}
               {card.subtitle ? ` - ${card.subtitle}` : ""}

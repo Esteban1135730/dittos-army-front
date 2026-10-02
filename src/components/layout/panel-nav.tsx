@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EuroToCOPConverter from "../../utils/tasa";
 import { OwnerSelect, useOwner } from "../../modules/owner";
 import { TcgSelect } from "./tcg-select";
-import { panelBasenameForPath, YUGIOH_UI_PREFIX } from "../../config/routes";
+import { currentPanelTcg } from "../../config/routes";
 import { OWNERS_CONFIG, type OwnerKey } from "../../config/owners";
 import { isRouteAllowed } from "../../modules/owner/owner-acl";
 import { runOwnerChangeGuards } from "../../modules/owner/owner-change-guard";
@@ -75,8 +75,8 @@ const CARDTRADER_SECTION_POKEMON: NavSection = {
   ],
 };
 
-/** Yu-Gi-Oh: sin recepción CT (solo en Pokémon / Pablo; admite todos los TCG allí). */
-const CARDTRADER_SECTION_YUGIOH: NavSection = {
+/** TCG con catálogo externo: sin recepción CT (solo en Pokémon / Pablo; admite todos los TCG allí). */
+const CARDTRADER_SECTION_CATALOG: NavSection = {
   id: "cardtrader",
   label: "CardTrader",
   icon: IconTruck,
@@ -90,11 +90,12 @@ const CARDTRADER_SECTION_YUGIOH: NavSection = {
   ],
 };
 
-const YUGIOH_TOP_LINKS: NavLeaf[] = [
+const CATALOG_TOP_LINKS: NavLeaf[] = [
   { to: "/", label: "Inicio", icon: IconHome },
 ];
 
-const YUGIOH_SECTIONS: NavSection[] = [
+/** Yu-Gi-Oh, Magic y One Piece comparten menú (mismas rutas de PanelRoutes). */
+const CATALOG_SECTIONS: NavSection[] = [
   {
     id: "inventario",
     label: "Inventario",
@@ -106,7 +107,7 @@ const YUGIOH_SECTIONS: NavSection[] = [
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
-  CARDTRADER_SECTION_YUGIOH,
+  CARDTRADER_SECTION_CATALOG,
   {
     id: "dashboards",
     label: "Dashboards",
@@ -290,9 +291,9 @@ export default function PanelNav({
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const yugioh = panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX;
-  const topLinks = yugioh ? YUGIOH_TOP_LINKS : TOP_LINKS;
-  const sections = yugioh ? YUGIOH_SECTIONS : SECTIONS;
+  const isPokemon = currentPanelTcg() === "pokemon";
+  const topLinks = isPokemon ? TOP_LINKS : CATALOG_TOP_LINKS;
+  const sections = isPokemon ? SECTIONS : CATALOG_SECTIONS;
 
   const visibleTop = topLinks.filter((item) =>
     isRouteAllowed(item.to, allowedFeatures),
@@ -305,7 +306,7 @@ export default function PanelNav({
         if (!isRouteAllowed(item.to, allowedFeatures)) return false;
         // Recepción CT: solo Pokémon / Pablo (admite todos los TCG en ese flujo).
         if (item.to === "/cardtrader-receipt") {
-          return !yugioh && owner === "pablo";
+          return isPokemon && owner === "pablo";
         }
         return true;
       }),

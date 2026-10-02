@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // Hook extendido de tasas de cambio (EUR → COP, USD → COP, USD → EUR, COP → EUR)
 export function useExchangeRates() {
@@ -56,22 +56,22 @@ export function useExchangeRates() {
     }
   };
 
-  const convert = {
-    toCopFromEur: (eur: number) =>
-      rates.euroToCop !== null ? eur * rates.euroToCop : null,
-    toCopFromUsd: (usd: number) =>
-      rates.usdToCop !== null ? usd * rates.usdToCop : null,
-    toEurFromUsd: (usd: number) =>
-      rates.usdToEur !== null ? usd * rates.usdToEur : null,
-    toEurFromCop: (cop: number) =>
-      rates.euroToCop !== null && rates.euroToCop > 0
-        ? cop / rates.euroToCop
-        : null,
-    toUsdFromCop: (cop: number) =>
-      rates.usdToCop !== null && rates.usdToCop > 0
-        ? cop / rates.usdToCop
-        : null,
-  };
+  const { euroToCop, usdToCop, usdToEur } = rates;
+  const convert = useMemo(
+    () => ({
+      toCopFromEur: (eur: number) =>
+        euroToCop !== null ? eur * euroToCop : null,
+      toCopFromUsd: (usd: number) =>
+        usdToCop !== null ? usd * usdToCop : null,
+      toEurFromUsd: (usd: number) =>
+        usdToEur !== null ? usd * usdToEur : null,
+      toEurFromCop: (cop: number) =>
+        euroToCop !== null && euroToCop > 0 ? cop / euroToCop : null,
+      toUsdFromCop: (cop: number) =>
+        usdToCop !== null && usdToCop > 0 ? cop / usdToCop : null,
+    }),
+    [euroToCop, usdToCop, usdToEur],
+  );
 
   return {
     rates,

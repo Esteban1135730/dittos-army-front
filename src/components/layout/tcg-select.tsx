@@ -1,25 +1,14 @@
 import { PanelSelect } from "./panel-select";
 import {
   OWNER_STORAGE_KEY,
+  TCG_KEYS,
+  TCG_LABELS,
   defaultOwnerForTcg,
-  type TcgKey,
+  isTcgKey,
 } from "../../config/owners";
-import {
-  panelBasenameForPath,
-  YUGIOH_UI_PREFIX,
-  PANEL_UI_PREFIX,
-} from "../../config/routes";
+import { TCG_UI_PREFIX, currentPanelTcg } from "../../config/routes";
 
-const TCG_OPTIONS = [
-  { value: "pokemon", label: "Pokémon" },
-  { value: "yugioh", label: "Yu-Gi-Oh" },
-];
-
-function currentTcg(): TcgKey {
-  return panelBasenameForPath(window.location.pathname) === YUGIOH_UI_PREFIX
-    ? "yugioh"
-    : "pokemon";
-}
+const TCG_OPTIONS = TCG_KEYS.map((tcg) => ({ value: tcg, label: TCG_LABELS[tcg] }));
 
 /** Cambia de superficie TCG. Cada una conserva su menú y su dueño. */
 export function TcgSelect() {
@@ -27,19 +16,16 @@ export function TcgSelect() {
     <PanelSelect
       id="tcg-select-label"
       label="TCG"
-      value={currentTcg()}
+      value={currentPanelTcg()}
       options={TCG_OPTIONS}
       onChange={(next) => {
-        if (next === currentTcg()) return;
-        const tcg = next as TcgKey;
+        if (!isTcgKey(next) || next === currentPanelTcg()) return;
         try {
-          localStorage.setItem(OWNER_STORAGE_KEY, defaultOwnerForTcg(tcg));
+          localStorage.setItem(OWNER_STORAGE_KEY, defaultOwnerForTcg(next));
         } catch {
           /* ignore */
         }
-        window.location.assign(
-          tcg === "yugioh" ? YUGIOH_UI_PREFIX : PANEL_UI_PREFIX,
-        );
+        window.location.assign(TCG_UI_PREFIX[next]);
       }}
     />
   );

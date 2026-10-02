@@ -3,13 +3,23 @@
  * `dittos-army-back/src/config/owners.config.ts`.
  *
  * Pokémon: Pablo (`test`) y Esteban (`esteban`).
- * Yu-Gi-Oh: un solo owner Tefa (`yugioh-tefa`).
+ * Yu-Gi-Oh: Tefa (`yugioh-tefa`). Magic: Pablo (`magic-pablo`).
+ * One Piece: Ali (`onepiece-ali`).
  */
 
-export type OwnerKey = "pablo" | "esteban" | "tefa";
+export const OWNER_KEYS = ["pablo", "esteban", "tefa", "pablo-magic", "ali"] as const;
+export type OwnerKey = (typeof OWNER_KEYS)[number];
 
-/** TCG slug for path and DB naming (`pokemon` legacy DBs; `yugioh` → `{tcg}-{owner}`). */
-export type TcgKey = "pokemon" | "yugioh";
+/** TCG slug for path and DB naming (`pokemon` legacy DBs; resto → `{tcg}-{owner}`). */
+export const TCG_KEYS = ["pokemon", "yugioh", "magic", "onepiece"] as const;
+export type TcgKey = (typeof TCG_KEYS)[number];
+
+export const TCG_LABELS: Record<TcgKey, string> = {
+  pokemon: "Pokémon",
+  yugioh: "Yu-Gi-Oh",
+  magic: "Magic",
+  onepiece: "One Piece",
+};
 
 export type FeatureKey =
   | "inicio"
@@ -89,6 +99,8 @@ const PABLO_DB_NAME = "test";
 const ESTEBAN_DB_NAME = "esteban";
 /** Yu-Gi-Oh physical DB for Tefa. */
 const TEFA_DB_NAME = databaseNameFor("yugioh", "tefa");
+const PABLO_MAGIC_DB_NAME = databaseNameFor("magic", "pablo");
+const ALI_DB_NAME = databaseNameFor("onepiece", "ali");
 
 export const OWNERS_CONFIG: OwnersConfig = {
   defaultOwner: "pablo",
@@ -117,7 +129,30 @@ export const OWNERS_CONFIG: OwnersConfig = {
       stockQrPrefix: "TEFA-STOCK:",
       allowedFeatures: [...ALL_FEATURES],
     },
+    "pablo-magic": {
+      key: "pablo-magic",
+      label: "Pablo",
+      tcg: "magic",
+      dbName: PABLO_MAGIC_DB_NAME,
+      stockQrPrefix: "MAGIC-STOCK:",
+      allowedFeatures: [...ALL_FEATURES],
+    },
+    ali: {
+      key: "ali",
+      label: "Ali",
+      tcg: "onepiece",
+      dbName: ALI_DB_NAME,
+      stockQrPrefix: "ALI-STOCK:",
+      allowedFeatures: [...ALL_FEATURES],
+    },
   },
+};
+
+const DEFAULT_OWNER_BY_TCG: Record<TcgKey, OwnerKey> = {
+  pokemon: "pablo",
+  yugioh: "tefa",
+  magic: "pablo-magic",
+  onepiece: "ali",
 };
 
 export const OWNER_STORAGE_KEY = "dittos.panel.activeOwner";
@@ -126,7 +161,11 @@ export const OWNER_STORAGE_KEY = "dittos.panel.activeOwner";
 export const ESTEBAN_STOCK_MARK = "☼";
 
 export function isOwnerKey(value: unknown): value is OwnerKey {
-  return value === "pablo" || value === "esteban" || value === "tefa";
+  return (OWNER_KEYS as readonly unknown[]).includes(value);
+}
+
+export function isTcgKey(value: unknown): value is TcgKey {
+  return (TCG_KEYS as readonly unknown[]).includes(value);
 }
 
 export function ownersForTcg(tcg: TcgKey): OwnerDefinition[] {
@@ -134,7 +173,7 @@ export function ownersForTcg(tcg: TcgKey): OwnerDefinition[] {
 }
 
 export function defaultOwnerForTcg(tcg: TcgKey): OwnerKey {
-  return tcg === "yugioh" ? "tefa" : "pablo";
+  return DEFAULT_OWNER_BY_TCG[tcg];
 }
 
 /** If owner does not belong to `tcg`, returns the default owner for that TCG. */
@@ -146,7 +185,7 @@ export function coerceOwnerForTcg(owner: OwnerKey, tcg: TcgKey): OwnerKey {
 
 /**
  * Complementary Pokémon owner (pablo ↔ esteban).
- * Tefa (Yu-Gi-Oh) has no pair → `null`.
+ * Owners de un solo dueño por TCG (Tefa, Pablo Magic, Ali) → `null`.
  */
 export function otherOwner(owner: OwnerKey): OwnerKey | null {
   if (owner === "pablo") return "esteban";

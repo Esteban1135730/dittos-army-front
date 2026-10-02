@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Alert,
@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import { formatCOP } from "../../../utils/convert";
 import { useExchangeRates } from "../../../utils/tasa";
+import { mapSettledWithConcurrency } from "../../../utils/concurrency";
 import { apiUrl, API_BASE } from "../../../config/api";
 import { LoadingScreen } from "../../../components/loading";
 import PropertyCard from "./property-card";
@@ -82,18 +83,26 @@ export default function PropertyList() {
     },
   });
 
+  const inFlightStockIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    const pendingIds = keepCards
-      .map((sale) => sale.stock_id)
-      .filter(
-        (id) =>
-          id &&
-          !stockData[id] &&
-          !stockFailedIds.has(id) &&
-          !stockLoadingIds.has(id),
-      );
+    const inFlight = inFlightStockIdsRef.current;
+    const pendingIds = Array.from(
+      new Set(
+        keepCards
+          .map((sale) => sale.stock_id)
+          .filter(
+            (id) =>
+              id &&
+              !stockData[id] &&
+              !stockFailedIds.has(id) &&
+              !inFlight.has(id),
+          ),
+      ),
+    );
     if (pendingIds.length === 0) return;
 
+    pendingIds.forEach((id) => inFlight.add(id));
     setStockLoadingIds((prev) => {
       const next = new Set(prev);
       pendingIds.forEach((id) => next.add(id));
@@ -101,20 +110,21 @@ export default function PropertyList() {
     });
 
     void (async () => {
-      const responses = await Promise.allSettled(
-        pendingIds.map((id) => axios.get(`${API_BASE}/stock/${id}`)),
+      const responses = await mapSettledWithConcurrency(pendingIds, (id) =>
+        axios.get(`${API_BASE}/stock/${id}`),
       );
       const updated: Record<string, PropertyStockItem> = {};
       const failed: string[] = [];
 
       responses.forEach((res, index) => {
         const stockId = pendingIds[index];
-        if (res.status === "fulfilled" && res.value?.data?._id) {
+        if (res.ok && res.value?.data?._id) {
           updated[res.value.data._id] = res.value.data;
         } else {
           failed.push(stockId);
         }
       });
+      pendingIds.forEach((id) => inFlight.delete(id));
 
       if (Object.keys(updated).length > 0) {
         setStockData((prev) => ({ ...prev, ...updated }));
@@ -134,7 +144,7 @@ export default function PropertyList() {
         });
       }
     })();
-  }, [keepCards, stockData, stockFailedIds, stockLoadingIds]);
+  }, [keepCards, stockData, stockFailedIds]);
 
   const filasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -174,9 +184,11 @@ export default function PropertyList() {
   );
 
   const invalidateProperty = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["property-cards"] });
-    await queryClient.invalidateQueries({ queryKey: ["stock"] });
-    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["property-cards"] }),
+      queryClient.invalidateQueries({ queryKey: ["stock"] }),
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+    ]);
   };
 
   const showSuccess = (message: string) => setSnackbar({ open: true, message });

@@ -15,6 +15,11 @@ import {
 import { LoadingScreen } from "../../../components/loading";
 import { filterSalesByName } from "./filter-sales-by-name";
 import { isZeroProfitCardId } from "../../../constants/bulk-product";
+import { STOCK_LIST_QUERY_KEY, fetchStockListRaw } from "../../../api/list-queries";
+import { useEventCallback } from "../../../utils/use-event-callback";
+
+const EMPTY_STOCK: StockListItem[] = [];
+const EMPTY_SALES: SaleWithStock[] = [];
 
 type SaleWithStock = {
   _id: string;
@@ -73,7 +78,7 @@ export default function SalesDashboard() {
   }, [busqueda]);
 
   const {
-    data: sales = [],
+    data: sales = EMPTY_SALES,
     isLoading,
     error,
   } = useQuery<SaleWithStock[]>({
@@ -85,14 +90,9 @@ export default function SalesDashboard() {
   });
 
   // Obtener valor total del inventario actual
-  const {
-    data: stockData = [],
-  } = useQuery<StockListItem[]>({
-    queryKey: ["stock-for-dashboard"],
-    queryFn: async () => {
-      const res = await axios.get(apiUrl("/stock"));
-      return Array.isArray(res.data) ? res.data : [];
-    },
+  const { data: stockData = EMPTY_STOCK } = useQuery({
+    queryKey: STOCK_LIST_QUERY_KEY,
+    queryFn: () => fetchStockListRaw(),
   });
 
   // Calcular estadísticas generales
@@ -240,9 +240,11 @@ export default function SalesDashboard() {
         alert(res.data.message);
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
-      await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: STOCK_LIST_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ["sales-history"] }),
+      ]);
     } catch (error: any) {
       alert(
         error?.response?.data?.message ??
@@ -262,9 +264,10 @@ export default function SalesDashboard() {
     try {
       setDeshaciendo(ventaId);
       await axios.delete(`${API_BASE}/sales/${ventaId}`);
-      await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: STOCK_LIST_QUERY_KEY }),
+      ]);
     } catch (error: any) {
       alert(
         error?.response?.data?.message ||
@@ -290,9 +293,11 @@ export default function SalesDashboard() {
             ? `Ciclo cerrado. ${count} venta(s) pasaron a histórico. Las ganancias se reiniciaron para el nuevo ciclo.`
             : "No había ventas activas para cerrar.",
         });
-        await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-        await queryClient.invalidateQueries({ queryKey: ["stock-for-dashboard"] });
-        await queryClient.invalidateQueries({ queryKey: ["sales-history"] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+          queryClient.invalidateQueries({ queryKey: STOCK_LIST_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: ["sales-history"] }),
+        ]);
         setTimeout(() => {
           setMostrarModalCerrarCiclo(false);
           setMensajeCierreCiclo(null);
@@ -313,7 +318,11 @@ export default function SalesDashboard() {
     }
   };
 
-  const columns: GridColDef[] = [
+  const onEditar = useEventCallback(handleAbrirModalEditar);
+  const onFinalizarCiclo = useEventCallback(handleFinalizarCicloVenta);
+  const onDeshacer = useEventCallback(handleDeshacerVenta);
+
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: "image_url",
       headerName: "Imagen",
@@ -491,14 +500,14 @@ export default function SalesDashboard() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => handleAbrirModalEditar(params.row)}
+            onClick={() => onEditar(params.row)}
             className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
           >
             Editar
           </button>
           <button
             type="button"
-            onClick={() => handleFinalizarCicloVenta(params.row._id)}
+            onClick={() => onFinalizarCiclo(params.row._id)}
             disabled={finalizandoCicloId === params.row._id}
             className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
@@ -506,7 +515,7 @@ export default function SalesDashboard() {
           </button>
           <button
             type="button"
-            onClick={() => handleDeshacerVenta(params.row._id)}
+            onClick={() => onDeshacer(params.row._id)}
             disabled={deshaciendo === params.row._id}
             className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
@@ -515,7 +524,7 @@ export default function SalesDashboard() {
         </div>
       ),
     },
-  ];
+  ], [convert, deshaciendo, finalizandoCicloId, onDeshacer, onEditar, onFinalizarCiclo]);
 
   if (isLoading)
     return <LoadingScreen message="Cargando dashboard de ventas…" />;

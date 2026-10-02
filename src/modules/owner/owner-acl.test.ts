@@ -44,6 +44,9 @@ describe("owner ACL helpers", () => {
     expect(routeToFeature("/yugioh/stock/revision")).toBe("stock");
     expect(routeToFeature("/yugioh/stock/imprimir-etiquetas-qr")).toBe("stock");
     expect(routeToFeature("/pokemon/stock")).toBe("stock");
+    expect(routeToFeature("/magic/cotizar")).toBe("cotizar");
+    expect(routeToFeature("/onepiece/add-stock")).toBe("agregar-stock");
+    expect(routeToFeature("/onepiece")).toBe("inicio");
   });
 
   it("parseStoredOwner inválido → pablo", () => {

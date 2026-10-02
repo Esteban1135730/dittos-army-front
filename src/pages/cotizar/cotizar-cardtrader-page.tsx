@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
 import { Link as RouterLink } from "react-router-dom";
@@ -90,6 +90,7 @@ import {
 } from "@mui/material";
 
 import { API_BASE } from "../../config/api";
+import { mapWithConcurrency } from "../../utils/concurrency";
 import { useOwner } from "../../modules/owner";
 import {
   buildCartExportPayload,
@@ -101,11 +102,43 @@ import {
 } from "../../utils/cardtrader-cart-transfer";
 import { ImportEstebanCartDialog } from "./import-esteban-cart-dialog";
 import { getApiTcgHeader } from "../../config/api";
+import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
+import type { TcgKey } from "../../config/owners";
 import {
-  CARDTRADER_YUGIOH_GAME_ID,
-  cardTraderGameIdForTcg,
-} from "../../config/cardtrader-games";
+  CT_CONDITION_KEYS,
+  CT_LANGUAGE_KEYS,
+  pickCtProperty,
+} from "../../utils/cardtrader-order-item-map";
 const BLUEPRINTS_PER_PAGE = 96;
+
+/** Pistas del buscador por TCG: `inExpansion` filtra la expansión elegida; `byName` busca en CT. */
+const SEARCH_HINTS: Record<
+  TcgKey,
+  { inExpansion: string; byName: string; caption: string }
+> = {
+  pokemon: {
+    inExpansion: "Ej. Articuno",
+    byName: "Ej. Pikachu, ピカチュウ…",
+    caption: "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH.",
+  },
+  yugioh: {
+    inExpansion: "Ej. Blue-Eyes",
+    byName: "Ej. Dark Magician…",
+    caption:
+      "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom).",
+  },
+  magic: {
+    inExpansion: "Ej. Lightning Bolt",
+    byName: "Ej. Sol Ring…",
+    caption:
+      "Pulsa Buscar o Enter. Puedes escribir parte del nombre en inglés (p. ej. Bolt, Sol Ring).",
+  },
+  onepiece: {
+    inExpansion: "Ej. Zoro",
+    byName: "Ej. Monkey.D.Luffy…",
+    caption: "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Luffy, Nami).",
+  },
+};
 const OFFERS_PER_PAGE = 12;
 
 type CtExpansion = {
@@ -218,6 +251,21 @@ function normalizeBlueprints(data: unknown): CtBlueprint[] {
     );
   }
   return [];
+}
+
+const SHIPPING_METHODS_STALE_TIME_MS = 10 * 60_000;
+const CARDTRADER_CATALOG_STALE_TIME_MS = 30 * 60_000;
+
+/** `null` cuando el vendedor no expone días estimados (se muestra "—"). */
+async function fetchSellerMinShippingDays(username: string): Promise<number | null> {
+  const res = await axios.get(`${API_BASE}/cardtrader/shipping-methods`, {
+    params: { username },
+  });
+  const methods = Array.isArray(res.data) ? (res.data as ShippingMethod[]) : [];
+  const days = methods
+    .map((m) => m.max_estimate_shipping_days)
+    .filter((d): d is number => typeof d === "number" && d > 0);
+  return days.length ? Math.min(...days) : null;
 }
 
 function firstProductList(data: unknown): CtProduct[] {
@@ -417,19 +465,11 @@ function SearchGlyph() {
 }
 
 function productLangRaw(p: CtProduct): string | null {
-  const props = p.properties_hash;
-  const lang =
-    props?.pokemon_language ??
-    props?.yugioh_language ??
-    props?.mtg_language ??
-    props?.language ??
-    props?.fab_language;
-  return typeof lang === "string" && lang.trim() ? lang.trim() : null;
+  return pickCtProperty(p.properties_hash, CT_LANGUAGE_KEYS);
 }
 
 function productConditionValue(p: CtProduct): string | null {
-  const raw = p.properties_hash?.condition ?? p.properties_hash?.pokemon_condition;
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  return pickCtProperty(p.properties_hash, CT_CONDITION_KEYS);
 }
 
 function productLanguageValue(p: CtProduct): string | null {
@@ -540,20 +580,7 @@ function cartLines(cart: CartResponse | null | undefined): {
           expansion:
             meta?.expansion?.name_en ?? meta?.expansion?.name ?? meta?.expansion?.code ?? undefined,
           condition: typeof props?.condition === "string" ? props.condition : undefined,
-          language:
-            typeof (
-              props?.pokemon_language ??
-              props?.yugioh_language ??
-              props?.mtg_language ??
-              props?.language
-            ) === "string"
-              ? String(
-                  props?.pokemon_language ??
-                    props?.yugioh_language ??
-                    props?.mtg_language ??
-                    props?.language,
-                ).toUpperCase()
-              : undefined,
+          language: pickCtProperty(props, CT_LANGUAGE_KEYS)?.toUpperCase(),
           collectorNumber: collectorFromProps?.trim() || undefined,
           blueprintId,
           imageUrl:
@@ -681,10 +708,13 @@ export default function CotizarCardtraderPage() {
     severity: "success" | "warning" | "error";
   } | null>(null);
 
-  const cardTraderGameId = cardTraderGameIdForTcg(getApiTcgHeader());
+  const panelTcg = getApiTcgHeader();
+  const cardTraderGameId = cardTraderGameIdForTcg(panelTcg);
+  const searchHints = SEARCH_HINTS[panelTcg];
 
   const expansionsQuery = useQuery({
     queryKey: ["cardtrader", "expansions", cardTraderGameId],
+    staleTime: CARDTRADER_CATALOG_STALE_TIME_MS,
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/expansions`, {
         params: { game_id: cardTraderGameId },
@@ -730,6 +760,7 @@ export default function CotizarCardtraderPage() {
   const blueprintsQuery = useQuery({
     queryKey: ["cardtrader", "blueprints", expansion?.id],
     enabled: !!expansion?.id,
+    staleTime: CARDTRADER_CATALOG_STALE_TIME_MS,
     queryFn: async () => {
       const res = await axios.get(`${API_BASE}/cardtrader/blueprints`, {
         params: { expansion_id: expansion!.id },
@@ -1066,26 +1097,18 @@ export default function CotizarCardtraderPage() {
       ),
     [products],
   );
-  const shippingQuery = useQuery({
-    queryKey: ["cardtrader", "shipping", ...sellerUsernames.sort()],
-    enabled: sellerUsernames.length > 0,
-    queryFn: async () => {
-      const entries = await Promise.all(
-        sellerUsernames.map(async (username) => {
-          const res = await axios.get(`${API_BASE}/cardtrader/shipping-methods`, {
-            params: { username },
-          });
-          const methods = Array.isArray(res.data)
-            ? (res.data as ShippingMethod[])
-            : [];
-          const days = methods
-            .map((m) => m.max_estimate_shipping_days)
-            .filter((d): d is number => typeof d === "number" && d > 0);
-          const minDays = days.length ? Math.min(...days) : undefined;
-          return [username, minDays] as const;
-        }),
-      );
-      return Object.fromEntries(entries) as Record<string, number | undefined>;
+  const shippingDaysBySeller = useQueries({
+    queries: sellerUsernames.map((username) => ({
+      queryKey: ["cardtrader", "shipping-seller", username],
+      staleTime: SHIPPING_METHODS_STALE_TIME_MS,
+      queryFn: () => fetchSellerMinShippingDays(username),
+    })),
+    combine: (results) => {
+      const out: Record<string, number | undefined> = {};
+      results.forEach((r, i) => {
+        if (r.data != null) out[sellerUsernames[i]] = r.data;
+      });
+      return out;
     },
   });
   const offersTotalPages = Math.max(1, Math.ceil(products.length / OFFERS_PER_PAGE));
@@ -1441,14 +1464,16 @@ export default function CotizarCardtraderPage() {
         meta: CartItemMeta,
       ) => number | null,
     ): Promise<CotizarCartPdfLine[]> => {
-      const pdfLines: CotizarCartPdfLine[] = [];
-      for (const ln of lines) {
+      const candidates = lines.flatMap((ln) => {
         const unit = lineUnitCosts.get(ln.key);
-        if (!unit) continue;
+        if (!unit) return [];
         const meta = mergeCartItemMeta(productMetaById[ln.productId], ln.meta ?? {});
         const pvpUnitCop = resolveUnitPvpCop(unit, meta);
-        if (pvpUnitCop === null || pvpUnitCop <= 0) continue;
+        if (pvpUnitCop === null || pvpUnitCop <= 0) return [];
+        return [{ ln, meta, pvpUnitCop }];
+      });
 
+      return mapWithConcurrency(candidates, async ({ ln, meta, pvpUnitCop }): Promise<CotizarCartPdfLine> => {
         const qty = Math.max(1, ln.qty);
         const imageUrl =
           meta.imageUrl ??
@@ -1463,7 +1488,7 @@ export default function CotizarCardtraderPage() {
           }
         }
 
-        pdfLines.push({
+        return {
           productId: ln.productId,
           name: meta.name?.trim() || ln.name,
           imageUrl,
@@ -1479,25 +1504,26 @@ export default function CotizarCardtraderPage() {
             rarity: meta.rarity,
             variants: meta.variants,
           },
-        });
-      }
-      return pdfLines;
+        };
+      });
     },
     [lines, lineUnitCosts, productMetaById, blueprintImageById, persistCartMeta],
   );
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      for (const ln of lines) {
-        const meta = ln.meta;
-        if (!meta?.imageUrl?.trim() || meta.imageDataUrl?.startsWith("data:")) continue;
-        const dataUrl = await fetchCartImageDataUrl(meta.imageUrl, API_BASE);
-        if (cancelled || !dataUrl) continue;
-        setMemoryCartImageDataUrl(ln.productId, dataUrl);
-        persistCartMeta(ln.productId, { imageDataUrl: dataUrl });
-      }
-    })();
+    const pending = lines.flatMap((ln) => {
+      const imageUrl = ln.meta?.imageUrl;
+      if (!imageUrl?.trim() || ln.meta?.imageDataUrl?.startsWith("data:")) return [];
+      return [{ productId: ln.productId, imageUrl }];
+    });
+    void mapWithConcurrency(pending, async ({ productId, imageUrl }) => {
+      if (cancelled) return;
+      const dataUrl = await fetchCartImageDataUrl(imageUrl, API_BASE);
+      if (cancelled || !dataUrl) return;
+      setMemoryCartImageDataUrl(productId, dataUrl);
+      persistCartMeta(productId, { imageDataUrl: dataUrl });
+    });
     return () => {
       cancelled = true;
     };
@@ -1755,15 +1781,7 @@ export default function CotizarCardtraderPage() {
             <TextField
               fullWidth
               label="Buscar carta por nombre o ID"
-              placeholder={
-                expansion
-                  ? cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                    ? "Ej. Blue-Eyes"
-                    : "Ej. Articuno"
-                  : cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                    ? "Ej. Dark Magician…"
-                    : "Ej. Pikachu, ピカチュウ…"
-              }
+              placeholder={expansion ? searchHints.inExpansion : searchHints.byName}
               value={blueprintFilter}
               onChange={(e) => {
                 setBlueprintFilter(e.target.value);
@@ -1799,9 +1817,7 @@ export default function CotizarCardtraderPage() {
             </Stack>
             {!expansion && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-                {cardTraderGameId === CARDTRADER_YUGIOH_GAME_ID
-                  ? "Pulsa Buscar o Enter. Puedes escribir parte del nombre (p. ej. Blue-Eyes, Ash Blossom)."
-                  : "Pulsa Buscar o Enter (no busca al escribir). Incluye sets EN, JP y ZH."}
+                {searchHints.caption}
               </Typography>
             )}
           </Box>
@@ -2601,8 +2617,8 @@ export default function CotizarCardtraderPage() {
                             const langRaw = productLangRaw(p);
                             const shipDays =
                               p.user?.username &&
-                              shippingQuery.data?.[p.user.username] !== undefined
-                                ? `${shippingQuery.data[p.user.username]} d.`
+                              shippingDaysBySeller[p.user.username] !== undefined
+                                ? `${shippingDaysBySeller[p.user.username]} d.`
                                 : p.on_vacation
                                   ? "Vacaciones"
                                   : "—";

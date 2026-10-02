@@ -1,20 +1,22 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { getApiOrigin } from "../config/api";
-import CardDetail from "../pages/stock/create-stock/components/card.detail";
-import type { CartaBusquedaDirecta } from "../pages/stock/create-stock/stock";
-import { ExpansionSearch } from "../components/add-stock/expansion-search";
-import { CardResultGrid } from "../components/add-stock/card-result-grid";
-import { StockEntryModal } from "../components/add-stock/stock-entry-modal";
+import { apiUrl } from "../../../config/api";
+import type { TcgKey } from "../../../config/owners";
+import { currentPanelTcg } from "../../../config/routes";
+import CardDetail from "../create-stock/components/card.detail";
+import type { CartaBusquedaDirecta } from "../create-stock/stock";
+import { ExpansionSearch } from "../../../components/add-stock/expansion-search";
+import { CardResultGrid } from "../../../components/add-stock/card-result-grid";
+import { StockEntryModal } from "../../../components/add-stock/stock-entry-modal";
 
-type YugiohSet = {
+type CatalogSet = {
   code: string;
   name: string;
   cardCount: number;
 };
 
-type YugiohCard = {
+type CatalogCard = {
   id: string;
   name: string;
   number: string;
@@ -23,12 +25,14 @@ type YugiohCard = {
   image: string;
 };
 
-function yugiohUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${getApiOrigin()}/yugioh${normalized}`;
-}
+const CARD_NAME_PLACEHOLDER: Record<TcgKey, string> = {
+  pokemon: "Ej. Pikachu",
+  yugioh: "Ej. Dark Magician",
+  magic: "Ej. Lightning Bolt",
+  onepiece: "Ej. Monkey.D.Luffy",
+};
 
-function asDetalle(card: YugiohCard): CartaBusquedaDirecta {
+function asDetalle(card: CatalogCard): CartaBusquedaDirecta {
   return {
     id: card.id,
     localId: card.number,
@@ -37,15 +41,20 @@ function asDetalle(card: YugiohCard): CartaBusquedaDirecta {
   };
 }
 
-export default function YugiohAddStockPage() {
+/**
+ * Alta de stock para TCG con catálogo externo (Yu-Gi-Oh, Magic, One Piece).
+ * El backend elige el catálogo según `X-Tcg` y guarda en la DB del owner activo.
+ */
+export default function CatalogAddStockPage() {
+  const tcg = currentPanelTcg();
   const [modoBusqueda, setModoBusqueda] = useState<"expansion" | "directa">("expansion");
   const [filtroExpansion, setFiltroExpansion] = useState("");
   const [mostrarLista, setMostrarLista] = useState(false);
   const [setName, setSetName] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const [carta, setCarta] = useState<YugiohCard | null>(null);
+  const [carta, setCarta] = useState<CatalogCard | null>(null);
   const [nombreCarta, setNombreCarta] = useState("");
-  const [resultadosCarta, setResultadosCarta] = useState<YugiohCard[]>([]);
+  const [resultadosCarta, setResultadosCarta] = useState<CatalogCard[]>([]);
   const [buscandoCartaDirecta, setBuscandoCartaDirecta] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState("");
   const [costoCarta, setCostoCarta] = useState(0);
@@ -60,9 +69,9 @@ export default function YugiohAddStockPage() {
   const [mensaje, setMensaje] = useState("");
 
   const setsQuery = useQuery({
-    queryKey: ["yugioh-sets"],
+    queryKey: ["catalog-sets", tcg],
     queryFn: async () => {
-      const res = await axios.get<YugiohSet[]>(yugiohUrl("/sets"));
+      const res = await axios.get<CatalogSet[]>(apiUrl("/catalog/sets"));
       return Array.isArray(res.data) ? res.data : [];
     },
     staleTime: 60 * 60 * 1000,
@@ -83,11 +92,11 @@ export default function YugiohAddStockPage() {
   const selectedSet = expansiones.find((set) => set.name === setName) ?? null;
 
   const cardsQuery = useQuery({
-    queryKey: ["yugioh-cards", setName],
+    queryKey: ["catalog-cards", tcg, setName],
     enabled: Boolean(setName) && modoBusqueda === "expansion",
     queryFn: async () => {
-      const res = await axios.get<{ set: YugiohSet; cards: YugiohCard[] }>(
-        yugiohUrl(`/sets/${encodeURIComponent(setName)}/cards`),
+      const res = await axios.get<{ set: CatalogSet; cards: CatalogCard[] }>(
+        apiUrl(`/catalog/sets/${encodeURIComponent(setName)}/cards`),
       );
       return res.data.cards ?? [];
     },
@@ -110,7 +119,7 @@ export default function YugiohAddStockPage() {
     setBuscandoCartaDirecta(true);
     setErrorBusqueda("");
     try {
-      const res = await axios.get<YugiohCard[]>(yugiohUrl("/cards"), {
+      const res = await axios.get<CatalogCard[]>(apiUrl("/catalog/cards"), {
         params: { q: nombreCarta.trim() },
       });
       const data = Array.isArray(res.data) ? res.data : [];
@@ -124,7 +133,7 @@ export default function YugiohAddStockPage() {
     }
   };
 
-  const abrir = (row: YugiohCard) => {
+  const abrir = (row: CatalogCard) => {
     setCarta(row);
     setModalAbierto(true);
     setMensaje("");
@@ -142,7 +151,7 @@ export default function YugiohAddStockPage() {
     }
     try {
       setGuardando(true);
-      await axios.post(yugiohUrl("/stock"), {
+      await axios.post(apiUrl("/catalog/stock"), {
         card_id: carta.id,
         card_name: carta.name,
         set_name: selectedSet?.name || carta.setName,
@@ -254,7 +263,7 @@ export default function YugiohAddStockPage() {
               type="text"
               value={nombreCarta}
               onChange={(e) => setNombreCarta(e.target.value)}
-              placeholder="Ej. Dark Magician"
+              placeholder={CARD_NAME_PLACEHOLDER[tcg]}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             />
             <button

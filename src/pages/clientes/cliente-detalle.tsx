@@ -19,7 +19,6 @@ import type { StockListItem } from "../../types/stock";
 import { LoadingScreen } from "../../components/loading";
 import ClienteFormDialog from "./cliente-form-dialog";
 import {
-  API_CLIENT,
   API_RESERVA,
   API_SALES,
   API_STOCK,
@@ -43,6 +42,7 @@ import {
   reservaLineQuantity,
 } from "./clientes-resumen-pedidos";
 import { useExchangeRates } from "../../utils/tasa";
+import { mapWithConcurrency } from "../../utils/concurrency";
 import { otherOwner, type OwnerKey } from "../../config/owners";
 import { useOwner } from "../../modules/owner";
 import {
@@ -69,7 +69,7 @@ import {
   descripcionEntrega,
   formatFechaTentativa,
 } from "./pedido-entrega-label";
-import { normalizeClientItem } from "./cliente-id";
+import { fetchClientById } from "../../api/list-queries";
 import { fetchPedidosByClient, isPedidoApiLikelyMissing } from "./fetch-pedidos";
 import {
   clientesDetailGridSx,
@@ -121,14 +121,7 @@ export default function ClienteDetallePage() {
 
   const { data: client, isLoading, isError, error: clientError } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
-    queryFn: async () => {
-      const res = await axios.get(`${API_CLIENT}/${clientId}`);
-      const normalized = normalizeClientItem(res.data);
-      if (!normalized) {
-        throw new Error("Cliente no encontrado en el servidor.");
-      }
-      return normalized;
-    },
+    queryFn: () => fetchClientById(clientId!),
     enabled: !!clientId,
     retry: false,
   });
@@ -361,14 +354,13 @@ export default function ClienteDetallePage() {
   };
 
   const guardarPvpReserva = async (rows: ReservaIncomingItem[], cop: number | null) => {
-    for (const r of rows) {
-      await axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop });
-    }
-    if (clientId) {
-      await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
-    }
-    await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
-    await invalidateReservaIncomingAbonos(queryClient, clientId);
+    await mapWithConcurrency(rows, (r) =>
+      axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop }),
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] }),
+      invalidateReservaIncomingAbonos(queryClient, clientId),
+    ]);
     show(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
   };
 
@@ -483,13 +475,14 @@ export default function ClienteDetallePage() {
 
   const invalidarPedidoQueries = async () => {
     if (!clientId) return;
-    await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
-    await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-    await queryClient.invalidateQueries({ queryKey: ["reservas"] });
-    await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-    await queryClient.invalidateQueries({ queryKey: ["stock"] });
-    await queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-    await queryClient.invalidateQueries({ queryKey: ["ventas-cliente", clientId] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] }),
+      queryClient.invalidateQueries({ queryKey: ["reservas"] }),
+      queryClient.invalidateQueries({ queryKey: ["clientes"] }),
+      queryClient.invalidateQueries({ queryKey: ["stock"] }),
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["ventas-cliente", clientId] }),
+    ]);
   };
 
   const pagarPedido = async (pedido: PedidoItem) => {

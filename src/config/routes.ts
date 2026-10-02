@@ -1,23 +1,42 @@
+import { TCG_KEYS, type TcgKey } from "./owners";
+
 /**
  * UI path prefix for the Pokémon surface of the panel.
- * BrowserRouter basename; legacy URLs without this prefix redirect here.
+ * BrowserRouter basename; legacy URLs without a TCG prefix redirect here.
  */
 export const PANEL_UI_PREFIX = "/pokemon";
-export const YUGIOH_UI_PREFIX = "/yugioh";
 
-/** Basename del panel según la URL, o null si hay que redirigir a Pokémon. */
-export function panelBasenameForPath(pathname: string): string | null {
-  if (pathname === YUGIOH_UI_PREFIX || pathname.startsWith(`${YUGIOH_UI_PREFIX}/`)) {
-    return YUGIOH_UI_PREFIX;
-  }
-  if (pathname === PANEL_UI_PREFIX || pathname.startsWith(`${PANEL_UI_PREFIX}/`)) {
-    return PANEL_UI_PREFIX;
+/** BrowserRouter basename de cada superficie TCG del panel. */
+export const TCG_UI_PREFIX: Record<TcgKey, string> = {
+  pokemon: PANEL_UI_PREFIX,
+  yugioh: "/yugioh",
+  magic: "/magic",
+  onepiece: "/onepiece",
+};
+
+/** TCG de la superficie según la URL, o null si no hay prefijo TCG. */
+export function tcgForPath(pathname: string): TcgKey | null {
+  for (const tcg of TCG_KEYS) {
+    const prefix = TCG_UI_PREFIX[tcg];
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return tcg;
   }
   return null;
 }
 
+/** Basename del panel según la URL, o null si hay que redirigir a Pokémon. */
+export function panelBasenameForPath(pathname: string): string | null {
+  const tcg = tcgForPath(pathname);
+  return tcg ? TCG_UI_PREFIX[tcg] : null;
+}
+
+/** TCG de la superficie activa (Pokémon fuera del navegador o sin prefijo). */
+export function currentPanelTcg(): TcgKey {
+  if (typeof window === "undefined") return "pokemon";
+  return tcgForPath(window.location.pathname) ?? "pokemon";
+}
+
 /**
- * If the location is outside `/pokemon`, replace to the prefixed path.
+ * If the location is outside any TCG prefix, replace to the Pokémon path.
  * @returns true when a redirect was triggered (caller should not mount the app).
  */
 export function redirectLegacyPanelPath(): boolean {

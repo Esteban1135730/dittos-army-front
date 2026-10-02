@@ -67,8 +67,10 @@ export default function ClienteFormDialog({ open, mode, client, onClose, onSaved
       };
       if (mode === "edit" && client) {
         await axios.put(`${API_CLIENT}/${client._id}`, body);
-        await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-        await queryClient.invalidateQueries({ queryKey: ["client", client._id] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["clientes"] }),
+          queryClient.invalidateQueries({ queryKey: ["client", client._id] }),
+        ]);
       } else {
         await axios.post(API_CLIENT, body);
         await queryClient.invalidateQueries({ queryKey: ["clientes"] });

@@ -1,14 +1,14 @@
 import axios from "axios";
-import type { OwnerKey } from "./owners";
-import { OWNERS_CONFIG } from "./owners";
-import { YUGIOH_UI_PREFIX, panelBasenameForPath } from "./routes";
+import type { OwnerKey, TcgKey } from "./owners";
+import { defaultOwnerForTcg } from "./owners";
+import { currentPanelTcg } from "./routes";
 
 const API_PORT = import.meta.env.VITE_API_PORT ?? "3000";
 
-/** Nest product API path prefix (Pokémon surface URL; Yu-Gi-Oh uses X-Tcg). */
+/** Nest product API path prefix (Pokémon surface URL; otros TCG usan X-Tcg). */
 export const API_TCG_PREFIX = "/pokemon";
 
-export type ApiTcg = "pokemon" | "yugioh";
+export type ApiTcg = TcgKey;
 
 /**
  * Origen del API Nest (sin `/pokemon`, sin barra final).
@@ -70,9 +70,6 @@ function withTcgPrefix(path: string): string {
   if (normalized === "/health" || normalized.startsWith("/health?")) {
     return normalized;
   }
-  if (normalized === "/yugioh" || normalized.startsWith("/yugioh/")) {
-    return normalized;
-  }
   if (
     normalized === API_TCG_PREFIX ||
     normalized.startsWith(`${API_TCG_PREFIX}/`)
@@ -86,17 +83,11 @@ export function apiUrl(path: string): string {
   return `${getApiOrigin()}${withTcgPrefix(path)}`;
 }
 
-/** Active TCG for Axios — Yu-Gi-Oh panel hits the same Nest routes with X-Tcg. */
-let activeApiTcg: ApiTcg =
-  panelBasenameForPath(
-    typeof window !== "undefined" ? window.location.pathname : "/pokemon",
-  ) === YUGIOH_UI_PREFIX
-    ? "yugioh"
-    : "pokemon";
+/** Active TCG for Axios — cada superficie usa las mismas rutas Nest con X-Tcg. */
+let activeApiTcg: ApiTcg = currentPanelTcg();
 
 /** Active owner for Axios default instance (034). */
-let activeApiOwner: OwnerKey =
-  activeApiTcg === "yugioh" ? "tefa" : OWNERS_CONFIG.defaultOwner;
+let activeApiOwner: OwnerKey = defaultOwnerForTcg(activeApiTcg);
 
 declare module "axios" {
   interface AxiosRequestConfig {

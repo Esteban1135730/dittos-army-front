@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Alert,
@@ -17,7 +17,6 @@ import NuevoPedidoDialog from "../clientes/nuevo-pedido-dialog";
 import { clientesPageSx, clientesSectionPaperSx } from "../clientes/clientes-page-layout";
 import EnviosCalendar from "./envios-calendar";
 import EnviosDayDialog from "./envios-day-dialog";
-import EnviosMap from "./envios-map";
 import { fetchPedidoCalendario } from "./fetch-calendario";
 import { calendarioToPedidoItem } from "./calendario-to-pedido";
 import {
@@ -28,6 +27,8 @@ import {
 import { unlocatedDomicilioIds } from "./map-pins";
 import { useDayGeocode } from "./use-day-geocode";
 import type { PedidoCalendarioItem } from "./types";
+
+const EnviosMap = lazy(() => import("./envios-map"));
 
 const EMPTY_ITEMS: PedidoCalendarioItem[] = [];
 
@@ -148,11 +149,13 @@ export default function EnviosPage() {
         <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 1.5 }}>
           Mapa del día
         </Typography>
-        <EnviosMap
-          items={selectedItems}
-          coordsByAddress={coordsByAddress}
-          onEditItem={openEdit}
-        />
+        <Suspense fallback={<LinearProgress sx={{ borderRadius: 1 }} />}>
+          <EnviosMap
+            items={selectedItems}
+            coordsByAddress={coordsByAddress}
+            onEditItem={openEdit}
+          />
+        </Suspense>
       </Paper>
 
       <EnviosDayDialog

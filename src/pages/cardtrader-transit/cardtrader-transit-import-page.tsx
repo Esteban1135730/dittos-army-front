@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { apiUrl, getApiTcgHeader } from "../../config/api";
 import { cardTraderGameIdForTcg } from "../../config/cardtrader-games";
 import type { Ct0BoxItem } from "../../utils/cardtrader-ct0-box";
+import { mapWithConcurrency } from "../../utils/concurrency";
 import {
   type IncomingBatchBundleForCt0Draft,
   pricingFieldsFromOpenIncomingBatch,
@@ -65,8 +66,9 @@ export default function CardtraderTransitImportPage() {
     enabled: (legacyOpenQuery.data?.length ?? 0) > 0,
     queryFn: async () => {
       const batches = legacyOpenQuery.data ?? [];
-      return Promise.all(
-        batches.map(async (batch) => {
+      return mapWithConcurrency(
+        batches,
+        async (batch) => {
           const res = await axios.get(`${API_INCOMING}/batch/${batch.batch_id}/items`);
           const items = Array.isArray(res.data) ? res.data : [];
           return {
@@ -89,7 +91,7 @@ export default function CardtraderTransitImportPage() {
               }),
             ),
           };
-        }),
+        },
       );
     },
   });

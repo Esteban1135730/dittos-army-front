@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import SideLayout from "../components/layout/side-layout";
 import { LoadingScreen } from "../components/loading";
+import type { TcgKey } from "../config/owners";
 
 const Home = lazy(() => import("../pages/home/home"));
 const StockGrid = lazy(() => import("../pages/stock/grid-stock"));
@@ -61,7 +62,7 @@ function LayoutPage({ children }: { children: ReactNode }) {
   return <SideLayout>{children}</SideLayout>;
 }
 
-export type PanelSurface = "pokemon" | "yugioh";
+export type PanelSurface = TcgKey;
 
 type PanelRoutesProps = {
   surface: PanelSurface;
@@ -70,7 +71,7 @@ type PanelRoutesProps = {
 };
 
 /**
- * Rutas del panel operativo. Pokémon y Yu-Gi-Oh comparten las mismas pantallas
+ * Rutas del panel operativo. Todos los TCG comparten las mismas pantallas
  * (cotizar, tránsito, clientes, etc.); solo se excluyen flujos TCG-específicos.
  */
 export function PanelRoutes({ surface, AddStockPage }: PanelRoutesProps) {

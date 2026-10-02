@@ -139,8 +139,10 @@ export default function NuevoPedidoDialog({
         setErrorMsg("Pedido no encontrado.");
         return;
       }
-      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
-      await queryClient.invalidateQueries({ queryKey: ["pedido-calendario"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["pedido-calendario"] }),
+      ]);
       onSaved?.(saved);
       onClose();
     } catch (err) {

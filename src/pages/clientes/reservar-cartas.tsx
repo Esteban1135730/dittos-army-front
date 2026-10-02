@@ -21,13 +21,15 @@ import { useExchangeRates } from "../../utils/tasa";
 import { formatCOP } from "../../utils/convert";
 import type { StockListItem } from "../../types/stock";
 import {
-  API_CLIENT,
   API_RESERVA,
   API_STOCK,
   type ClientItem,
   type ReservaIncomingItem,
   type ReservaItem,
 } from "./cliente-types";
+import { fetchClientById } from "../../api/list-queries";
+import { mapWithConcurrency } from "../../utils/concurrency";
+import { useEventCallback } from "../../utils/use-event-callback";
 import { API_CARDTRADER_TRANSIT_LOTS } from "../cardtrader-transit/cardtrader-transit-types";
 import {
   compareIncomingLinesByOldest,
@@ -174,10 +176,7 @@ export default function ReservarCartasPage() {
 
   const { data: client, isLoading: loadingClient } = useQuery<ClientItem>({
     queryKey: ["client", clientId],
-    queryFn: async () => {
-      const res = await axios.get(`${API_CLIENT}/${clientId}`);
-      return res.data;
-    },
+    queryFn: () => fetchClientById(clientId!),
     enabled: !!clientId,
   });
 
@@ -219,7 +218,7 @@ export default function ReservarCartasPage() {
     void ensureBulkProduct().then((r) => {
       if (!r.ok) {
         toast(r.error ?? "No se pudo asegurar el SKU bulk", "error");
-      } else {
+      } else if (r.data?.created) {
         void queryClient.invalidateQueries({ queryKey: ["stock"] });
       }
     });
@@ -457,14 +456,17 @@ export default function ReservarCartasPage() {
       );
   }, [reservasDelPedido, stockCatalogAll, activeOwner]);
 
-  const getPrecioDefault = (item: StockItem): number => {
-    if (item.pvp != null && item.pvp > 0 && item.pvp_currency) {
-      if (item.pvp_currency === "COP") return item.pvp;
-      if (item.pvp_currency === "EUR") return convert.toCopFromEur(item.pvp) ?? 0;
-      if (item.pvp_currency === "USD") return convert.toCopFromUsd(item.pvp) ?? 0;
-    }
-    return 0;
-  };
+  const getPrecioDefault = useCallback(
+    (item: StockItem): number => {
+      if (item.pvp != null && item.pvp > 0 && item.pvp_currency) {
+        if (item.pvp_currency === "COP") return item.pvp;
+        if (item.pvp_currency === "EUR") return convert.toCopFromEur(item.pvp) ?? 0;
+        if (item.pvp_currency === "USD") return convert.toCopFromUsd(item.pvp) ?? 0;
+      }
+      return 0;
+    },
+    [convert],
+  );
 
   const getPrecioReserva = (rowKey: string, item: StockItem): number => {
     const v = precios[rowKey];
@@ -521,10 +523,12 @@ export default function ReservarCartasPage() {
       if (isQty) {
         setCantidadStock((prev) => ({ ...prev, [rowKey]: "1" }));
       }
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
-      await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      await invalidatePedidoAbonos(queryClient, stockPedidoId);
-      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stock"] }),
+        queryClient.invalidateQueries({ queryKey: ["reservas", clientId] }),
+        invalidatePedidoAbonos(queryClient, stockPedidoId),
+        queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] }),
+      ]);
       toast(
         isQty
           ? `«${item.card_name}» ×${qty} añadido al pedido.`
@@ -555,10 +559,12 @@ export default function ReservarCartasPage() {
       const next = { ...preciosReservadas };
       delete next[lineKey];
       setPreciosReservadas(next);
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
-      await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      await invalidatePedidoAbonos(queryClient, stockPedidoId);
-      await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stock"] }),
+        queryClient.invalidateQueries({ queryKey: ["reservas", clientId] }),
+        invalidatePedidoAbonos(queryClient, stockPedidoId),
+        queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] }),
+      ]);
       toast("Línea quitada del pedido.", "success");
     } catch {
       toast("Error al quitar la reserva.", "error");
@@ -599,8 +605,10 @@ export default function ReservarCartasPage() {
         delete next[lineKey];
         return next;
       });
-      await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      await invalidatePedidoAbonos(queryClient, stockPedidoId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["reservas", clientId] }),
+        invalidatePedidoAbonos(queryClient, stockPedidoId),
+      ]);
       toast("Precio actualizado.", "success");
     } catch {
       toast("Error al actualizar el precio.", "error");
@@ -641,8 +649,10 @@ export default function ReservarCartasPage() {
         delete next[lineKey];
         return next;
       });
-      await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      await invalidatePedidoAbonos(queryClient, stockPedidoId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["reservas", clientId] }),
+        invalidatePedidoAbonos(queryClient, stockPedidoId),
+      ]);
       toast("Precio aplicado desde PVP.", "success");
     } catch {
       toast("Error al aplicar PVP.", "error");
@@ -684,11 +694,13 @@ export default function ReservarCartasPage() {
   };
 
   const handleSaveIncomingPvp = async (rows: ReservaIncomingItem[], cop: number | null) => {
-    for (const r of rows) {
-      await axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop });
-    }
-    await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
-    await invalidateReservaIncomingAbonos(queryClient, clientId);
+    await mapWithConcurrency(rows, (r) =>
+      axios.patch(`${API_RESERVA}/incoming/${r._id}`, { precio_cop: cop }),
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] }),
+      invalidateReservaIncomingAbonos(queryClient, clientId),
+    ]);
     toast(cop != null ? "PVP de la reserva actualizado." : "PVP quitado de la reserva.", "success");
   };
 
@@ -748,11 +760,13 @@ export default function ReservarCartasPage() {
     if (rows.length === 0) return;
     setIncomingMutatingId(groupId);
     try {
-      for (const r of rows) {
-        await axios.delete(`${API_RESERVA}/incoming/${r._id}`);
-      }
-      await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
-      await invalidateReservaIncomingAbonos(queryClient, clientId);
+      await mapWithConcurrency(rows, (r) =>
+        axios.delete(`${API_RESERVA}/incoming/${r._id}`),
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] }),
+        invalidateReservaIncomingAbonos(queryClient, clientId),
+      ]);
       toast(
         rows.length > 1 ? "Reservas en camino de esta variante eliminadas." : "Reserva en camino eliminada.",
         "success",
@@ -774,7 +788,10 @@ export default function ReservarCartasPage() {
     [incomingGroupedFiltrado],
   );
 
-  const columnsIncoming: GridColDef<GroupedIncomingCatalogRow>[] = [
+  const onAddIncomingGroup = useEventCallback(handleAddIncomingGroup);
+  const onReservar = useEventCallback(handleReservar);
+
+  const columnsIncoming = useMemo<GridColDef<GroupedIncomingCatalogRow>[]>(() => [
     {
       field: "image_url",
       headerName: "",
@@ -890,7 +907,7 @@ export default function ReservarCartasPage() {
               size="small"
               variant="contained"
               disabled={group.cupo <= 0 || busy}
-              onClick={() => handleAddIncomingGroup(group)}
+              onClick={() => onAddIncomingGroup(group)}
               sx={{ textTransform: "none" }}
             >
               {busy ? "…" : "Añadir"}
@@ -899,9 +916,9 @@ export default function ReservarCartasPage() {
         );
       },
     },
-  ];
+  ], [cantidadIncoming, detailsByCardId, incomingMutatingId, loadingCardImages, onAddIncomingGroup]);
 
-  const columns: GridColDef<ReservaCatalogRow>[] = [
+  const columns = useMemo<GridColDef<ReservaCatalogRow>[]>(() => [
     {
       field: "image_url",
       headerName: "",
@@ -1071,7 +1088,7 @@ export default function ReservarCartasPage() {
             <Button
               variant="contained"
               size="small"
-              onClick={() => handleReservar(item)}
+              onClick={() => onReservar(item)}
               disabled={loading || !canReservarStock(pedidoReservado) || (isQty && available <= 0)}
               sx={{ textTransform: "none", minWidth: 96 }}
             >
@@ -1081,7 +1098,15 @@ export default function ReservarCartasPage() {
         );
       },
     },
-  ];
+  ], [
+    cantidadStock,
+    convert,
+    getPrecioDefault,
+    onReservar,
+    pedidoReservado,
+    precios,
+    reservandoId,
+  ]);
 
   if (!clientId) {
     return (
@@ -1169,12 +1194,16 @@ export default function ReservarCartasPage() {
         onClose={() => setImportWaOpen(false)}
         client={client}
         onImported={async (summary) => {
-          await queryClient.invalidateQueries({ queryKey: ["stock"] });
-          if (clientId) {
-            await queryClient.invalidateQueries({ queryKey: ["reservas", clientId] });
-      await invalidatePedidoAbonos(queryClient, stockPedidoId);
-            await queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] });
-          }
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["stock"] }),
+            ...(clientId
+              ? [
+                  queryClient.invalidateQueries({ queryKey: ["reservas", clientId] }),
+                  invalidatePedidoAbonos(queryClient, stockPedidoId),
+                  queryClient.invalidateQueries({ queryKey: ["pedidos", clientId] }),
+                ]
+              : []),
+          ]);
           toast(summary, "success");
         }}
       />
@@ -1619,11 +1648,10 @@ export default function ReservarCartasPage() {
         onClose={() => setImportWaReservaOpen(false)}
         client={client}
         onImported={async (summary) => {
-          await queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] });
-          if (clientId) {
-            await queryClient.invalidateQueries({ queryKey: ["reservas-incoming", clientId] });
-          }
-          await invalidateReservaIncomingAbonos(queryClient, clientId);
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["reservas-incoming"] }),
+            invalidateReservaIncomingAbonos(queryClient, clientId),
+          ]);
           toast(summary, "success");
         }}
       />
