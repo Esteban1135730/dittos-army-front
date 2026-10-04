@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   QR_FAVORITES_MAX,
   QR_FAVORITES_STORAGE_KEY,
+  filterQrFavorites,
   isQrFavorite,
   loadQrFavorites,
   parseQrFavorites,
   qrFavoriteKey,
+  reorderQrFavorites,
   saveQrFavorites,
   toggleQrFavorite,
   type QrFavorite,
@@ -71,5 +73,25 @@ describe("qr favorites", () => {
     saveQrFavorites(list, storage);
     expect(mem.has(QR_FAVORITES_STORAGE_KEY)).toBe(true);
     expect(loadQrFavorites(storage)).toEqual(list);
+  });
+
+  it("filtra por nombre, idioma o rareza", () => {
+    const list = [
+      fav({ stock_id: "a", card_name: "Pikachu", language: "EN" }),
+      fav({ stock_id: "b", card_id: "sv1-2", card_name: "Charizard", language: "JA", rareza: null }),
+    ];
+    expect(filterQrFavorites(list, "  pika ")).toEqual([list[0]]);
+    expect(filterQrFavorites(list, "ja")).toEqual([list[1]]);
+    expect(filterQrFavorites(list, "")).toEqual(list);
+  });
+
+  it("reordena solo las visibles y conserva el resto", () => {
+    const hidden = fav({ stock_id: "h", card_id: "hidden", card_name: "Mew" });
+    const a = fav({ stock_id: "a", card_id: "a", card_name: "Pikachu" });
+    const b = fav({ stock_id: "b", card_id: "b", card_name: "Charmander" });
+    const list = [a, hidden, b];
+    const next = reorderQrFavorites(list, [a, b], qrFavoriteKey(b), qrFavoriteKey(a));
+    expect(next.map((item) => item.stock_id)).toEqual(["b", "h", "a"]);
+    expect(reorderQrFavorites(list, [a, b], qrFavoriteKey(a), qrFavoriteKey(a))).toBe(list);
   });
 });

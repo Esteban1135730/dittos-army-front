@@ -8,8 +8,10 @@ export {
   type ReservedScanNotice,
 } from "./reject-reason-message";
 export {
+  filterQrFavorites,
   isQrFavorite,
   loadQrFavorites,
+  reorderQrFavorites,
   QR_FAVORITES_MAX,
   QR_FAVORITES_STORAGE_KEY,
   saveQrFavorites,

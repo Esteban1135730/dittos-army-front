@@ -67,6 +67,45 @@ export function parseQrFavorites(raw: string | null): QrFavorite[] {
   return out;
 }
 
+export function filterQrFavorites(list: QrFavorite[], query: string): QrFavorite[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((fav) => {
+    const blob = [fav.card_name, fav.language, fav.rareza ?? "", fav.card_id]
+      .join(" ")
+      .toLowerCase();
+    return blob.includes(q);
+  });
+}
+
+/**
+ * Mueve un favorito dentro del orden visible y deja el resto en su sitio.
+ * Así un filtro no revuelve las cartas que no se están viendo.
+ */
+export function reorderQrFavorites(
+  list: QrFavorite[],
+  visible: QrFavorite[],
+  fromKey: string,
+  toKey: string,
+): QrFavorite[] {
+  if (!fromKey || !toKey || fromKey === toKey) return list;
+  const from = visible.findIndex((fav) => qrFavoriteKey(fav) === fromKey);
+  const to = visible.findIndex((fav) => qrFavoriteKey(fav) === toKey);
+  if (from < 0 || to < 0) return list;
+  const nextVisible = visible.slice();
+  const [moved] = nextVisible.splice(from, 1);
+  if (!moved) return list;
+  nextVisible.splice(to, 0, moved);
+  const visibleKeys = new Set(visible.map((fav) => qrFavoriteKey(fav)));
+  let cursor = 0;
+  return list.map((item) => {
+    if (!visibleKeys.has(qrFavoriteKey(item))) return item;
+    const replacement = nextVisible[cursor];
+    cursor += 1;
+    return replacement ?? item;
+  });
+}
+
 export function toggleQrFavorite(
   list: QrFavorite[],
   next: QrFavorite,

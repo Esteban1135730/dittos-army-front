@@ -2,6 +2,7 @@ import {
   normalizeOperationalRareza,
   operationalRarezaLabel,
 } from "../../constants/item-rareza";
+import type { OwnerKey } from "../../config/owners";
 import { isStockLineVisibleInGrid } from "../../utils/stock-grid-visible";
 
 /** Estados que el mostrador no ofrece en la búsqueda manual. */
@@ -22,6 +23,8 @@ export type CounterSearchRow = {
   quantity?: number | null;
   pvp?: number;
   pvp_currency?: string;
+  /** Base de la que salió la fila (Pablo y Esteban se buscan por separado). */
+  owner?: OwnerKey;
 };
 
 export type CounterSearchGroup = {
@@ -36,6 +39,7 @@ export type CounterSearchGroup = {
   pvp_currency: string | null;
   count: number;
   stock_ids: string[];
+  owner?: OwnerKey;
 };
 
 export function effectiveOperationalRareza(row: {
@@ -106,7 +110,8 @@ export function groupCounterSearchRows(
     const canonical = effectiveOperationalRareza(row);
     const rareza = rarezaLabel(canonical);
     const price = rowPrice(row);
-    const key = `${cardId}|${language}|${canonical ?? ""}`;
+    const owner = row.owner;
+    const key = `${owner ?? ""}|${cardId}|${language}|${canonical ?? ""}`;
     const existing = groups.get(key);
     if (!existing) {
       groups.set(key, {
@@ -120,6 +125,7 @@ export function groupCounterSearchRows(
         pvp_currency: price.pvp_currency,
         count: rowUnits(row),
         stock_ids: [stockId],
+        owner,
       });
       continue;
     }
@@ -141,9 +147,14 @@ export function groupCounterSearchRows(
   for (const group of list) {
     group.stock_ids.sort((a, b) => a.localeCompare(b));
   }
-  list.sort((a, b) =>
-    (a.card_name || a.card_id).localeCompare(b.card_name || b.card_id, "es"),
-  );
+  list.sort((a, b) => {
+    const byName = (a.card_name || a.card_id).localeCompare(
+      b.card_name || b.card_id,
+      "es",
+    );
+    if (byName !== 0) return byName;
+    return (a.owner ?? "").localeCompare(b.owner ?? "");
+  });
   return list;
 }
 

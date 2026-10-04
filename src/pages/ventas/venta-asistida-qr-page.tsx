@@ -39,11 +39,14 @@ import {
   cartUnitCount,
   duplicateUnitScanMessage,
   expandCartLinesToSellBatchItems,
+  filterQrFavorites,
   groupCounterSearchRows,
   isQrFavorite,
   lineProfitCop,
   loadQrFavorites,
   pickGroupScanStockId,
+  qrFavoriteKey,
+  reorderQrFavorites,
   reservedScanNotice,
   saveQrFavorites,
   scanRejectMessage,
@@ -158,10 +161,12 @@ function SummaryCard({
 function SideMenuFrame({
   title,
   count,
+  action,
   children,
 }: {
   title: string;
   count?: number;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -170,49 +175,171 @@ function SideMenuFrame({
         <Typography variant="subtitle1" fontWeight={700}>
           {title}
         </Typography>
-        {count != null ? <Chip label={count} size="small" /> : null}
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          {count != null ? <Chip label={count} size="small" /> : null}
+          {action}
+        </Stack>
       </Stack>
       {children}
     </Paper>
   );
 }
 
+function ReorderIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="9" cy="6" r="1.6" />
+      <circle cx="15" cy="6" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" />
+      <circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="18" r="1.6" />
+      <circle cx="15" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
+const FAVORITES_PAGE_SIZE = 8;
+
 function FavoritesMenu({
   favorites,
   canScan,
   onAdd,
   onToggle,
+  onReorder,
 }: {
   favorites: QrFavorite[];
   canScan: boolean;
   onAdd: (fav: QrFavorite) => void;
   onToggle: (fav: QrFavorite) => void;
+  onReorder: (next: QrFavorite[]) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [reordering, setReordering] = useState(false);
+  const [shown, setShown] = useState(FAVORITES_PAGE_SIZE);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const draggedRef = useRef(false);
+
+  const filtered = useMemo(
+    () => filterQrFavorites(favorites, query),
+    [favorites, query],
+  );
+
+  useEffect(() => {
+    setShown(FAVORITES_PAGE_SIZE);
+  }, [query]);
+
+  const visible = reordering ? filtered : filtered.slice(0, shown);
+  const hasMore = !reordering && shown < filtered.length;
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShown((current) =>
+          Math.min(filtered.length, current + FAVORITES_PAGE_SIZE),
+        );
+      },
+      { root, rootMargin: "120px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, filtered.length, shown]);
+
   return (
-    <SideMenuFrame title="Favoritos" count={favorites.length}>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
+    <SideMenuFrame
+      title="Favoritos"
+      count={query.trim() ? filtered.length : favorites.length}
+      action={
+        <IconButton
+          size="small"
+          aria-label={reordering ? "Terminar de reorganizar" : "Reorganizar favoritos"}
+          aria-pressed={reordering}
+          disabled={favorites.length < 2}
+          onClick={() => setReordering((current) => !current)}
+          sx={{ color: reordering ? "primary.main" : "text.secondary" }}
+        >
+          <ReorderIcon />
+        </IconButton>
+      }
+    >
+      <TextField
+        fullWidth
+        size="small"
+        label="Buscar en favoritos"
+        placeholder="Nombre, idioma o rareza"
+        value={query}
+        autoComplete="off"
+        onChange={(e) => setQuery(e.target.value)}
+        inputProps={{ "aria-label": "Buscar en favoritos" }}
+      />
+      {reordering ? (
+        <Typography variant="caption" color="text.secondary">
+          Arrastra para cambiar el orden.
+        </Typography>
+      ) : null}
+      <Box ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
         {favorites.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             Marca una carta con la estrella para tenerla en este menú.
           </Typography>
+        ) : filtered.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Ningún favorito coincide.
+          </Typography>
         ) : (
           <Stack spacing={0.75}>
-            {favorites.map((fav) => {
+            {visible.map((fav) => {
               const img = resolveStockImageUrl(fav.card_id, fav.image_url);
+              const key = qrFavoriteKey(fav);
               return (
                 <Stack
-                  key={`${fav.owner}-${fav.stock_id}-${fav.card_id}-${fav.language}-${fav.rareza ?? ""}`}
+                  key={key}
                   direction="row"
                   spacing={1}
                   alignItems="center"
+                  draggable={reordering}
+                  onDragStart={(event) => {
+                    if (!reordering) return;
+                    draggedRef.current = true;
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", key);
+                  }}
+                  onDragOver={(event) => {
+                    if (!reordering) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDragOverKey(key);
+                  }}
+                  onDragLeave={() => {
+                    setDragOverKey((current) => (current === key ? null : current));
+                  }}
+                  onDrop={(event) => {
+                    if (!reordering) return;
+                    event.preventDefault();
+                    const from = event.dataTransfer.getData("text/plain");
+                    setDragOverKey(null);
+                    if (!from || from === key) return;
+                    onReorder(reorderQrFavorites(favorites, filtered, from, key));
+                  }}
+                  onDragEnd={() => {
+                    setDragOverKey(null);
+                    window.setTimeout(() => {
+                      draggedRef.current = false;
+                    }, 0);
+                  }}
                   onClick={() => {
-                    if (!canScan) return;
+                    if (reordering || draggedRef.current || !canScan) return;
                     onAdd(fav);
                   }}
-                  role="button"
-                  tabIndex={0}
+                  role={reordering ? undefined : "button"}
+                  tabIndex={reordering ? undefined : 0}
                   onKeyDown={(e) => {
-                    if (e.key !== "Enter" || !canScan) return;
+                    if (reordering || e.key !== "Enter" || !canScan) return;
                     e.preventDefault();
                     onAdd(fav);
                   }}
@@ -221,12 +348,18 @@ function FavoritesMenu({
                     py: 0.75,
                     borderRadius: 1.5,
                     border: "1px solid",
-                    borderColor: "grey.200",
-                    cursor: canScan ? "pointer" : "default",
+                    borderColor: dragOverKey === key ? "primary.main" : "grey.200",
+                    cursor: reordering ? "grab" : canScan ? "pointer" : "default",
+                    bgcolor: dragOverKey === key ? "action.hover" : "transparent",
                     "&:hover": { bgcolor: "grey.50" },
                   }}
                 >
-                  <CardThumb src={img} alt={fav.card_name || "carta"} size="sm" />
+                  {reordering ? (
+                    <Box sx={{ color: "text.disabled", display: "flex", flexShrink: 0 }}>
+                      <ReorderIcon />
+                    </Box>
+                  ) : null}
+                  <CardThumb src={img} alt={fav.card_name || "carta"} size="sm" loading="lazy" />
                   <Box minWidth={0} flex={1}>
                     <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.25 }}>
                       {fav.card_name || "Sin nombre"}
@@ -244,6 +377,13 @@ function FavoritesMenu({
                 </Stack>
               );
             })}
+            {hasMore ? (
+              <Box ref={sentinelRef} sx={{ py: 1, textAlign: "center" }}>
+                <Typography variant="caption" color="text.secondary">
+                  Cargando más…
+                </Typography>
+              </Box>
+            ) : null}
           </Stack>
         )}
       </Box>
@@ -327,7 +467,7 @@ function SearchMenu({
               image_url: img,
               language: group.language,
               rareza: group.rareza,
-              owner: activeOwner,
+              owner: group.owner ?? activeOwner,
             } satisfies QrFavorite;
             return (
               <Stack
@@ -362,6 +502,14 @@ function SearchMenu({
                     {group.card_name || "Sin nombre"}
                   </Typography>
                   <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                    {group.owner ? (
+                      <Chip
+                        label={OWNERS_CONFIG.owners[group.owner]?.label ?? group.owner}
+                        size="small"
+                        color={group.owner === "esteban" ? "secondary" : "default"}
+                        sx={{ height: 20, fontSize: 10 }}
+                      />
+                    ) : null}
                     {group.language ? (
                       <Chip label={group.language} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
                     ) : null}
@@ -460,24 +608,55 @@ function VentaAsistidaQrContent() {
     const ac = new AbortController();
     setSearchLoading(true);
     setSearchError(null);
-    void axios
-      .get<CounterSearchRow[] | null>(
-        apiUrl(`/stock?q=${encodeURIComponent(debouncedSearch)}`),
-        { signal: ac.signal },
-      )
-      .then((res) => {
-        const rows = Array.isArray(res.data) ? res.data : [];
-        setSearchHits(
-          rows.map((row) => ({
-            ...row,
-            _id: String(row._id ?? ""),
-            card_id: String(row.card_id ?? ""),
-          })),
-        );
+    const sameTcg = OWNERS_CONFIG.owners[activeOwner]?.tcg === "pokemon";
+    const owners: OwnerKey[] =
+      !sameTcg || activeOwner === "esteban"
+        ? [activeOwner]
+        : [activeOwner, "esteban"];
+
+    void Promise.all(
+      owners.map(async (owner) => {
+        try {
+          const res = await axios.get<CounterSearchRow[] | null>(
+            apiUrl(`/stock?q=${encodeURIComponent(debouncedSearch)}`),
+            { signal: ac.signal, ownerOverride: owner },
+          );
+          const rows = Array.isArray(res.data) ? res.data : [];
+          return {
+            ok: true as const,
+            owner,
+            rows: rows.map((row) => ({
+              ...row,
+              _id: String(row._id ?? ""),
+              card_id: String(row.card_id ?? ""),
+              owner,
+            })),
+          };
+        } catch (e: unknown) {
+          if (axios.isCancel(e)) throw e;
+          if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") throw e;
+          return { ok: false as const, owner, rows: [] as CounterSearchRow[] };
+        }
+      }),
+    )
+      .then((results) => {
+        if (ac.signal.aborted) return;
+        setSearchHits(results.flatMap((result) => result.rows));
+        const failed = results.filter((result) => !result.ok);
+        if (failed.length === 0) {
+          setSearchError(null);
+        } else if (failed.length === results.length) {
+          setSearchError("No se pudo buscar en el stock.");
+        } else if (failed.some((result) => result.owner === "esteban")) {
+          setSearchError("No se pudo buscar el stock de Esteban.");
+        } else {
+          setSearchError("No se pudo buscar en el stock.");
+        }
       })
       .catch((e: unknown) => {
         if (axios.isCancel(e)) return;
         if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") return;
+        if (ac.signal.aborted) return;
         setSearchHits([]);
         setSearchError("No se pudo buscar en el stock.");
       })
@@ -485,7 +664,7 @@ function VentaAsistidaQrContent() {
         if (!ac.signal.aborted) setSearchLoading(false);
       });
     return () => ac.abort();
-  }, [debouncedSearch]);
+  }, [debouncedSearch, activeOwner]);
 
   const unitExcludeIds = useMemo(
     () =>
@@ -622,7 +801,7 @@ function VentaAsistidaQrContent() {
     (group: CounterSearchGroup) => {
       const stockId = pickGroupScanStockId(group.stock_ids, unitExcludeIds);
       if (!stockId) return;
-      void addByStockId(stockId, activeOwner, "manual");
+      void addByStockId(stockId, group.owner ?? activeOwner, "manual");
     },
     [addByStockId, activeOwner, unitExcludeIds],
   );
@@ -702,6 +881,7 @@ function VentaAsistidaQrContent() {
       canScan={canScan}
       onAdd={(fav) => void addByStockId(fav.stock_id, fav.owner, "manual")}
       onToggle={toggleFavorite}
+      onReorder={setFavorites}
     />
   );
 

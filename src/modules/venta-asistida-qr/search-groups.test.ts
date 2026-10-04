@@ -6,7 +6,7 @@ import {
   type CounterSearchRow,
 } from "./search-groups";
 
-function row(partial: Partial<CounterSearchRow> & Pick<CounterSearchRow, "_id">): CounterSearchRow {
+  function row(partial: Partial<CounterSearchRow> & Pick<CounterSearchRow, "_id">): CounterSearchRow {
   return {
     _id: partial._id,
     card_id: partial.card_id ?? "swsh3-136",
@@ -21,6 +21,7 @@ function row(partial: Partial<CounterSearchRow> & Pick<CounterSearchRow, "_id">)
     quantity: partial.quantity,
     pvp: partial.pvp,
     pvp_currency: partial.pvp_currency,
+    owner: partial.owner,
   };
 }
 
@@ -58,6 +59,16 @@ describe("búsqueda manual del mostrador", () => {
     expect(en?.pvp).toBe(5000);
     expect(en?.pvp_currency).toBe("COP");
     expect(ja?.stock_ids).toEqual(["c"]);
+  });
+
+  it("separa la misma carta si está en Pablo y en Esteban", () => {
+    const groups = groupCounterSearchRows([
+      row({ _id: "p1", owner: "pablo" }),
+      row({ _id: "e1", owner: "esteban" }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.owner).sort()).toEqual(["esteban", "pablo"]);
+    expect(groups.every((g) => g.stock_ids.length === 1)).toBe(true);
   });
 
   it("elige un id fuera del carrito y, si no hay, el primero", () => {
