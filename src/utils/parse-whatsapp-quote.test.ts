@@ -68,6 +68,36 @@ describe("parseWhatsappQuotePaste", () => {
     expect(lines[0].conditionLabel).toBe("Puede tener imperfecciones");
   });
 
+  it("acepta notas libres en idioma y falta de coma antes de Estado", () => {
+    const lines = parseWhatsappQuotePaste(
+      [
+        "- Paras (BREAKthrough #1) — Idioma: normal y holo Inglés, Estado: Perfecto",
+        "- Paras (Mysterious Treasures #92) — Idioma: Inglés, normal y reverse Estado: Perfecto",
+        "- Erika's Paras (Gym Challenge #71) — Idioma: Inglés,first y normal  Estado: Perfecto",
+        "- Paras (Generations #6) — Idioma: solo reverse Inglés, Estado: normal y reverse Perfecto",
+      ].join("\n"),
+    );
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toMatchObject({
+      expansion: "BREAKthrough",
+      collectorNumber: "1",
+      languageLabel: "normal y holo Inglés",
+      conditionLabel: "Perfecto",
+    });
+    expect(lines[1]).toMatchObject({
+      expansion: "Mysterious Treasures",
+      collectorNumber: "92",
+      languageLabel: "Inglés, normal y reverse",
+      conditionLabel: "Perfecto",
+    });
+    expect(lines[2]).toMatchObject({
+      name: "Erika's Paras",
+      expansion: "Gym Challenge",
+      languageLabel: "Inglés,first y normal",
+    });
+    expect(lines[3].conditionLabel).toBe("normal y reverse Perfecto");
+  });
+
   it("detectPedidoPasteKind: URLs ganan sobre cotización", () => {
     expect(detectPedidoPasteKind("")).toBe("empty");
     expect(detectPedidoPasteKind(SAMPLE)).toBe("quote");

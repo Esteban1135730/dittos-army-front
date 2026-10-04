@@ -11,7 +11,7 @@ export type ParsedWhatsappQuoteLine = {
 };
 
 const QUOTE_LINE_RE =
-  /^[-*•]\s*(.+?)\s*\((.+?)\s+#([^)]+)\)\s+[—–-]\s*Idioma:\s*(.+?),\s*Estado:\s*(.+)$/u;
+  /^[-*•]\s*(.+?)\s*\((.+?)\s+#([^)]+)\)\s+[—–-]\s*Idioma:\s*(.+?)(?:,\s*|\s+)Estado:\s*(.+)$/u;
 
 const CARDTRADER_CARD_URL_RE =
   /https?:\/\/(?:www\.)?cardtrader\.com\/(?:es|en)\/cards\/\d+-[a-z0-9-]+/i;
