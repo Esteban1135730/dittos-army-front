@@ -1,0 +1,14 @@
+# Render Blueprint — sitio estático Free.
+# Conecta https://github.com/pabloangola/dittos-army-front
+# Después del deploy del back, pon VITE_API_URL = URL del API (ej. https://ditto-army-back.onrender.com)
+
+services:
+  - type: web
+    name: ditto-army-front
+    runtime: static
+    plan: free
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

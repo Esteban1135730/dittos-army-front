@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tablas Tailwind en pantallas estrechas */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Evita que inputs en iOS hagan zoom al enfocar (16px mínimo) */
+@media (max-width: 599px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

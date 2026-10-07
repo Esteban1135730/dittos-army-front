@@ -174,6 +174,7 @@ const SECTIONS: NavSection[] = [
     icon: IconUsers,
     items: [
       { to: "/clientes", label: "Clientes", icon: IconUsers },
+      { to: "/facturacion-electronica", label: "Facturación electrónica", icon: IconPrint },
       { to: "/envios", label: "Coordinar envíos", icon: IconCart },
       { to: "/clientes/imprimir-pedidos", label: "Imprimir pedidos", icon: IconPrint },
     ],

@@ -58,6 +58,9 @@ const StockPvpBenchmarkPage = lazy(
 );
 const EnviosPage = lazy(() => import("../pages/envios/envios"));
 const PdfGruposPage = lazy(() => import("../pages/pdf-grupos/pdf-grupos-page"));
+const FacturacionElectronicaPage = lazy(
+  () => import("../pages/facturacion/facturacion-electronica"),
+);
 
 function RedirectLegacyIncomingShipRound() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -197,6 +200,14 @@ export function PanelRoutes({ surface, AddStockPage }: PanelRoutesProps) {
         />
         {isPokemon ? (
           <>
+            <Route
+              path="/facturacion-electronica"
+              element={
+                <LayoutPage>
+                  <FacturacionElectronicaPage />
+                </LayoutPage>
+              }
+            />
             <Route
               path="/ventas/desde-movil"
               element={<LayoutPage><VentasDesdeMovilPage /></LayoutPage>}
