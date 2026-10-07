@@ -18,14 +18,19 @@ import {
 } from "./cardtrader-transit-catalog-group";
 import { resolveTransitCatalogImageSrc } from "./cardtrader-transit-catalog-image";
 import { downloadTransitCatalogPdf } from "./cardtrader-transit-catalog-pdf";
+import type { CardtraderTransitCatalogLine } from "./cardtrader-transit-types";
 import {
-  API_CARDTRADER_TRANSIT_LOTS,
-  type CardtraderTransitCatalogLine,
-} from "./cardtrader-transit-types";
+  fetchOpenTransitCatalog,
+  type TransitOwnerFilter,
+} from "./transit-owner-filter";
 
 const PAGE_SIZE = 24;
 
-export function CardtraderTransitByCardPanel() {
+type Props = {
+  ownerFilter?: TransitOwnerFilter;
+};
+
+export function CardtraderTransitByCardPanel({ ownerFilter = "all" }: Props) {
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("");
   const [rareza, setRareza] = useState("");
@@ -35,12 +40,8 @@ export function CardtraderTransitByCardPanel() {
   const [mensaje, setMensaje] = useState("");
 
   const { data, isLoading, error } = useQuery<CardtraderTransitCatalogLine[]>({
-    queryKey: ["cardtrader-transit-open-catalog"],
-    queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/open/catalog`);
-      const rows = Array.isArray(res.data) ? res.data : [];
-      return rows as CardtraderTransitCatalogLine[];
-    },
+    queryKey: ["cardtrader-transit-open-catalog", ownerFilter],
+    queryFn: () => fetchOpenTransitCatalog(ownerFilter),
   });
 
   const lines = useMemo(() => data ?? [], [data]);
@@ -250,7 +251,7 @@ export function CardtraderTransitByCardPanel() {
                         return (
                           <li key={lot.transit_line_id} className="space-y-0.5">
                             <Link
-                              to={`/cardtrader-transit/lot/${lot.transit_lot_id}`}
+                              to={`/cardtrader-transit/lot/${lot.transit_lot_id}?owner=${encodeURIComponent(ownerKey)}`}
                               className="text-blue-600 hover:underline font-medium"
                             >
                               {new Date(lot.purchase_date).toLocaleDateString("es-CO")}

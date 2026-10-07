@@ -33,6 +33,9 @@ const CardtraderTransitLotDetailPage = lazy(
 const CardtraderTransitImportPage = lazy(
   () => import("../pages/cardtrader-transit/cardtrader-transit-import-page"),
 );
+const CardtraderOrdersHistorialPage = lazy(
+  () => import("../pages/cardtrader-orders-historial/cardtrader-orders-historial-page"),
+);
 const CardtraderReceiptPage = lazy(
   () => import("../pages/cardtrader-receipt/cardtrader-receipt-page"),
 );
@@ -50,6 +53,9 @@ const AperturaSelladoPage = lazy(
   () => import("../pages/stock/apertura-sellado/apertura-sellado"),
 );
 const MetricasPage = lazy(() => import("../pages/metricas/metricas-page"));
+const StockPvpBenchmarkPage = lazy(
+  () => import("../pages/stock-pvp-benchmark/stock-pvp-benchmark-page"),
+);
 const EnviosPage = lazy(() => import("../pages/envios/envios"));
 const PdfGruposPage = lazy(() => import("../pages/pdf-grupos/pdf-grupos-page"));
 
@@ -164,6 +170,10 @@ export function PanelRoutes({ surface, AddStockPage }: PanelRoutesProps) {
           path="/cardtrader-transit/lot/:lotId"
           element={<LayoutPage><CardtraderTransitLotDetailPage /></LayoutPage>}
         />
+        <Route
+          path="/cardtrader-orders-historial"
+          element={<LayoutPage><CardtraderOrdersHistorialPage /></LayoutPage>}
+        />
         {isPokemon ? (
           <Route
             path="/cardtrader-receipt"
@@ -173,6 +183,14 @@ export function PanelRoutes({ surface, AddStockPage }: PanelRoutesProps) {
 
         <Route path="/ventas" element={<LayoutPage><SalesDashboard /></LayoutPage>} />
         <Route path="/metricas" element={<LayoutPage><MetricasPage /></LayoutPage>} />
+        <Route
+          path="/stock/revision-precios-pvp"
+          element={<LayoutPage><StockPvpBenchmarkPage /></LayoutPage>}
+        />
+        <Route
+          path="/stock-pvp-benchmark"
+          element={<Navigate to="/stock/revision-precios-pvp" replace />}
+        />
         <Route
           path="/ventas/escanear-qr"
           element={<LayoutPage><VentaAsistidaQrPage /></LayoutPage>}

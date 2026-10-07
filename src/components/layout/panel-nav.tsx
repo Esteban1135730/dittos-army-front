@@ -104,6 +104,11 @@ const CATALOG_SECTIONS: NavSection[] = [
       { to: "/stock", label: "Stock", icon: IconGrid },
       { to: "/add-stock", label: "Agregar stock", icon: IconPlus },
       { to: "/stock/revision", label: "Revisión de stock", icon: IconSearch },
+      {
+        to: "/stock/revision-precios-pvp",
+        label: "Revisión precios PVP",
+        icon: IconRates,
+      },
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
     ],
   },
@@ -139,6 +144,11 @@ const SECTIONS: NavSection[] = [
       { to: "/add-stock", label: "Agregar stock", icon: IconPlus },
       { to: "/stock/apertura-sellado", label: "Apertura sellado", icon: IconPackage },
       { to: "/stock/revision", label: "Revisión de stock", icon: IconSearch },
+      {
+        to: "/stock/revision-precios-pvp",
+        label: "Revisión precios PVP",
+        icon: IconRates,
+      },
       { to: "/stock/perdidas", label: "Cartas perdidas", icon: IconAlert },
       { to: "/stock/imprimir-etiquetas-qr", label: "Etiquetas QR", icon: IconQr },
       { to: "/stock/fotos-inventario", label: "Fotos inventario", icon: IconScan },

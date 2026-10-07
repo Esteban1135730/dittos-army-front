@@ -1,19 +1,25 @@
 import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { CardThumb } from "../../components/card-thumb";
 import { operationalRarezaLabel } from "../../constants/item-rareza";
-import { OWNERS_CONFIG, defaultOwnerForTcg, isOwnerKey, type OwnerKey } from "../../config/owners";
+import { defaultOwnerForTcg, isOwnerKey, type OwnerKey } from "../../config/owners";
 import { getApiTcgHeader } from "../../config/api";
+import { collectTcgdexIdsFromLines, useTcgdexCardDetails } from "../../pokemon";
+import { resolveTransitCatalogImageSrc } from "./cardtrader-transit-catalog-image";
 import {
   API_CARDTRADER_TRANSIT_LOTS,
   type CardtraderTransitLineRow,
   type CardtraderTransitLotMeta,
 } from "./cardtrader-transit-types";
 import { TransitLotOwnerSelect } from "./transit-lot-owner-select";
+import { parseTransitLotOwnerFromSearch } from "./transit-owner-filter";
 
 export default function CardtraderTransitLotDetailPage() {
   const { lotId } = useParams<{ lotId: string }>();
+  const [searchParams] = useSearchParams();
+  const lotOwnerOverride = parseTransitLotOwnerFromSearch(searchParams.get("owner"));
   const queryClient = useQueryClient();
   const [purchaseDate, setPurchaseDate] = useState("");
   const [totalCopCardsCost, setTotalCopCardsCost] = useState("");
@@ -24,22 +30,29 @@ export default function CardtraderTransitLotDetailPage() {
   const [mensaje, setMensaje] = useState("");
 
   const { data: lotMeta, isLoading: isLoadingMeta } = useQuery<CardtraderTransitLotMeta>({
-    queryKey: ["cardtrader-transit-lot-meta", lotId],
+    queryKey: ["cardtrader-transit-lot-meta", lotId, lotOwnerOverride],
     enabled: !!lotId,
     queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`);
+      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`, {
+        ownerOverride: lotOwnerOverride,
+      });
       return res.data as CardtraderTransitLotMeta;
     },
   });
 
   const { data: lines = [], isLoading: isLoadingLines } = useQuery<CardtraderTransitLineRow[]>({
-    queryKey: ["cardtrader-transit-lot-lines", lotId],
+    queryKey: ["cardtrader-transit-lot-lines", lotId, lotOwnerOverride],
     enabled: !!lotId,
     queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}/lines`);
+      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}/lines`, {
+        ownerOverride: lotOwnerOverride,
+      });
       return Array.isArray(res.data) ? (res.data as CardtraderTransitLineRow[]) : [];
     },
   });
+
+  const cardIds = useMemo(() => collectTcgdexIdsFromLines(lines), [lines]);
+  const { detailsByCardId, isLoading: tcgImagesLoading } = useTcgdexCardDetails(cardIds);
 
   useEffect(() => {
     if (!lotMeta) return;
@@ -67,11 +80,15 @@ export default function CardtraderTransitLotDetailPage() {
     try {
       setSavingMeta(true);
       setMensaje("");
-      const res = await axios.put(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`, {
-        purchase_date: purchaseDate,
-        total_cop_cards_cost: totalCop,
-        owner,
-      });
+      const res = await axios.put(
+        `${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`,
+        {
+          purchase_date: purchaseDate,
+          total_cop_cards_cost: totalCop,
+          owner,
+        },
+        { ownerOverride: lotOwnerOverride ?? owner },
+      );
       if (!res.data?.success) {
         setMensaje(res.data?.message || "No se pudo actualizar el lote.");
         return;
@@ -215,22 +232,24 @@ export default function CardtraderTransitLotDetailPage() {
         )}
         {!isLoadingLines && lines.length > 0 && (
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {lines.map((line) => (
+            {lines.map((line) => {
+              const imageSrc = resolveTransitCatalogImageSrc(
+                line.card_id,
+                line.image_url,
+                detailsByCardId,
+                line.language,
+              );
+              return (
               <div
                 key={line.line_id}
                 className="flex gap-3 border rounded-lg p-3 bg-white border-gray-200 items-start"
               >
-                <div className="w-14 h-18 flex-shrink-0 bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-                  {line.image_url ? (
-                    <img
-                      src={line.image_url}
-                      alt={line.card_name}
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-gray-400 text-xs">—</span>
-                  )}
-                </div>
+                <CardThumb
+                  src={imageSrc || undefined}
+                  alt={line.card_name}
+                  size="md"
+                  pending={tcgImagesLoading && !imageSrc}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-gray-800 truncate">{line.card_name}</div>
                   <div className="text-xs text-gray-500 mt-0.5 break-all">{line.card_id}</div>
@@ -264,7 +283,8 @@ export default function CardtraderTransitLotDetailPage() {
                   ) : null}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

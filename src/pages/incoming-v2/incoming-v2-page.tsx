@@ -36,6 +36,8 @@ import {
   resolvePanelImageSrc,
   useHomologBlueprintImages,
 } from './use-homolog-blueprint-images';
+import { collectTcgdexIdsFromLines, useTcgdexCardDetails } from '../../pokemon';
+import { resolveTransitCatalogImageSrc } from '../cardtrader-transit/cardtrader-transit-catalog-image';
 import { HomologMetaSection } from './homolog-meta-panel';
 import { HomologPriceBlock, HomologPriceChip } from './homolog-price-block';
 import { PanelItemPriceChip, PanelItemPrices } from './panel-item-prices';
@@ -241,14 +243,26 @@ export default function IncomingV2Page() {
   const units = session?.units ?? [];
   const { blueprintImages, imagesLoading } = useHomologBlueprintImages(units);
 
+  const panelCardIds = useMemo(
+    () => collectTcgdexIdsFromLines(panelItems),
+    [panelItems],
+  );
+  const { detailsByCardId: panelTcgDetails, isLoading: panelTcgImagesLoading } =
+    useTcgdexCardDetails(panelCardIds);
+
   const panelImageByTransitLineId = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of panelItems) {
-      const src = resolvePanelImageSrc(p.image_url);
+      const src = resolveTransitCatalogImageSrc(
+        p.card_id,
+        p.image_url,
+        panelTcgDetails,
+        p.language,
+      );
       if (src) map.set(p.transit_line_id, src);
     }
     return map;
-  }, [panelItems]);
+  }, [panelItems, panelTcgDetails]);
 
   const panelItemByTransitLineId = useMemo(() => {
     return new Map(panelItems.map((p) => [p.transit_line_id, p]));
@@ -1020,7 +1034,12 @@ export default function IncomingV2Page() {
             ) : (
               <Stack spacing={1}>
                 {filteredPanelItems.map((item) => {
-                  const img = resolvePanelImageSrc(item.image_url);
+                  const img = resolveTransitCatalogImageSrc(
+                    item.card_id,
+                    item.image_url,
+                    panelTcgDetails,
+                    item.language,
+                  );
                   const canPick =
                     selectedUnit?.status === 'pending' && item.available_in_session > 0;
                   return (
@@ -1038,7 +1057,12 @@ export default function IncomingV2Page() {
                         '&:hover': canPick ? { bgcolor: 'action.hover' } : undefined,
                       }}
                     >
-                      <HomologCardImage src={img} alt={item.card_name} variant="list" />
+                      <HomologCardImage
+                        src={img}
+                        alt={item.card_name}
+                        variant="list"
+                        loading={panelTcgImagesLoading && !img}
+                      />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} noWrap>
                           {item.card_name}

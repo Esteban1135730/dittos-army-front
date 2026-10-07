@@ -24,6 +24,9 @@ export default defineConfig(({ mode }) => {
         target: `http://127.0.0.1:${nestPort}`,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
+        // Historial CT puede tardar >2 min la primera vez (muchas páginas CardTrader).
+        timeout: 300_000,
+        proxyTimeout: 300_000,
       },
     },
   },

@@ -8,21 +8,24 @@ import {
   type CardtraderTransitLotRow,
 } from "./cardtrader-transit-types";
 import { OWNERS_CONFIG, isOwnerKey } from "../../config/owners";
+import { TransitOwnerFilterBar } from "./transit-owner-filter-bar";
+import {
+  fetchOpenTransitLots,
+  type TransitOwnerFilter,
+} from "./transit-owner-filter";
 
 type TransitListTab = "lots" | "by-card";
 
 export default function CardtraderTransitListPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TransitListTab>("lots");
+  const [ownerFilter, setOwnerFilter] = useState<TransitOwnerFilter>("all");
   const [mensaje, setMensaje] = useState("");
   const [deletingLotId, setDeletingLotId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<CardtraderTransitLotRow[]>({
-    queryKey: ["cardtrader-transit-lots-open"],
-    queryFn: async () => {
-      const res = await axios.get(`${API_CARDTRADER_TRANSIT_LOTS}/open`);
-      return Array.isArray(res.data) ? (res.data as CardtraderTransitLotRow[]) : [];
-    },
+    queryKey: ["cardtrader-transit-lots-open", ownerFilter],
+    queryFn: () => fetchOpenTransitLots(ownerFilter),
     enabled: tab === "lots",
   });
 
@@ -37,7 +40,11 @@ export default function CardtraderTransitListPage() {
     try {
       setDeletingLotId(lotId);
       setMensaje("");
-      const res = await axios.delete(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`);
+      const lot = lots.find((l) => l.lot_id === lotId);
+      const lotOwner = isOwnerKey(lot?.owner) ? lot.owner : undefined;
+      const res = await axios.delete(`${API_CARDTRADER_TRANSIT_LOTS}/${lotId}`, {
+        ownerOverride: lotOwner,
+      });
       if (!res.data?.success) {
         setMensaje(res.data?.message || "No se pudo eliminar el lote.");
         return;
@@ -70,6 +77,12 @@ export default function CardtraderTransitListPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
+          <Link
+            to="/cardtrader-orders-historial"
+            className="border border-purple-700 text-purple-800 hover:bg-purple-50 px-4 py-2 rounded-md text-sm font-medium"
+          >
+            Historial CT
+          </Link>
           <Link
             to="/cardtrader-transit/import"
             className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-md text-sm font-medium"
@@ -104,7 +117,11 @@ export default function CardtraderTransitListPage() {
         </button>
       </div>
 
-      {tab === "by-card" ? <CardtraderTransitByCardPanel /> : null}
+      <TransitOwnerFilterBar value={ownerFilter} onChange={setOwnerFilter} />
+
+      {tab === "by-card" ? (
+        <CardtraderTransitByCardPanel ownerFilter={ownerFilter} />
+      ) : null}
 
       {tab === "lots" ? (
         <>
@@ -199,7 +216,7 @@ export default function CardtraderTransitListPage() {
                     </div>
                     <div className="col-span-2 flex items-center gap-3">
                       <Link
-                        to={`/cardtrader-transit/lot/${lot.lot_id}`}
+                        to={`/cardtrader-transit/lot/${lot.lot_id}?owner=${encodeURIComponent(ownerKey)}`}
                         className="text-blue-600 hover:underline font-medium"
                       >
                         Revisar
